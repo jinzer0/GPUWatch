@@ -1,0 +1,2 @@
+# gpu        pid  type    sm   mem   enc   dec   jpg   ofa    fb  ccpm   command
+    0    3638413     G     -     -     -     -     -     -     6     0   gnome-shell

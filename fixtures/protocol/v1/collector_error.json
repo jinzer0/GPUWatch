@@ -1,0 +1,10 @@
+{
+  "protocolVersion": 1,
+  "schemaVersion": 1,
+  "ok": false,
+  "timestamp": "2026-06-01T15:24:00+09:00",
+  "error": {
+    "type": "collector_internal_error",
+    "message": "Unexpected collector failure"
+  }
+}

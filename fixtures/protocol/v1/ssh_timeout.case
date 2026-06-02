@@ -1,0 +1,3 @@
+layer=transport_ssh
+type=ssh_timeout
+message=SSH connection timed out

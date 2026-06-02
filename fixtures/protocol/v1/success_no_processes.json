@@ -1,0 +1,30 @@
+{
+  "protocolVersion": 1,
+  "schemaVersion": 1,
+  "ok": true,
+  "timestamp": "2026-06-01T15:24:00+09:00",
+  "server": {
+    "hostname": "gpu-free",
+    "driverVersion": "550.54.14",
+    "cudaVersion": "12.4"
+  },
+  "gpus": [
+    {
+      "index": 0,
+      "uuid": "GPU-33333333-3333-3333-3333-333333333333",
+      "name": "NVIDIA RTX 6000 Ada",
+      "memoryTotalMiB": 49140,
+      "memoryUsedMiB": 256,
+      "memoryFreeMiB": 48884,
+      "gpuUtilizationPercent": 0,
+      "memoryUtilizationPercent": 0,
+      "temperatureCelsius": 32,
+      "powerDrawWatt": 43.1,
+      "powerLimitWatt": 300,
+      "fanSpeedPercent": 30,
+      "processCount": 0,
+      "processes": []
+    }
+  ],
+  "warnings": []
+}

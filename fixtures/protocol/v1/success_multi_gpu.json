@@ -1,0 +1,65 @@
+{
+  "protocolVersion": 1,
+  "schemaVersion": 1,
+  "ok": true,
+  "timestamp": "2026-06-01T15:24:00+09:00",
+  "server": {
+    "hostname": "gpu-lab-01",
+    "driverVersion": "550.54.14",
+    "cudaVersion": "12.4"
+  },
+  "gpus": [
+    {
+      "index": 0,
+      "uuid": "GPU-00000000-0000-0000-0000-000000000000",
+      "name": "NVIDIA A100-SXM4-80GB",
+      "memoryTotalMiB": 81920,
+      "memoryUsedMiB": 1024,
+      "memoryFreeMiB": 80896,
+      "gpuUtilizationPercent": 3,
+      "memoryUtilizationPercent": 1,
+      "temperatureCelsius": 36,
+      "powerDrawWatt": 71.2,
+      "powerLimitWatt": 400,
+      "fanSpeedPercent": null,
+      "processCount": 0,
+      "processes": []
+    },
+    {
+      "index": 1,
+      "uuid": "GPU-22222222-2222-2222-2222-222222222222",
+      "name": "NVIDIA A100-SXM4-80GB",
+      "memoryTotalMiB": 81920,
+      "memoryUsedMiB": 64000,
+      "memoryFreeMiB": 17920,
+      "gpuUtilizationPercent": 91,
+      "memoryUtilizationPercent": 78,
+      "temperatureCelsius": 69,
+      "powerDrawWatt": 311.7,
+      "powerLimitWatt": 400,
+      "fanSpeedPercent": null,
+      "processCount": 2,
+      "processes": [
+        {
+          "pid": 1101,
+          "username": "bob",
+          "command": "python pretrain.py --config exp.yaml",
+          "gpuMemoryUsedMiB": 49152,
+          "gpuUtilizationPercent": null,
+          "cpuPercent": 96.3,
+          "hostMemoryUsedMiB": 16384
+        },
+        {
+          "pid": 1102,
+          "username": "carol",
+          "command": "python eval.py",
+          "gpuMemoryUsedMiB": 8192,
+          "gpuUtilizationPercent": null,
+          "cpuPercent": 22.1,
+          "hostMemoryUsedMiB": 4096
+        }
+      ]
+    }
+  ],
+  "warnings": []
+}

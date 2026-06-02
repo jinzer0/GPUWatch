@@ -1,0 +1,13 @@
+{
+  "protocolVersion": 1,
+  "schemaVersion": 1,
+  "ok": true,
+  "timestamp": "2026-06-01T15:24:00+09:00",
+  "server": {
+    "hostname": "cpu-only",
+    "driverVersion": null,
+    "cudaVersion": null
+  },
+  "gpus": [],
+  "warnings": ["No NVIDIA GPU was reported by NVML"]
+}

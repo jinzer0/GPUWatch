@@ -1,0 +1,13 @@
+{
+  "protocolVersion": 99,
+  "schemaVersion": 1,
+  "ok": true,
+  "timestamp": "2026-06-01T15:24:00+09:00",
+  "server": {
+    "hostname": "future",
+    "driverVersion": "999.0",
+    "cudaVersion": "99.0"
+  },
+  "gpus": [],
+  "warnings": []
+}

@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gpuwatcher.local/schemas/gpuwatcher-v1.schema.json",
+  "title": "GPUWatcher JSON Protocol v1",
+  "oneOf": [
+    { "$ref": "#/$defs/successEnvelope" },
+    { "$ref": "#/$defs/errorEnvelope" }
+  ],
+  "$defs": {
+    "base": {
+      "type": "object",
+      "required": ["protocolVersion", "schemaVersion", "ok", "timestamp"],
+      "properties": {
+        "protocolVersion": { "const": 1 },
+        "schemaVersion": { "const": 1 },
+        "ok": { "type": "boolean" },
+        "timestamp": { "type": "string", "minLength": 1 }
+      }
+    },
+    "nullableNumber": { "type": ["number", "null"] },
+    "nullableInteger": { "type": ["integer", "null"] },
+    "process": {
+      "type": "object",
+      "required": ["pid", "username", "command", "gpuMemoryUsedMiB", "gpuUtilizationPercent", "cpuPercent", "hostMemoryUsedMiB"],
+      "additionalProperties": false,
+      "properties": {
+        "pid": { "type": "integer" },
+        "username": { "type": ["string", "null"] },
+        "command": { "type": ["string", "null"] },
+        "gpuMemoryUsedMiB": { "$ref": "#/$defs/nullableInteger" },
+        "gpuUtilizationPercent": { "$ref": "#/$defs/nullableNumber" },
+        "cpuPercent": { "$ref": "#/$defs/nullableNumber" },
+        "hostMemoryUsedMiB": { "$ref": "#/$defs/nullableInteger" }
+      }
+    },
+    "gpu": {
+      "type": "object",
+      "required": [
+        "index",
+        "uuid",
+        "name",
+        "memoryTotalMiB",
+        "memoryUsedMiB",
+        "memoryFreeMiB",
+        "gpuUtilizationPercent",
+        "memoryUtilizationPercent",
+        "temperatureCelsius",
+        "powerDrawWatt",
+        "powerLimitWatt",
+        "fanSpeedPercent",
+        "processCount",
+        "processes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "index": { "type": "integer", "minimum": 0 },
+        "uuid": { "type": "string" },
+        "name": { "type": "string" },
+        "memoryTotalMiB": { "$ref": "#/$defs/nullableInteger" },
+        "memoryUsedMiB": { "$ref": "#/$defs/nullableInteger" },
+        "memoryFreeMiB": { "$ref": "#/$defs/nullableInteger" },
+        "gpuUtilizationPercent": { "$ref": "#/$defs/nullableNumber" },
+        "memoryUtilizationPercent": { "$ref": "#/$defs/nullableNumber" },
+        "temperatureCelsius": { "$ref": "#/$defs/nullableNumber" },
+        "powerDrawWatt": { "$ref": "#/$defs/nullableNumber" },
+        "powerLimitWatt": { "$ref": "#/$defs/nullableNumber" },
+        "fanSpeedPercent": { "$ref": "#/$defs/nullableNumber" },
+        "processCount": { "type": "integer", "minimum": 0 },
+        "processes": { "type": "array", "items": { "$ref": "#/$defs/process" } }
+      }
+    },
+    "successEnvelope": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "required": ["server", "gpus"],
+          "additionalProperties": false,
+          "properties": {
+            "protocolVersion": true,
+            "schemaVersion": true,
+            "ok": { "const": true },
+            "timestamp": true,
+            "server": {
+              "type": "object",
+              "required": ["hostname", "driverVersion", "cudaVersion"],
+              "additionalProperties": false,
+              "properties": {
+                "hostname": { "type": ["string", "null"] },
+                "driverVersion": { "type": ["string", "null"] },
+                "cudaVersion": { "type": ["string", "null"] }
+              }
+            },
+            "gpus": { "type": "array", "items": { "$ref": "#/$defs/gpu" } },
+            "warnings": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      ]
+    },
+    "errorEnvelope": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "required": ["error"],
+          "additionalProperties": false,
+          "properties": {
+            "protocolVersion": true,
+            "schemaVersion": true,
+            "ok": { "const": false },
+            "timestamp": true,
+            "error": {
+              "type": "object",
+              "required": ["type", "message"],
+              "additionalProperties": false,
+              "properties": {
+                "type": { "type": "string", "minLength": 1 },
+                "message": { "type": "string" }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

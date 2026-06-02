@@ -1,0 +1,2 @@
+# gpu   pwr  gtemp mtemp    sm   mem   enc   dec  mclk  pclk
+    0 420.5

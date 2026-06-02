@@ -1,0 +1,40 @@
+{
+  "protocolVersion": 1,
+  "schemaVersion": 1,
+  "ok": true,
+  "timestamp": "2026-06-01T15:24:00+09:00",
+  "server": {
+    "hostname": "gpu-partial",
+    "driverVersion": "550.54.14",
+    "cudaVersion": null
+  },
+  "gpus": [
+    {
+      "index": 0,
+      "uuid": "GPU-44444444-4444-4444-4444-444444444444",
+      "name": "NVIDIA T4",
+      "memoryTotalMiB": 15360,
+      "memoryUsedMiB": null,
+      "memoryFreeMiB": null,
+      "gpuUtilizationPercent": null,
+      "memoryUtilizationPercent": null,
+      "temperatureCelsius": null,
+      "powerDrawWatt": null,
+      "powerLimitWatt": null,
+      "fanSpeedPercent": null,
+      "processCount": 1,
+      "processes": [
+        {
+          "pid": 2026,
+          "username": null,
+          "command": null,
+          "gpuMemoryUsedMiB": null,
+          "gpuUtilizationPercent": null,
+          "cpuPercent": null,
+          "hostMemoryUsedMiB": null
+        }
+      ]
+    }
+  ],
+  "warnings": ["Process owner lookup failed", "Power metrics unavailable"]
+}
