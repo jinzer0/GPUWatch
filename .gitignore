@@ -38,3 +38,6 @@ __pycache__/
 # Local agent and browser QA artifacts
 .sisyphus/
 .playwright-mcp/
+
+# User files
+docs/memo/
