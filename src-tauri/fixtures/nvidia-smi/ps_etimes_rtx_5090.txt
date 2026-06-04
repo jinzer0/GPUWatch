@@ -1,0 +1,2 @@
+12001|11999|alice|python|python train.py --model llama|97.5|12.0|7811|02:10:11
+2200|1|alice|gnome-shell|gnome-shell|2.1|1.2||08:00:00

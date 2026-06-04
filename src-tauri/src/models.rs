@@ -60,15 +60,35 @@ pub struct CollectorServerInfo {
     pub cuda_version: Option<String>,
 }
 
+fn default_process_kind() -> String {
+    "unknown".to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct CollectorProcess {
     pub pid: i64,
+    #[serde(default)]
+    pub gpu_uuid: Option<String>,
+    #[serde(default = "default_process_kind")]
+    pub process_kind: String,
+    #[serde(default)]
+    pub parent_pid: Option<i64>,
+    #[serde(default)]
+    pub runtime_seconds: Option<i64>,
     pub username: Option<String>,
     pub command: Option<String>,
     #[serde(rename = "gpuMemoryUsedMiB")]
     pub gpu_memory_used_mib: Option<i64>,
     pub gpu_utilization_percent: Option<f64>,
+    #[serde(default)]
+    pub gpu_sm_utilization_percent: Option<f64>,
+    #[serde(default)]
+    pub gpu_memory_utilization_percent: Option<f64>,
+    #[serde(default)]
+    pub gpu_encoder_utilization_percent: Option<f64>,
+    #[serde(default)]
+    pub gpu_decoder_utilization_percent: Option<f64>,
     pub cpu_percent: Option<f64>,
     #[serde(rename = "hostMemoryUsedMiB")]
     pub host_memory_used_mib: Option<i64>,
@@ -79,7 +99,11 @@ pub struct CollectorProcess {
 pub struct CollectorGpu {
     pub index: i64,
     pub uuid: String,
+    #[serde(default)]
+    pub pci_bus_id: Option<String>,
     pub name: String,
+    #[serde(default)]
+    pub driver_version: Option<String>,
     #[serde(rename = "memoryTotalMiB")]
     pub memory_total_mib: Option<i64>,
     #[serde(rename = "memoryUsedMiB")]
@@ -88,10 +112,36 @@ pub struct CollectorGpu {
     pub memory_free_mib: Option<i64>,
     pub gpu_utilization_percent: Option<f64>,
     pub memory_utilization_percent: Option<f64>,
+    #[serde(default)]
+    pub encoder_utilization_percent: Option<f64>,
+    #[serde(default)]
+    pub decoder_utilization_percent: Option<f64>,
+    #[serde(default)]
+    pub jpeg_utilization_percent: Option<f64>,
+    #[serde(default)]
+    pub ofa_utilization_percent: Option<f64>,
+    #[serde(rename = "pcieRxKibPerSec", default)]
+    pub pcie_rx_kib_per_sec: Option<i64>,
+    #[serde(rename = "pcieTxKibPerSec", default)]
+    pub pcie_tx_kib_per_sec: Option<i64>,
+    #[serde(default)]
+    pub pcie_link_gen_current: Option<i64>,
+    #[serde(default)]
+    pub pcie_link_width_current: Option<i64>,
+    #[serde(default)]
+    pub mig_mode_current: Option<String>,
+    #[serde(default)]
+    pub mig_mode_pending: Option<String>,
+    #[serde(default)]
+    pub mig_instance_count: Option<i64>,
     pub temperature_celsius: Option<f64>,
     pub power_draw_watt: Option<f64>,
     pub power_limit_watt: Option<f64>,
     pub fan_speed_percent: Option<f64>,
+    #[serde(default)]
+    pub graphics_clock_mhz: Option<i64>,
+    #[serde(default)]
+    pub memory_clock_mhz: Option<i64>,
     pub process_count: i64,
     pub processes: Vec<CollectorProcess>,
 }
@@ -166,7 +216,9 @@ pub struct ServerOverviewDto {
 pub struct GpuCardDto {
     pub index: i64,
     pub uuid: String,
+    pub pci_bus_id: Option<String>,
     pub name: String,
+    pub driver_version: Option<String>,
     pub busy: bool,
     #[serde(rename = "memoryTotalMiB")]
     pub memory_total_mib: Option<i64>,
@@ -176,10 +228,36 @@ pub struct GpuCardDto {
     pub memory_free_mib: Option<i64>,
     pub gpu_utilization_percent: Option<f64>,
     pub memory_utilization_percent: Option<f64>,
+    #[serde(default)]
+    pub encoder_utilization_percent: Option<f64>,
+    #[serde(default)]
+    pub decoder_utilization_percent: Option<f64>,
+    #[serde(default)]
+    pub jpeg_utilization_percent: Option<f64>,
+    #[serde(default)]
+    pub ofa_utilization_percent: Option<f64>,
+    #[serde(rename = "pcieRxKibPerSec", default)]
+    pub pcie_rx_kib_per_sec: Option<i64>,
+    #[serde(rename = "pcieTxKibPerSec", default)]
+    pub pcie_tx_kib_per_sec: Option<i64>,
+    #[serde(default)]
+    pub pcie_link_gen_current: Option<i64>,
+    #[serde(default)]
+    pub pcie_link_width_current: Option<i64>,
+    #[serde(default)]
+    pub mig_mode_current: Option<String>,
+    #[serde(default)]
+    pub mig_mode_pending: Option<String>,
+    #[serde(default)]
+    pub mig_instance_count: Option<i64>,
     pub temperature_celsius: Option<f64>,
     pub power_draw_watt: Option<f64>,
     pub power_limit_watt: Option<f64>,
     pub fan_speed_percent: Option<f64>,
+    #[serde(default)]
+    pub graphics_clock_mhz: Option<i64>,
+    #[serde(default)]
+    pub memory_clock_mhz: Option<i64>,
     pub process_count: i64,
     pub processes: Vec<CollectorProcess>,
 }
@@ -204,12 +282,26 @@ pub struct ProcessRowDto {
     pub server_name: String,
     pub stale: bool,
     pub gpu_index: i64,
+    pub gpu_uuid: String,
     pub pid: i64,
+    pub process_kind: String,
+    #[serde(default)]
+    pub parent_pid: Option<i64>,
+    #[serde(default)]
+    pub runtime_seconds: Option<i64>,
     pub username: Option<String>,
     pub command: Option<String>,
     #[serde(rename = "gpuMemoryUsedMiB")]
     pub gpu_memory_used_mib: Option<i64>,
     pub gpu_utilization_percent: Option<f64>,
+    #[serde(default)]
+    pub gpu_sm_utilization_percent: Option<f64>,
+    #[serde(default)]
+    pub gpu_memory_utilization_percent: Option<f64>,
+    #[serde(default)]
+    pub gpu_encoder_utilization_percent: Option<f64>,
+    #[serde(default)]
+    pub gpu_decoder_utilization_percent: Option<f64>,
     pub cpu_percent: Option<f64>,
     #[serde(rename = "hostMemoryUsedMiB")]
     pub host_memory_used_mib: Option<i64>,

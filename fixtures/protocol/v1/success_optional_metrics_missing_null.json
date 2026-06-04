@@ -1,0 +1,57 @@
+{
+  "protocolVersion": 1,
+  "schemaVersion": 1,
+  "ok": true,
+  "timestamp": "2026-06-04T10:31:00+09:00",
+  "server": {
+    "hostname": "gpu-null-safe",
+    "driverVersion": "550.54.14",
+    "cudaVersion": null
+  },
+  "gpus": [
+    {
+      "index": 0,
+      "uuid": "GPU-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      "name": "NVIDIA L40S",
+      "memoryTotalMiB": 46068,
+      "memoryUsedMiB": null,
+      "memoryFreeMiB": null,
+      "gpuUtilizationPercent": null,
+      "memoryUtilizationPercent": null,
+      "encoderUtilizationPercent": null,
+      "decoderUtilizationPercent": null,
+      "jpegUtilizationPercent": null,
+      "ofaUtilizationPercent": null,
+      "pcieRxKibPerSec": null,
+      "pcieTxKibPerSec": null,
+      "pcieLinkGenCurrent": null,
+      "pcieLinkWidthCurrent": null,
+      "migModeCurrent": null,
+      "migModePending": null,
+      "migInstanceCount": null,
+      "temperatureCelsius": null,
+      "powerDrawWatt": null,
+      "powerLimitWatt": null,
+      "fanSpeedPercent": null,
+      "processCount": 1,
+      "processes": [
+        {
+          "pid": 9902,
+          "parentPid": null,
+          "runtimeSeconds": null,
+          "username": null,
+          "command": null,
+          "gpuMemoryUsedMiB": null,
+          "gpuUtilizationPercent": null,
+          "gpuSmUtilizationPercent": null,
+          "gpuMemoryUtilizationPercent": null,
+          "gpuEncoderUtilizationPercent": null,
+          "gpuDecoderUtilizationPercent": null,
+          "cpuPercent": null,
+          "hostMemoryUsedMiB": null
+        }
+      ]
+    }
+  ],
+  "warnings": ["Optional utilization metrics unavailable"]
+}

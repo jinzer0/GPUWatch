@@ -1,0 +1,2 @@
+# gpu   pwr  gtemp mtemp    sm   mem   enc   dec   jpg   ofa  mclk  pclk
+    0 420.5     72     -    86    57    11    22    33    44 14001  2850

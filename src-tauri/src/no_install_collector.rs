@@ -30,15 +30,21 @@ pub fn build_no_install_snapshot_from_output(
     let mut warnings = Vec::new();
     let gpu_csv = required_gpu_csv(&sections)?;
     let compute_apps_csv = optional_success_section(&sections, "compute_apps_csv", &mut warnings);
+    let gpu_extra_csv = optional_success_section(&sections, "gpu_extra_csv", &mut warnings);
+    let mig_list = optional_success_section(&sections, "mig_list", &mut warnings);
     let pmon = optional_success_section(&sections, "pmon", &mut warnings);
     let dmon = optional_success_section(&sections, "dmon", &mut warnings);
+    let dmon_pcie = optional_success_section(&sections, "dmon_pcie", &mut warnings);
     let ps = optional_success_section(&sections, "ps", &mut warnings);
 
     let parsed = parse_nvidia_smi_outputs(NvidiaSmiOutputs {
         gpu_csv,
         compute_apps_csv,
+        gpu_extra_csv,
+        mig_list,
         pmon,
         dmon,
+        dmon_pcie,
         ps,
     })?;
     warnings.extend(parsed.warnings);
@@ -248,8 +254,11 @@ emit_section hostname "$status" "$output"
 if ! command -v nvidia-smi >/dev/null 2>&1; then
   emit_section gpu_csv 127 'nvidia-smi not found'
   emit_section compute_apps_csv 127 'nvidia-smi not found'
+  emit_section gpu_extra_csv 127 'nvidia-smi not found'
+  emit_section mig_list 127 'nvidia-smi not found'
   emit_section pmon 127 'nvidia-smi not found'
   emit_section dmon 127 'nvidia-smi not found'
+  emit_section dmon_pcie 127 'nvidia-smi not found'
   emit_section ps 0 ''
   exit 0
 fi
@@ -263,6 +272,12 @@ compute_apps_output="$output"
 compute_apps_status="$status"
 emit_section compute_apps_csv "$compute_apps_status" "$compute_apps_output"
 
+run_capture nvidia-smi --query-gpu=index,uuid,mig.mode.current,mig.mode.pending,pcie.link.gen.current,pcie.link.width.current --format=csv,noheader,nounits
+emit_section gpu_extra_csv "$status" "$output"
+
+run_capture nvidia-smi -L
+emit_section mig_list "$status" "$output"
+
 run_capture nvidia-smi pmon -s um -c 1
 pmon_output="$output"
 pmon_status="$status"
@@ -270,6 +285,9 @@ emit_section pmon "$pmon_status" "$pmon_output"
 
 run_capture nvidia-smi dmon -s pucm -c 1 --format=csv,noheader,nounit
 emit_section dmon "$status" "$output"
+
+run_capture nvidia-smi dmon -s t -c 1 --format=csv,noheader,nounit
+emit_section dmon_pcie "$status" "$output"
 
 pids=$(
   {
@@ -287,8 +305,12 @@ case "$pids" in
     emit_section ps 0 ''
     ;;
   *)
-    output=$(ps -p "$pids" -o pid= -o ppid= -o user= -o comm= -o pcpu= -o pmem= -o etime= -o args= 2>&1 | awk '{ args=""; for (i = 8; i <= NF; i++) { args = args (i == 8 ? "" : " ") $i } print $1 "|" $2 "|" $3 "|" $4 "|" args "|" $5 "|" $6 "|" $7 }')
+    output=$(ps -p "$pids" -o pid= -o ppid= -o user= -o comm= -o pcpu= -o pmem= -o etimes= -o etime= -o args= 2>&1 | awk '{ args=""; for (i = 9; i <= NF; i++) { args = args (i == 9 ? "" : " ") $i } print $1 "|" $2 "|" $3 "|" $4 "|" args "|" $5 "|" $6 "|" $7 "|" $8 }')
     status=$?
+    if [ "$status" -ne 0 ]; then
+      output=$(ps -p "$pids" -o pid= -o ppid= -o user= -o comm= -o pcpu= -o pmem= -o etime= -o args= 2>&1 | awk '{ args=""; for (i = 8; i <= NF; i++) { args = args (i == 8 ? "" : " ") $i } print $1 "|" $2 "|" $3 "|" $4 "|" args "|" $5 "|" $6 "|" $7 }')
+      status=$?
+    fi
     emit_section ps "$status" "$output"
     ;;
 esac
@@ -335,9 +357,12 @@ mod tests {
             section("hostname", 0, "gpu-host"),
             section("gpu_csv", 0, base_gpu_csv()),
             section("compute_apps_csv", 0, "GPU-aaaa, 1234, python, 512"),
+            section("gpu_extra_csv", 0, "0, GPU-aaaa, Enabled, Enabled, 4, 16"),
+            section("mig_list", 0, "GPU 0: NVIDIA A100-SXM4-40GB (UUID: GPU-aaaa)\n  MIG 1g.5gb Device 0: (UUID: MIG-GPU-aaaa/1/0)"),
             section("pmon", 0, "# gpu        pid  type    sm   mem   enc   dec   jpg   ofa   fb  ccpm command\n    0       1234     C    25     8     -     -     -     -  512     - python"),
             section("dmon", 0, "0, 90, 42, 0, 30, 12, 0, 0, 0, 0, 1215, 1410, 0, 0, 0"),
-            section("ps", 0, "1234|1|alice|python|python train.py|10.5|2.0|01:02"),
+            section("dmon_pcie", 0, "0, 2048, 4096"),
+            section("ps", 0, "1234|1|alice|python|python train.py|10.5|2.0|3723|01:02:03"),
         ]
         .concat();
 
@@ -354,8 +379,32 @@ mod tests {
             Some("535.129.03")
         );
         assert_eq!(envelope.gpus.len(), 1);
+        assert_eq!(
+            envelope.gpus[0].pci_bus_id.as_deref(),
+            Some("00000000:65:00.0")
+        );
+        assert_eq!(
+            envelope.gpus[0].driver_version.as_deref(),
+            Some("535.129.03")
+        );
+        assert_eq!(envelope.gpus[0].graphics_clock_mhz, Some(1410));
+        assert_eq!(envelope.gpus[0].memory_clock_mhz, Some(1215));
+        assert_eq!(
+            envelope.gpus[0].mig_mode_current.as_deref(),
+            Some("Enabled")
+        );
+        assert_eq!(envelope.gpus[0].mig_instance_count, Some(1));
+        assert_eq!(envelope.gpus[0].pcie_rx_kib_per_sec, Some(2048));
+        assert_eq!(envelope.gpus[0].pcie_tx_kib_per_sec, Some(4096));
         assert_eq!(envelope.gpus[0].process_count, 1);
         assert_eq!(envelope.gpus[0].processes[0].pid, 1234);
+        assert_eq!(
+            envelope.gpus[0].processes[0].gpu_uuid.as_deref(),
+            Some("GPU-aaaa")
+        );
+        assert_eq!(envelope.gpus[0].processes[0].process_kind, "compute");
+        assert_eq!(envelope.gpus[0].processes[0].parent_pid, Some(1));
+        assert_eq!(envelope.gpus[0].processes[0].runtime_seconds, Some(3723));
         assert_eq!(
             envelope.gpus[0].processes[0].username.as_deref(),
             Some("alice")
@@ -369,8 +418,11 @@ mod tests {
             section("hostname", 0, "gpu-host"),
             section("gpu_csv", 0, base_gpu_csv()),
             section("compute_apps_csv", 9, "compute-apps not supported"),
+            section("gpu_extra_csv", 9, "gpu extra not supported"),
+            section("mig_list", 9, "mig listing not supported"),
             section("pmon", 9, "pmon not supported"),
             section("dmon", 9, "dmon not supported"),
+            section("dmon_pcie", 9, "pcie dmon not supported"),
             section("ps", 0, ""),
         ]
         .concat();
@@ -387,11 +439,23 @@ mod tests {
         assert!(envelope
             .warnings
             .iter()
+            .any(|warning| warning.contains("gpu_extra_csv collection failed")));
+        assert!(envelope
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("mig_list collection failed")));
+        assert!(envelope
+            .warnings
+            .iter()
             .any(|warning| warning.contains("pmon collection failed")));
         assert!(envelope
             .warnings
             .iter()
             .any(|warning| warning.contains("dmon collection failed")));
+        assert!(envelope
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("dmon_pcie collection failed")));
     }
 
     #[test]
@@ -400,8 +464,11 @@ mod tests {
             section("hostname", 0, "gpu-host"),
             section("gpu_csv", 127, "nvidia-smi not found"),
             section("compute_apps_csv", 127, "nvidia-smi not found"),
+            section("gpu_extra_csv", 127, "nvidia-smi not found"),
+            section("mig_list", 127, "nvidia-smi not found"),
             section("pmon", 127, "nvidia-smi not found"),
             section("dmon", 127, "nvidia-smi not found"),
+            section("dmon_pcie", 127, "nvidia-smi not found"),
             section("ps", 0, ""),
         ]
         .concat();

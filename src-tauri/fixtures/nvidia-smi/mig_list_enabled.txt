@@ -1,0 +1,4 @@
+GPU 0: NVIDIA A100-SXM4-40GB (UUID: GPU-aaaa)
+  MIG 1g.5gb Device 0: (UUID: MIG-GPU-aaaa/1/0)
+  MIG 2g.10gb Device 1: (UUID: MIG-GPU-aaaa/2/0)
+GPU 1: NVIDIA A100-SXM4-40GB (UUID: GPU-bbbb)

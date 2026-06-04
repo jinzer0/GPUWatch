@@ -54,10 +54,16 @@ export interface ServerOverviewDto {
 
 export interface CollectorProcess {
   pid: number;
+  parentPid?: number | null;
+  runtimeSeconds?: number | null;
   username: string | null;
   command: string | null;
   gpuMemoryUsedMiB: number | null;
   gpuUtilizationPercent: number | null;
+  gpuSmUtilizationPercent?: number | null;
+  gpuMemoryUtilizationPercent?: number | null;
+  gpuEncoderUtilizationPercent?: number | null;
+  gpuDecoderUtilizationPercent?: number | null;
   cpuPercent: number | null;
   hostMemoryUsedMiB: number | null;
 }
@@ -66,12 +72,27 @@ export interface GpuCardDto {
   index: number;
   uuid: string;
   name: string;
+  pciBusId: string | null;
+  driverVersion: string | null;
+  graphicsClockMhz: number | null;
+  memoryClockMhz: number | null;
   busy: boolean;
   memoryTotalMiB: number | null;
   memoryUsedMiB: number | null;
   memoryFreeMiB: number | null;
   gpuUtilizationPercent: number | null;
   memoryUtilizationPercent: number | null;
+  encoderUtilizationPercent?: number | null;
+  decoderUtilizationPercent?: number | null;
+  jpegUtilizationPercent?: number | null;
+  ofaUtilizationPercent?: number | null;
+  pcieRxKibPerSec?: number | null;
+  pcieTxKibPerSec?: number | null;
+  pcieLinkGenCurrent?: number | null;
+  pcieLinkWidthCurrent?: number | null;
+  migModeCurrent?: string | null;
+  migModePending?: string | null;
+  migInstanceCount?: number | null;
   temperatureCelsius: number | null;
   powerDrawWatt: number | null;
   powerLimitWatt: number | null;
@@ -97,10 +118,18 @@ export interface ProcessRowDto {
   stale: boolean;
   gpuIndex: number;
   pid: number;
+  parentPid?: number | null;
+  runtimeSeconds?: number | null;
   username: string | null;
   command: string | null;
+  gpuUuid: string;
+  processKind: string;
   gpuMemoryUsedMiB: number | null;
   gpuUtilizationPercent: number | null;
+  gpuSmUtilizationPercent?: number | null;
+  gpuMemoryUtilizationPercent?: number | null;
+  gpuEncoderUtilizationPercent?: number | null;
+  gpuDecoderUtilizationPercent?: number | null;
   cpuPercent: number | null;
   hostMemoryUsedMiB: number | null;
 }

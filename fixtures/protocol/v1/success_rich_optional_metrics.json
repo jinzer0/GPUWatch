@@ -1,0 +1,63 @@
+{
+  "protocolVersion": 1,
+  "schemaVersion": 1,
+  "ok": true,
+  "timestamp": "2026-06-04T10:30:00+09:00",
+  "server": {
+    "hostname": "gpu-rich",
+    "driverVersion": "550.54.14",
+    "cudaVersion": "12.4"
+  },
+  "gpus": [
+    {
+      "index": 0,
+      "uuid": "GPU-99999999-9999-9999-9999-999999999999",
+      "name": "NVIDIA H100 80GB HBM3",
+      "pciBusId": "00000000:81:00.0",
+      "driverVersion": "550.54.14",
+      "graphicsClockMhz": 1425,
+      "memoryClockMhz": 1593,
+      "memoryTotalMiB": 81559,
+      "memoryUsedMiB": 40960,
+      "memoryFreeMiB": 40599,
+      "gpuUtilizationPercent": 88.5,
+      "memoryUtilizationPercent": 72.25,
+      "encoderUtilizationPercent": 4.5,
+      "decoderUtilizationPercent": 2.25,
+      "jpegUtilizationPercent": 1.5,
+      "ofaUtilizationPercent": 0.5,
+      "pcieRxKibPerSec": 123456,
+      "pcieTxKibPerSec": 654321,
+      "pcieLinkGenCurrent": 4,
+      "pcieLinkWidthCurrent": 16,
+      "migModeCurrent": "enabled",
+      "migModePending": "disabled",
+      "migInstanceCount": 7,
+      "temperatureCelsius": 67.5,
+      "powerDrawWatt": 312.8,
+      "powerLimitWatt": 700,
+      "fanSpeedPercent": 55,
+      "processCount": 1,
+      "processes": [
+        {
+          "pid": 9901,
+          "gpuUuid": "GPU-99999999-9999-9999-9999-999999999999",
+          "processKind": "compute",
+          "parentPid": 9800,
+          "runtimeSeconds": 3661,
+          "username": "dana",
+          "command": "python rich_train.py",
+          "gpuMemoryUsedMiB": 32768,
+          "gpuUtilizationPercent": 84.5,
+          "gpuSmUtilizationPercent": 82.75,
+          "gpuMemoryUtilizationPercent": 70.5,
+          "gpuEncoderUtilizationPercent": 3.25,
+          "gpuDecoderUtilizationPercent": 1.25,
+          "cpuPercent": 104.5,
+          "hostMemoryUsedMiB": 24576
+        }
+      ]
+    }
+  ],
+  "warnings": []
+}

@@ -76,6 +76,68 @@ mod tests {
     }
 
     #[test]
+    fn rich_optional_metrics_fixture_parses() {
+        let raw = include_str!("../../fixtures/protocol/v1/success_rich_optional_metrics.json");
+        let parsed = parse_collector_json(raw).expect("rich optional metrics fixture should parse");
+        let ParsedCollectorPayload::Success(success) = parsed else {
+            panic!("expected success");
+        };
+        let gpu = &success.gpus[0];
+        assert_eq!(gpu.encoder_utilization_percent, Some(4.5));
+        assert_eq!(gpu.decoder_utilization_percent, Some(2.25));
+        assert_eq!(gpu.jpeg_utilization_percent, Some(1.5));
+        assert_eq!(gpu.ofa_utilization_percent, Some(0.5));
+        assert_eq!(gpu.pcie_rx_kib_per_sec, Some(123456));
+        assert_eq!(gpu.pcie_tx_kib_per_sec, Some(654321));
+        assert_eq!(gpu.pcie_link_gen_current, Some(4));
+        assert_eq!(gpu.pcie_link_width_current, Some(16));
+        assert_eq!(gpu.mig_mode_current.as_deref(), Some("enabled"));
+        assert_eq!(gpu.mig_mode_pending.as_deref(), Some("disabled"));
+        assert_eq!(gpu.mig_instance_count, Some(7));
+
+        let process = &gpu.processes[0];
+        assert_eq!(process.parent_pid, Some(9800));
+        assert_eq!(process.runtime_seconds, Some(3661));
+        assert_eq!(process.gpu_sm_utilization_percent, Some(82.75));
+        assert_eq!(process.gpu_memory_utilization_percent, Some(70.5));
+        assert_eq!(process.gpu_encoder_utilization_percent, Some(3.25));
+        assert_eq!(process.gpu_decoder_utilization_percent, Some(1.25));
+    }
+
+    #[test]
+    fn optional_metrics_are_missing_or_null_safe() {
+        let old_raw = include_str!("../../fixtures/protocol/v1/success_single_gpu.json");
+        let ParsedCollectorPayload::Success(old_success) =
+            parse_collector_json(old_raw).expect("old fixture should parse")
+        else {
+            panic!("expected success");
+        };
+        assert_eq!(old_success.gpus[0].encoder_utilization_percent, None);
+        assert_eq!(old_success.gpus[0].pcie_rx_kib_per_sec, None);
+        assert_eq!(old_success.gpus[0].mig_mode_current, None);
+        assert_eq!(old_success.gpus[0].processes[0].parent_pid, None);
+        assert_eq!(
+            old_success.gpus[0].processes[0].gpu_sm_utilization_percent,
+            None
+        );
+
+        let null_raw =
+            include_str!("../../fixtures/protocol/v1/success_optional_metrics_missing_null.json");
+        let ParsedCollectorPayload::Success(null_success) =
+            parse_collector_json(null_raw).expect("null optional metrics fixture should parse")
+        else {
+            panic!("expected success");
+        };
+        assert_eq!(null_success.gpus[0].decoder_utilization_percent, None);
+        assert_eq!(null_success.gpus[0].pcie_link_width_current, None);
+        assert_eq!(null_success.gpus[0].processes[0].runtime_seconds, None);
+        assert_eq!(
+            null_success.gpus[0].processes[0].gpu_decoder_utilization_percent,
+            None
+        );
+    }
+
+    #[test]
     fn protocol_schema_artifact_is_present() {
         let schema: Value =
             serde_json::from_str(include_str!("../../schemas/gpuwatcher-v1.schema.json"))
@@ -88,6 +150,55 @@ mod tests {
             .get("oneOf")
             .and_then(Value::as_array)
             .is_some_and(|items| items.len() == 2));
+    }
+
+    #[test]
+    fn protocol_schema_lists_optional_rich_metrics_without_requiring_them() {
+        let schema: Value =
+            serde_json::from_str(include_str!("../../schemas/gpuwatcher-v1.schema.json"))
+                .expect("schema JSON parses");
+        let gpu = &schema["$defs"]["gpu"];
+        let process = &schema["$defs"]["process"];
+
+        for field in [
+            "encoderUtilizationPercent",
+            "decoderUtilizationPercent",
+            "jpegUtilizationPercent",
+            "ofaUtilizationPercent",
+            "pcieRxKibPerSec",
+            "pcieTxKibPerSec",
+            "pcieLinkGenCurrent",
+            "pcieLinkWidthCurrent",
+            "migModeCurrent",
+            "migModePending",
+            "migInstanceCount",
+        ] {
+            assert!(gpu["properties"].get(field).is_some(), "missing {field}");
+            assert!(!gpu["required"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|value| value == field));
+        }
+
+        for field in [
+            "parentPid",
+            "runtimeSeconds",
+            "gpuSmUtilizationPercent",
+            "gpuMemoryUtilizationPercent",
+            "gpuEncoderUtilizationPercent",
+            "gpuDecoderUtilizationPercent",
+        ] {
+            assert!(
+                process["properties"].get(field).is_some(),
+                "missing {field}"
+            );
+            assert!(!process["required"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|value| value == field));
+        }
     }
 
     #[test]
