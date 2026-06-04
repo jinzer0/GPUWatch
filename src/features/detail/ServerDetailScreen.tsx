@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { EmptyState, ErrorState, LoadingState, MetricCard, MiniLineChart, StatusBadge } from '../../components/ui';
-import { getServerDetail, queryKeys, refreshServer } from '../../lib/api';
+import { EmptyState, ErrorState, LoadingState, MetricCard, StatusBadge, TimeSeriesChart, type TimeSeriesChartSeries } from '../../components/ui';
+import { getServerDetail, listGpuHistory, queryKeys, refreshServer } from '../../lib/api';
 import {
   formatCommand,
   formatKiBPerSecond,
@@ -16,7 +16,31 @@ import {
 } from '../../lib/format';
 import { getLiveGpuSampleKey, type LiveGpuSample } from '../../lib/liveHistory';
 import { useUiStore } from '../../lib/store';
-import type { CollectorProcess, GpuCardDto, ServerDetailDto } from '../../lib/types';
+import type { CollectorProcess, GpuCardDto, GpuHistoryResponseDto, GpuHistorySampleDto, ServerDetailDto } from '../../lib/types';
+
+type GpuHistoryMetricKey =
+  | 'gpuUtilizationPercent'
+  | 'memoryUtilizationPercent'
+  | 'encoderUtilizationPercent'
+  | 'decoderUtilizationPercent'
+  | 'pcieRxKibPerSec'
+  | 'pcieTxKibPerSec';
+
+type GpuHistoryChartSample = Pick<GpuHistorySampleDto, 'receivedAt' | GpuHistoryMetricKey>;
+
+type GpuHistoryChartSource = 'stored' | 'session';
+
+type GpuHistoryChartData = {
+  samples: GpuHistoryChartSample[];
+  source: GpuHistoryChartSource;
+};
+
+const historyQueryRange = '1h';
+
+const sourceLabelByType: Record<GpuHistoryChartSource, string> = {
+  stored: 'Stored history',
+  session: 'Session live fallback'
+};
 
 const formatClockMhz = (value: number | null | undefined) => {
   if (value === null || value === undefined) {
@@ -86,34 +110,107 @@ const GpuMetricSection = ({ children, title }: { children: React.ReactNode; titl
   </div>
 );
 
-const GpuHistoryChart = ({ ariaLabel, label, values }: { ariaLabel: string; label: string; values: Array<number | null | undefined> }) => (
-  <div className="surface p-3">
-    <div className="metric-label">{label}</div>
-    <div className="mt-2">
-      <MiniLineChart ariaLabel={ariaLabel} density="compact" values={values} />
+const gpuHistoryMetrics: Array<{ aria: string; key: GpuHistoryMetricKey; label: string; range?: { max?: number; min?: number } }> = [
+  { aria: 'GPU utilization history', key: 'gpuUtilizationPercent', label: 'GPU util', range: { min: 0, max: 100 } },
+  { aria: 'memory usage history', key: 'memoryUtilizationPercent', label: 'Memory', range: { min: 0, max: 100 } },
+  { aria: 'encoder utilization history', key: 'encoderUtilizationPercent', label: 'Encoder', range: { min: 0, max: 100 } },
+  { aria: 'decoder utilization history', key: 'decoderUtilizationPercent', label: 'Decoder', range: { min: 0, max: 100 } },
+  { aria: 'PCIe RX history', key: 'pcieRxKibPerSec', label: 'PCIe RX', range: { min: 0 } },
+  { aria: 'PCIe TX history', key: 'pcieTxKibPerSec', label: 'PCIe TX', range: { min: 0 } }
+];
+
+const toGpuHistoryChartSamples = (samples: Array<LiveGpuSample | GpuHistorySampleDto>): GpuHistoryChartSample[] =>
+  samples.map((sample) => ({
+    receivedAt: sample.receivedAt,
+    gpuUtilizationPercent: sample.gpuUtilizationPercent,
+    memoryUtilizationPercent: sample.memoryUtilizationPercent,
+    encoderUtilizationPercent: sample.encoderUtilizationPercent,
+    decoderUtilizationPercent: sample.decoderUtilizationPercent,
+    pcieRxKibPerSec: sample.pcieRxKibPerSec,
+    pcieTxKibPerSec: sample.pcieTxKibPerSec
+  }));
+
+const findStoredGpuSeries = (history: GpuHistoryResponseDto | null, gpu: GpuCardDto) => {
+  const seriesWithSamples = history?.series.filter((series) => series.samples.length > 0) ?? [];
+  return seriesWithSamples.find((series) => series.gpuIndex === gpu.index) ?? seriesWithSamples.find((series) => series.gpuUuid === gpu.uuid) ?? null;
+};
+
+const resolveGpuHistoryChartData = ({
+  gpu,
+  history,
+  isStoredHistoryReady,
+  sessionSamples
+}: {
+  gpu: GpuCardDto;
+  history: GpuHistoryResponseDto | null;
+  isStoredHistoryReady: boolean;
+  sessionSamples: LiveGpuSample[];
+}): GpuHistoryChartData => {
+  const storedSeries = isStoredHistoryReady ? findStoredGpuSeries(history, gpu) : null;
+  if (storedSeries) {
+    return { samples: toGpuHistoryChartSamples(storedSeries.samples), source: 'stored' };
+  }
+
+  return { samples: toGpuHistoryChartSamples(sessionSamples), source: 'session' };
+};
+
+const GpuHistoryChart = ({
+  ariaLabel,
+  label,
+  metricKey,
+  range,
+  samples
+}: {
+  ariaLabel: string;
+  label: string;
+  metricKey: GpuHistoryMetricKey;
+  range?: { max?: number; min?: number };
+  samples: GpuHistoryChartSample[];
+}) => {
+  const series: Array<TimeSeriesChartSeries<GpuHistoryChartSample>> = [{ id: metricKey, label, metric: metricKey }];
+
+  return (
+    <div className="surface p-3">
+      <div className="metric-label">{label}</div>
+      <div className="mt-2">
+        <TimeSeriesChart ariaLabel={ariaLabel} density="compact" emptyLabel="Not enough samples" range={range} samples={samples} series={series} />
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
-const gpuHistoryValue = (samples: LiveGpuSample[], key: keyof LiveGpuSample) => samples.map((sample) => sample[key] as number | null | undefined);
-
-const GpuHistorySection = ({ detail, gpu, samples }: { detail: ServerDetailDto; gpu: GpuCardDto; samples: LiveGpuSample[] }) => (
+const GpuHistorySection = ({
+  detail,
+  gpu,
+  samples,
+  source
+}: {
+  detail: ServerDetailDto;
+  gpu: GpuCardDto;
+  samples: GpuHistoryChartSample[];
+  source: GpuHistoryChartSource;
+}) => (
   <div className="mt-5">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="eyebrow">History</div>
-      {shouldShowLastSuccessNote(detail) ? (
-        <p className="text-xs font-semibold text-[color:var(--color-stale)]">
-          Charts use the last successful snapshot. Last success: {formatTime(detail.health.lastSuccessAt)}.
-        </p>
-      ) : null}
+      <div className="flex flex-wrap items-center justify-end gap-3 text-xs font-semibold">
+        <span className="rounded-full border border-[color:var(--color-border)] bg-[var(--color-accent-soft)] px-3 py-1 text-[color:var(--color-accent)]">
+          Chart source: {sourceLabelByType[source]}
+        </span>
+        {shouldShowLastSuccessNote(detail) ? <span className="text-[color:var(--color-stale)]">Charts use the last successful snapshot. Last success: {formatTime(detail.health.lastSuccessAt)}.</span> : null}
+      </div>
     </div>
     <div className="mt-3 grid grid-cols-3 gap-3">
-      <GpuHistoryChart ariaLabel={`GPU ${gpu.index} GPU utilization history`} label="GPU util" values={gpuHistoryValue(samples, 'gpuUtilizationPercent')} />
-      <GpuHistoryChart ariaLabel={`GPU ${gpu.index} memory usage history`} label="Memory" values={gpuHistoryValue(samples, 'memoryUtilizationPercent')} />
-      <GpuHistoryChart ariaLabel={`GPU ${gpu.index} encoder utilization history`} label="Encoder" values={gpuHistoryValue(samples, 'encoderUtilizationPercent')} />
-      <GpuHistoryChart ariaLabel={`GPU ${gpu.index} decoder utilization history`} label="Decoder" values={gpuHistoryValue(samples, 'decoderUtilizationPercent')} />
-      <GpuHistoryChart ariaLabel={`GPU ${gpu.index} PCIe RX history`} label="PCIe RX" values={gpuHistoryValue(samples, 'pcieRxKibPerSec')} />
-      <GpuHistoryChart ariaLabel={`GPU ${gpu.index} PCIe TX history`} label="PCIe TX" values={gpuHistoryValue(samples, 'pcieTxKibPerSec')} />
+      {gpuHistoryMetrics.map((metric) => (
+        <GpuHistoryChart
+          ariaLabel={`GPU ${gpu.index} ${metric.aria}`}
+          key={metric.key}
+          label={metric.label}
+          metricKey={metric.key}
+          range={metric.range}
+          samples={samples}
+        />
+      ))}
     </div>
   </div>
 );
@@ -135,11 +232,25 @@ export const ServerDetailScreen = ({ selectedServerId }: { selectedServerId: str
       return Math.max((detail?.server.pollingIntervalSeconds ?? 10) * 1000, 5_000);
     }
   });
+  const detail = detailQuery.data ?? null;
+  const detailServerId = detail?.server.id ?? null;
+  const historyQuery = useQuery({
+    enabled: Boolean(detailServerId),
+    queryFn: () => {
+      if (!detailServerId) {
+        throw new Error('Select a server before loading GPU history.');
+      }
+      return listGpuHistory(detailServerId, null, null, historyQueryRange);
+    },
+    queryKey: queryKeys.gpuHistory(detailServerId, null, null, historyQueryRange),
+    refetchInterval: () => (detail ? Math.max(detail.server.pollingIntervalSeconds * 1000, 5_000) : false)
+  });
   const refreshMutation = useMutation({
     mutationFn: refreshServer,
     onSuccess: (_result, id) =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.detail(id) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.gpuHistory(id, null, null, historyQueryRange) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.overview }),
         queryClient.invalidateQueries({ queryKey: queryKeys.processes })
       ])
@@ -172,10 +283,11 @@ export const ServerDetailScreen = ({ selectedServerId }: { selectedServerId: str
     return <ErrorState message={detailQuery.error.message} />;
   }
 
-  const detail = detailQuery.data;
   if (!detail) {
     return <EmptyState title="Server not found" body="The selected server is no longer available in backend storage." />;
   }
+
+  const storedHistory = historyQuery.isSuccess ? historyQuery.data : null;
 
   return (
     <section className="space-y-6">
@@ -219,7 +331,15 @@ export const ServerDetailScreen = ({ selectedServerId }: { selectedServerId: str
       ) : null}
 
       <div className="grid gap-4">
-        {detail.gpus.map((gpu) => (
+        {detail.gpus.map((gpu) => {
+          const chartData = resolveGpuHistoryChartData({
+            gpu,
+            history: storedHistory,
+            isStoredHistoryReady: historyQuery.isSuccess,
+            sessionSamples: liveSamples[getLiveGpuSampleKey(detail.server.id, gpu.index)] ?? []
+          });
+
+          return (
           <article className="panel p-5" key={gpu.uuid}>
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -267,12 +387,13 @@ export const ServerDetailScreen = ({ selectedServerId }: { selectedServerId: str
               <MetricCard label="Fan" value={formatPercent(gpu.fanSpeedPercent)} />
               <MetricCard label="Processes" value={gpu.processCount} />
             </div>
-            <GpuHistorySection detail={detail} gpu={gpu} samples={liveSamples[getLiveGpuSampleKey(detail.server.id, gpu.index)] ?? []} />
+            <GpuHistorySection detail={detail} gpu={gpu} samples={chartData.samples} source={chartData.source} />
             <div className="mt-5">
               <ProcessList processes={gpu.processes} />
             </div>
           </article>
-        ))}
+          );
+        })}
       </div>
     </section>
   );

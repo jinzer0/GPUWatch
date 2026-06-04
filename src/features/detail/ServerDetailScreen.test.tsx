@@ -3,13 +3,14 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ServerDetailScreen } from './ServerDetailScreen';
-import { getServerDetail } from '../../lib/api';
+import { getServerDetail, listGpuHistory } from '../../lib/api';
 import { getLiveGpuSampleKey } from '../../lib/liveHistory';
 import { useUiStore } from '../../lib/store';
-import type { ServerDetailDto } from '../../lib/types';
+import type { GpuHistoryResponseDto, GpuHistorySampleDto, ServerDetailDto } from '../../lib/types';
 
 const apiMocks = vi.hoisted(() => ({
   getServerDetail: vi.fn(),
+  listGpuHistory: vi.fn(),
   refreshServer: vi.fn()
 }));
 
@@ -120,8 +121,16 @@ const detailFixture: ServerDetailDto = {
 
 vi.mock('../../lib/api', () => ({
   getServerDetail: apiMocks.getServerDetail,
+  listGpuHistory: apiMocks.listGpuHistory,
   queryKeys: {
     detail: (id: string) => ['server-detail', id],
+    gpuHistory: (serverId: string | null | undefined, gpuIndex: number | null | undefined, gpuUuid: string | null | undefined, range: string) => [
+      'gpu-history',
+      serverId ?? null,
+      gpuIndex ?? null,
+      gpuUuid ?? null,
+      range
+    ],
     overview: ['overview'],
     processes: ['processes']
   },
@@ -130,14 +139,68 @@ vi.mock('../../lib/api', () => ({
 
 const makeQueryClient = () => new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
 
+const historySample = (overrides: Partial<GpuHistorySampleDto> = {}): GpuHistorySampleDto => ({
+  receivedAt: '2026-06-04T00:00:00.000Z',
+  memoryTotalMiB: 49_152,
+  memoryUsedMiB: 12_288,
+  memoryFreeMiB: 36_864,
+  gpuUtilizationPercent: 30,
+  memoryUtilizationPercent: 25,
+  encoderUtilizationPercent: 5,
+  decoderUtilizationPercent: 4,
+  jpegUtilizationPercent: null,
+  ofaUtilizationPercent: null,
+  temperatureCelsius: 50,
+  powerDrawWatt: 150,
+  powerLimitWatt: 300,
+  pcieRxKibPerSec: 512,
+  pcieTxKibPerSec: 768,
+  ...overrides
+});
+
+const historyResponse = (series: GpuHistoryResponseDto['series'] = []): GpuHistoryResponseDto => ({
+  serverId: 'server-1',
+  serverName: 'Lab GPU',
+  pollingIntervalSeconds: 30,
+  range: '1h',
+  startedAt: '2026-06-04T00:00:00.000Z',
+  finishedAt: '2026-06-04T01:00:00.000Z',
+  series
+});
+
+const sessionSample = (overrides: Partial<NonNullable<ReturnType<typeof useUiStore.getState>['liveSamples'][string]>[number]> = {}) => ({
+  serverId: 'server-1',
+  gpuIndex: 1,
+  gpuUuid: 'GPU-populated',
+  receivedAt: '2026-06-04T00:00:00.000Z',
+  memoryUsedMiB: 24_576,
+  memoryFreeMiB: 24_576,
+  memoryTotalMiB: 49_152,
+  gpuUtilizationPercent: 40,
+  memoryUtilizationPercent: 50,
+  encoderUtilizationPercent: 10,
+  decoderUtilizationPercent: 3,
+  jpegUtilizationPercent: null,
+  ofaUtilizationPercent: null,
+  pcieRxKibPerSec: 1000,
+  pcieTxKibPerSec: null,
+  temperatureCelsius: null,
+  powerDrawWatt: null,
+  powerLimitWatt: null,
+  stale: false,
+  source: 'live' as const,
+  ...overrides
+});
+
 type QueryWithRefetchInterval = {
   options: {
     refetchInterval?: (query: unknown) => number | false;
   };
 };
 
-const renderDetail = (detail: ServerDetailDto = detailFixture) => {
+const renderDetail = (detail: ServerDetailDto = detailFixture, historyResult: GpuHistoryResponseDto | Promise<GpuHistoryResponseDto> = historyResponse()) => {
   vi.mocked(getServerDetail).mockResolvedValue(detail);
+  vi.mocked(listGpuHistory).mockReturnValue(Promise.resolve(historyResult));
   const queryClient = makeQueryClient();
 
   const view = render(
@@ -213,6 +276,101 @@ describe('ServerDetailScreen', () => {
     const key = getLiveGpuSampleKey('server-1', 1);
     expect(useUiStore.getState().liveSamples[key]).toHaveLength(1);
     expect(useUiStore.getState().liveSamples[key][0].encoderUtilizationPercent).toBe(12.3);
+  });
+
+  it('queries stored 1h GPU history and prefers stored samples matched by index before UUID fallback', async () => {
+    const { container } = renderDetail(
+      detailFixture,
+      historyResponse([
+        {
+          serverId: 'server-1',
+          serverName: 'Lab GPU',
+          gpuIndex: 99,
+          gpuUuid: 'GPU-nullable',
+          name: 'UUID fallback GPU',
+          samples: [historySample({ gpuUtilizationPercent: 22 })]
+        },
+        {
+          serverId: 'server-1',
+          serverName: 'Lab GPU',
+          gpuIndex: 1,
+          gpuUuid: 'GPU-index-wins',
+          name: 'Index primary GPU',
+          samples: [historySample({ gpuUtilizationPercent: 77, receivedAt: '2026-06-04T00:00:30.000Z' })]
+        },
+        {
+          serverId: 'server-1',
+          serverName: 'Lab GPU',
+          gpuIndex: 98,
+          gpuUuid: 'GPU-populated',
+          name: 'UUID secondary GPU',
+          samples: [historySample({ gpuUtilizationPercent: 88, receivedAt: '2026-06-04T00:00:45.000Z' })]
+        }
+      ])
+    );
+
+    expect(await screen.findAllByText('Chart source: Stored history')).toHaveLength(2);
+    expect(listGpuHistory).toHaveBeenCalledWith('server-1', null, null, '1h');
+    expect(container.querySelector('[data-chart-point-value="22"]')).toBeDefined();
+    expect(container.querySelector('[data-chart-point-value="77"]')).toBeDefined();
+    expect(container.querySelector('[data-chart-point-value="88"]')).toBeNull();
+  });
+
+  it('uses session live fallback while stored history is still loading', async () => {
+    useUiStore.setState({
+      liveSamples: {
+        [getLiveGpuSampleKey('server-1', 1)]: [sessionSample({ gpuUtilizationPercent: 64 })]
+      }
+    });
+
+    const pendingHistory = new Promise<GpuHistoryResponseDto>(() => undefined);
+    const { container } = renderDetail(detailFixture, pendingHistory);
+
+    expect(await screen.findAllByText('Chart source: Session live fallback')).toHaveLength(2);
+    expect(listGpuHistory).toHaveBeenCalledWith('server-1', null, null, '1h');
+    expect(container.querySelector('[data-chart-point-value="64"]')).toBeDefined();
+  });
+
+  it('keeps using session live fallback when stored history is empty for a GPU', async () => {
+    useUiStore.setState({
+      liveSamples: {
+        [getLiveGpuSampleKey('server-1', 1)]: [sessionSample({ gpuUtilizationPercent: 71 })]
+      }
+    });
+
+    const { container } = renderDetail(
+      detailFixture,
+      historyResponse([
+        {
+          serverId: 'server-1',
+          serverName: 'Lab GPU',
+          gpuIndex: 1,
+          gpuUuid: 'GPU-populated',
+          name: 'NVIDIA Clocked GPU',
+          samples: []
+        }
+      ])
+    );
+
+    expect(await screen.findAllByText('Chart source: Session live fallback')).toHaveLength(2);
+    expect(container.querySelector('[data-chart-point-value="71"]')).toBeDefined();
+  });
+
+  it('does not append failed replacement snapshots or render them as stored chart samples', async () => {
+    const failedDetail = {
+      ...detailFixture,
+      health: { ...detailFixture.health, status: 'failed replacement', lastSuccessAt: '2026-06-04T00:00:00.000Z' },
+      receivedAt: '2026-06-04T00:01:00.000Z'
+    };
+    const appendLiveSamplesFromDetail = vi.fn(useUiStore.getState().appendLiveSamplesFromDetail);
+    useUiStore.setState({ appendLiveSamplesFromDetail });
+
+    renderDetail(failedDetail, historyResponse());
+
+    expect(await screen.findAllByText('Chart source: Session live fallback')).toHaveLength(2);
+    expect(appendLiveSamplesFromDetail).not.toHaveBeenCalled();
+    expect(useUiStore.getState().liveSamples).toEqual({});
+    expect(screen.queryByText('Chart source: Stored history')).toBeNull();
   });
 
   it('renders rich optional GPU metrics and live history charts without fabricated zeroes', async () => {
