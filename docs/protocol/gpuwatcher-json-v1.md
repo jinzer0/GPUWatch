@@ -2,7 +2,7 @@
 
 Protocol v1 is the app's stored snapshot contract. The remote server doesn't emit this JSON envelope. During a refresh, the backend opens system `ssh`, runs a fixed POSIX shell script, reads sectioned command output from stdout, parses it locally, and stores a synthesized protocol v1 snapshot.
 
-Remote stdout is command output grouped into sections for `nvidia-smi`, optional `pmon`, optional `dmon`, and `ps`. It isn't a remote GPUWatcher JSON command response, and the server doesn't need GPUWatcher, nvitop, Python, or a collector package installed.
+Remote stdout is command output grouped into sections for `nvidia-smi`, optional richer metric probes, and `ps`. It isn't a remote GPUWatcher JSON command response, and the server doesn't need GPUWatcher, nvitop, Python, or a collector package installed.
 
 ## Versions
 
@@ -15,13 +15,15 @@ The desktop app rejects unsupported protocol or schema versions with `protocol_u
 
 The backend can synthesize a success snapshot from these remote commands:
 
-- GPU CSV from `nvidia-smi --query-gpu=... --format=csv,noheader,nounits`
-- Compute applications from `nvidia-smi --query-compute-apps=... --format=csv,noheader,nounits`
-- Optional process monitor samples from `nvidia-smi pmon`
-- Optional device monitor samples from `nvidia-smi dmon`
-- Process enrichment from `ps`
+- `gpu_csv`: required GPU CSV from `nvidia-smi --query-gpu=... --format=csv,noheader,nounits`
+- `gpu_extra_csv`: optional clocks, encoder, decoder, JPEG, OFA, PCIe, fan, and throttle fields from `nvidia-smi --query-gpu`
+- `mig_list`: optional basic MIG instance listing from `nvidia-smi -L`
+- `dmon`: optional device monitor samples from `nvidia-smi dmon`
+- `dmon_pcie`: optional PCIe monitor samples from `nvidia-smi dmon -s t`
+- `pmon`: optional process monitor samples from `nvidia-smi pmon`
+- `ps`: optional process enrichment from `ps`
 
-The base GPU CSV query is required. Compute-apps, `pmon`, `dmon`, and `ps` improve process and utilization detail when present. Optional sections can fail or be unsupported without blocking the whole snapshot; those cases become warnings and nullable fields.
+The base `gpu_csv` query is required. `gpu_extra_csv`, `mig_list`, `dmon`, `dmon_pcie`, `pmon`, and `ps` improve fidelity when present. Optional sections can fail or be unsupported without blocking the whole snapshot if the base GPU CSV succeeds; those cases become warnings and nullable fields.
 
 ## Success Envelope
 
@@ -41,11 +43,11 @@ The base GPU CSV query is required. Compute-apps, `pmon`, `dmon`, and `ps` impro
 }
 ```
 
-Metric units are part of field names: `memoryUsedMiB`, `temperatureCelsius`, `powerDrawWatt`, `gpuUtilizationPercent`. Unavailable metrics are `null`, never `0`.
+Metric units are part of field names: `memoryUsedMiB`, `temperatureCelsius`, `powerDrawWatt`, `gpuUtilizationPercent`. Unavailable metrics are `null`, never `0`. PCIe throughput from the fixed `dmon_pcie` probe is reported as KiB/s because the command output doesn't carry unit metadata.
 
 ## Error Model
 
-Most collection failures are app-level errors because the backend owns SSH, parsing, and protocol synthesis. A missing `nvidia-smi` command is `nvidia_smi_missing`. A failed base GPU query is a blocking remote command failure. Optional section failures are warnings on the last poll or the synthesized snapshot, not collector envelopes.
+Most collection failures are app-level errors because the backend owns SSH, parsing, and protocol synthesis. A missing `nvidia-smi` command is `nvidia_smi_missing`. A failed base GPU query is a blocking remote command failure. Optional section failures for `gpu_extra_csv`, `mig_list`, `dmon`, `dmon_pcie`, `pmon`, or `ps` are warnings on the last poll or the synthesized snapshot, not collector envelopes.
 
 Collector error envelopes are reserved for stored historical snapshots that already contain protocol JSON from older designs. New no-install SSH collection doesn't rely on a remote collector error JSON response.
 
@@ -86,7 +88,7 @@ Freshness, stale, and offline decisions use app-local timestamps.
 |---|---|
 | `transport_ssh` | `ssh_timeout`, `ssh_auth_failed`, `ssh_unreachable`, `ssh_host_key_failed` |
 | `remote_command` | `nvidia_smi_missing`, `base_gpu_query_failed`, `remote_command_failed`, `remote_command_timeout` |
-| `remote_optional_section` | warnings for compute-apps, `pmon`, `dmon`, or `ps` failures |
+| `remote_optional_section` | warnings for `gpu_extra_csv`, `mig_list`, `dmon`, `dmon_pcie`, `pmon`, or `ps` failures |
 | `protocol` | `protocol_malformed_output`, `protocol_schema_invalid`, `protocol_unsupported_version` |
 | `collector` | historical collector-provided error type |
 | `storage_app` | `sqlite_error`, `migration_error`, `snapshot_write_failed` |
@@ -94,6 +96,10 @@ Freshness, stale, and offline decisions use app-local timestamps.
 
 ## Known Limitations
 
-`nvidia-smi` can return `N/A` or `-` for fields that aren't available on a given driver, GPU, or MIG setup. `pmon` and `dmon` support also varies by driver and platform. GPUWatcher keeps those values unknown or nullable and surfaces warnings where useful.
+`nvidia-smi` can return `N/A`, `-`, blank values, or unsupported markers for fields that aren't available on a given driver, GPU, or MIG setup. `gpu_extra_csv`, `mig_list`, `dmon`, `dmon_pcie`, `pmon`, and `ps` support also varies by driver, platform, permission, and GPU mode. GPUWatcher keeps those values unknown or nullable and surfaces warnings where useful.
+
+MIG support is basic instance counting from the visible list output, not full GI or CI topology. PCIe throughput depends on `dmon_pcie` availability and is kept nullable when the driver doesn't report it. Process utilization can be absent when `pmon` is unsupported or when a process disappears between probes.
 
 Process rows are built from `nvidia-smi` process queries plus `ps` enrichment. That data can miss short-lived processes and isn't as rich as nvitop backed by NVML plus psutil. The protocol should be read as a practical polling snapshot, not an exact nvitop match.
+
+Live mini chart history isn't part of this JSON contract. The frontend keeps successful samples in session memory only, keyed by server and GPU index, capped at 120 samples, deduplicated by timestamp, and cleared by app restart. Failed polls preserve stale latest-success data and don't append live chart samples.
