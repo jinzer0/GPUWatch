@@ -55,6 +55,9 @@ GPUWATCHER_LIVE_SSH_TARGET=tml-server cargo test --manifest-path src-tauri/Cargo
 - Optional `compute-apps`, `pmon`, `dmon`, and `ps` failures degrade to warnings if the base GPU CSV succeeds.
 - `docs/plan/` and `docs/draft/` are historical records; active instructions live in README/setup/protocol/troubleshooting/smoke docs.
 - `.sisyphus/`, `.playwright-mcp/`, `dist/`, `node_modules/`, and `src-tauri/target/` are local artifacts, not product source.
+- Every future commit attribution must use exactly:
+  `Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)`
+  `Co-authored-by: Sisyphus <clio-agent@sisyphuslabs.ai>`
 
 ## ANTI-PATTERNS
 
