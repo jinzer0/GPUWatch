@@ -32,6 +32,7 @@ pub fn run() {
             commands::list_overview,
             commands::get_server_detail,
             commands::list_processes,
+            commands::list_gpu_history,
             commands::test_connection,
             commands::refresh_server
         ])

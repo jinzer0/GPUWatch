@@ -7,8 +7,8 @@ use tauri::{AppHandle, Manager, State};
 use crate::command_runner::SystemSshRunner;
 use crate::error::AppError;
 use crate::models::{
-    ConnectionTestResultDto, ParsedCollectorPayload, ProcessRowDto, Server, ServerDetailDto,
-    ServerInput, ServerOverviewDto, SuccessEnvelope,
+    ConnectionTestResultDto, GpuHistoryResponseDto, ParsedCollectorPayload, ProcessRowDto, Server,
+    ServerDetailDto, ServerInput, ServerOverviewDto, SuccessEnvelope,
 };
 use crate::no_install_collector::collect_no_install_snapshot;
 use crate::protocol::parse_collector_json;
@@ -164,6 +164,18 @@ pub fn list_processes(state: State<'_, AppState>) -> Result<Vec<ProcessRowDto>, 
     let health = repository.all_health()?;
     let snapshots = repository.all_latest_snapshots()?;
     build_process_rows(&servers, &health, &snapshots)
+}
+
+#[tauri::command]
+pub fn list_gpu_history(
+    state: State<'_, AppState>,
+    server_id: String,
+    gpu_index: Option<i64>,
+    gpu_uuid: Option<String>,
+    range: String,
+) -> Result<GpuHistoryResponseDto, AppError> {
+    let repository = state.repository.lock().expect("repository mutex poisoned");
+    repository.list_gpu_history(&server_id, gpu_index, gpu_uuid, &range, &now_string())
 }
 
 #[tauri::command]
@@ -399,6 +411,16 @@ mod tests {
         assert!(!source.contains(&legacy_binary));
     }
 
+    #[test]
+    fn history_command_surface_is_present() {
+        let commands_source = include_str!("commands.rs");
+        let lib_source = include_str!("lib.rs");
+
+        assert!(commands_source.contains("pub fn list_gpu_history"));
+        assert!(commands_source.contains("repository.list_gpu_history"));
+        assert!(lib_source.contains("commands::list_gpu_history"));
+    }
+
     #[tokio::test]
     async fn poll_server_stores_synthesized_snapshot_on_success() {
         let state = test_state();
@@ -421,6 +443,12 @@ mod tests {
             .expect("snapshot lookup")
             .expect("snapshot stored");
         assert_eq!(snapshot.raw_json, raw_json);
+        assert_eq!(
+            repository
+                .gpu_history_sample_count(&server.id)
+                .expect("history count"),
+            2
+        );
         let health = repository
             .get_health(&server.id)
             .expect("health lookup")
@@ -453,6 +481,12 @@ mod tests {
             .latest_snapshot(&server.id)
             .expect("snapshot lookup")
             .is_none());
+        assert_eq!(
+            repository
+                .gpu_history_sample_count(&server.id)
+                .expect("history count"),
+            0
+        );
         let health = repository
             .get_health(&server.id)
             .expect("health lookup")
@@ -488,6 +522,12 @@ mod tests {
             .latest_snapshot(&server.id)
             .expect("snapshot lookup")
             .is_none());
+        assert_eq!(
+            repository
+                .gpu_history_sample_count(&server.id)
+                .expect("history count"),
+            0
+        );
         let health = repository
             .get_health(&server.id)
             .expect("health lookup")

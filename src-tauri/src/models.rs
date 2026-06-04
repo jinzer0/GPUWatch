@@ -277,6 +277,54 @@ pub struct ServerDetailDto {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
+pub struct GpuHistorySampleDto {
+    pub received_at: String,
+    #[serde(rename = "memoryTotalMiB")]
+    pub memory_total_mib: Option<i64>,
+    #[serde(rename = "memoryUsedMiB")]
+    pub memory_used_mib: Option<i64>,
+    #[serde(rename = "memoryFreeMiB")]
+    pub memory_free_mib: Option<i64>,
+    pub gpu_utilization_percent: Option<f64>,
+    pub memory_utilization_percent: Option<f64>,
+    pub encoder_utilization_percent: Option<f64>,
+    pub decoder_utilization_percent: Option<f64>,
+    pub jpeg_utilization_percent: Option<f64>,
+    pub ofa_utilization_percent: Option<f64>,
+    pub temperature_celsius: Option<f64>,
+    pub power_draw_watt: Option<f64>,
+    pub power_limit_watt: Option<f64>,
+    #[serde(rename = "pcieRxKibPerSec")]
+    pub pcie_rx_kib_per_sec: Option<i64>,
+    #[serde(rename = "pcieTxKibPerSec")]
+    pub pcie_tx_kib_per_sec: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuHistorySeriesDto {
+    pub server_id: String,
+    pub server_name: String,
+    pub gpu_index: i64,
+    pub gpu_uuid: Option<String>,
+    pub name: Option<String>,
+    pub samples: Vec<GpuHistorySampleDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuHistoryResponseDto {
+    pub server_id: String,
+    pub server_name: String,
+    pub polling_interval_seconds: i64,
+    pub range: String,
+    pub started_at: String,
+    pub finished_at: String,
+    pub series: Vec<GpuHistorySeriesDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct ProcessRowDto {
     pub server_id: String,
     pub server_name: String,

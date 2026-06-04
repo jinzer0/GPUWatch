@@ -3,7 +3,7 @@ use std::sync::Mutex;
 
 use crate::command_runner::SystemSshRunner;
 use crate::error::AppError;
-use crate::repository::Repository;
+use crate::repository::{now_string, Repository};
 use crate::scheduler::PollScheduler;
 
 pub struct AppState {
@@ -29,6 +29,7 @@ impl AppState {
         }
         let repository = Repository::open(&path)?;
         repository.migrate()?;
+        repository.prune_gpu_history(&now_string())?;
         Ok(Self::new(repository))
     }
 }
