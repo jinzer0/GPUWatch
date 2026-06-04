@@ -1,10 +1,25 @@
+import { useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { ErrorState, LoadingState, MetricCard, StatusBadge } from '../../components/ui';
+import {
+  EmptyState,
+  ErrorState,
+  InlineToolbar,
+  LabeledSelect,
+  LabeledTextInput,
+  LoadingState,
+  MetricCard,
+  ResetButton,
+  StatusBadge,
+  type LabeledSelectOption
+} from '../../components/ui';
 import { formatPercent, formatTemperature, formatTime, formatUnknown, sanitizeMessage } from '../../lib/format';
 import { queryKeys, refreshServer, seedDemoData } from '../../lib/api';
 import { useUiStore } from '../../lib/store';
 import type { ServerOverviewDto } from '../../lib/types';
+import { DEFAULT_OVERVIEW_FILTERS, filterOverviewRows, type OverviewFilters } from '../../lib/visibility';
+
+const ALL_FILTER_VALUE = 'all';
 
 const invalidateLiveData = (queryClient: ReturnType<typeof useQueryClient>) =>
   Promise.all([
@@ -17,6 +32,9 @@ export const OverviewScreen = ({ overview, isLoading, error }: { overview: Serve
   const queryClient = useQueryClient();
   const selectServer = useUiStore((state) => state.selectServer);
   const setActiveTab = useUiStore((state) => state.setActiveTab);
+  const [searchText, setSearchText] = useState(DEFAULT_OVERVIEW_FILTERS.searchText);
+  const [statusFilter, setStatusFilter] = useState(DEFAULT_OVERVIEW_FILTERS.status ?? ALL_FILTER_VALUE);
+  const [quickFilter, setQuickFilter] = useState<OverviewFilters['state']>(DEFAULT_OVERVIEW_FILTERS.state);
   const seedMutation = useMutation({
     mutationFn: seedDemoData,
     onSuccess: () => invalidateLiveData(queryClient)
@@ -27,10 +45,35 @@ export const OverviewScreen = ({ overview, isLoading, error }: { overview: Serve
       Promise.all([invalidateLiveData(queryClient), queryClient.invalidateQueries({ queryKey: queryKeys.detail(id) })])
   });
 
+  const statusOptions = useMemo<LabeledSelectOption[]>(() => {
+    const uniqueStatuses = Array.from(new Set(overview.map((server) => server.status))).sort((left, right) => left.localeCompare(right));
+    return [{ label: 'All statuses', value: ALL_FILTER_VALUE }, ...uniqueStatuses.map((status) => ({ label: formatUnknown(status), value: status }))];
+  }, [overview]);
+
+  const filters = useMemo<OverviewFilters>(
+    () => ({
+      searchText,
+      status: statusFilter === ALL_FILTER_VALUE ? null : statusFilter,
+      state: quickFilter
+    }),
+    [quickFilter, searchText, statusFilter]
+  );
+
+  const visibleRows = useMemo(() => filterOverviewRows(overview, filters), [filters, overview]);
+
+  const resetFilters = () => {
+    setSearchText(DEFAULT_OVERVIEW_FILTERS.searchText);
+    setStatusFilter(DEFAULT_OVERVIEW_FILTERS.status ?? ALL_FILTER_VALUE);
+    setQuickFilter(DEFAULT_OVERVIEW_FILTERS.state);
+  };
+
   const openServer = (id: string) => {
     selectServer(id);
     setActiveTab('detail');
   };
+
+  const showNoData = !isLoading && !error && overview.length === 0;
+  const showFilteredEmpty = !isLoading && !error && overview.length > 0 && visibleRows.length === 0;
 
   return (
     <section className="space-y-6">
@@ -49,11 +92,44 @@ export const OverviewScreen = ({ overview, isLoading, error }: { overview: Serve
         </div>
       </div>
 
+      <InlineToolbar label="Overview filters" summary={`Showing ${visibleRows.length} of ${overview.length} servers`}>
+        <LabeledTextInput
+          id="overview-search"
+          label="Search servers"
+          onChange={(event) => setSearchText(event.target.value)}
+          placeholder="Name, host, status, or error"
+          value={searchText}
+        />
+        <LabeledSelect
+          id="overview-status"
+          label="Status"
+          onChange={(event) => setStatusFilter(event.target.value)}
+          options={statusOptions}
+          value={statusFilter}
+        />
+        <LabeledSelect
+          id="overview-quick-filter"
+          label="Quick filter"
+          onChange={(event) => setQuickFilter(event.target.value as OverviewFilters['state'])}
+          options={[
+            { label: 'All servers', value: 'all' },
+            { label: 'Stale only', value: 'stale' },
+            { label: 'Errors only', value: 'error' }
+          ]}
+          value={quickFilter}
+        />
+        <ResetButton onClick={resetFilters} />
+      </InlineToolbar>
+
       {isLoading ? <LoadingState label="Loading overview DTOs..." /> : null}
       {error ? <ErrorState message={error.message} /> : null}
+      {showNoData ? <EmptyState body="Add a server or seed demo data to populate the fleet snapshot." title="No servers configured" /> : null}
+      {showFilteredEmpty ? (
+        <EmptyState body="Try a broader search or reset the local visibility controls." title="No servers match these filters" />
+      ) : null}
 
       <div className="grid gap-4">
-        {overview.map((server) => (
+        {visibleRows.map((server) => (
           <article className="panel overflow-hidden p-5" key={server.id}>
             <div className="flex flex-wrap items-start justify-between gap-4">
               <button className="text-left" onClick={() => openServer(server.id)} type="button">
