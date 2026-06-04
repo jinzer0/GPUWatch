@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   InlineToolbar,
   MiniLineChart,
+  TimeSeriesChart,
   LabeledSelect,
   LabeledTextInput,
   ResetButton,
@@ -119,6 +120,121 @@ describe('shared UI primitives', () => {
     expect(chart.getAttribute('class')).toContain('mini-line-chart-svg');
     expect(chart.getAttribute('height')).toBe('34');
     expect(chart.closest('.mini-line-chart')?.className).toContain('mini-line-chart-compact');
+  });
+
+
+  it('renders an accessible time series chart with a single selected metric sample', () => {
+    render(
+      <TimeSeriesChart
+        ariaLabel="GPU utilization over time"
+        density="compact"
+        height={88}
+        range={{ min: 0, max: 100 }}
+        samples={[{ receivedAt: '2026-06-04T00:00:00.000Z', gpuUtilizationPercent: 42 }]}
+        series={[{ id: 'gpu', label: 'GPU', metric: 'gpuUtilizationPercent' }]}
+      />
+    );
+
+    const chart = screen.getByRole('img', { name: 'GPU utilization over time' });
+    expect(chart.getAttribute('class')).toContain('time-series-chart-svg');
+    expect(chart.getAttribute('height')).toBe('88');
+    expect(chart.closest('.time-series-chart')?.className).toContain('time-series-chart-compact');
+    expect(chart.querySelector('[data-chart-point-value="42"]')).toBeDefined();
+  });
+
+  it('renders time series empty state for empty data or all-null selected metric values', () => {
+    const { rerender } = render(
+      <TimeSeriesChart
+        ariaLabel="Memory history"
+        emptyLabel="No memory samples"
+        samples={[]}
+        series={[{ id: 'memory', label: 'Memory', metric: 'memoryUsedMiB' }]}
+      />
+    );
+
+    expect(screen.getByText('No memory samples')).toBeDefined();
+    expect(screen.queryByRole('img', { name: 'Memory history' })).toBeNull();
+
+    rerender(
+      <TimeSeriesChart
+        ariaLabel="Memory history"
+        emptyLabel="No memory samples"
+        samples={[
+          { receivedAt: '2026-06-04T00:00:00.000Z', memoryUsedMiB: null },
+          { receivedAt: '2026-06-04T00:00:30.000Z', memoryUsedMiB: null }
+        ]}
+        series={[{ id: 'memory', label: 'Memory', metric: 'memoryUsedMiB' }]}
+      />
+    );
+
+    expect(screen.getByText('No memory samples')).toBeDefined();
+    expect(screen.queryByRole('img', { name: 'Memory history' })).toBeNull();
+  });
+
+  it('renders null metric values as gaps instead of zeroes', () => {
+    render(
+      <TimeSeriesChart
+        ariaLabel="GPU gap history"
+        pollingIntervalSeconds={30}
+        range={{ min: 0, max: 40 }}
+        samples={[
+          { receivedAt: '2026-06-04T00:00:00.000Z', gpuUtilizationPercent: 10 },
+          { receivedAt: '2026-06-04T00:00:30.000Z', gpuUtilizationPercent: null },
+          { receivedAt: '2026-06-04T00:01:00.000Z', gpuUtilizationPercent: 30 }
+        ]}
+        series={[{ id: 'gpu', label: 'GPU', metric: 'gpuUtilizationPercent' }]}
+      />
+    );
+
+    const chart = screen.getByRole('img', { name: 'GPU gap history' });
+    expect(chart.querySelectorAll('[data-chart-point-value]')).toHaveLength(2);
+    expect(chart.querySelector('[data-chart-point-value="0"]')).toBeNull();
+    expect(chart.querySelectorAll('[data-chart-gap="metric-null"]')).toHaveLength(1);
+  });
+
+  it('renders multi-series time paths from metric keys and extractor functions', () => {
+    render(
+      <TimeSeriesChart
+        ariaLabel="GPU and memory history"
+        range={{ min: 0, max: 100 }}
+        samples={[
+          { receivedAt: '2026-06-04T00:00:00.000Z', gpuUtilizationPercent: 10, memoryUtilizationPercent: 25 },
+          { receivedAt: '2026-06-04T00:00:30.000Z', gpuUtilizationPercent: 20, memoryUtilizationPercent: 35 },
+          { receivedAt: '2026-06-04T00:01:00.000Z', gpuUtilizationPercent: 30, memoryUtilizationPercent: 45 }
+        ]}
+        series={[
+          { id: 'gpu', label: 'GPU', metric: 'gpuUtilizationPercent', tone: 'accent' },
+          { id: 'memory', label: 'Memory', metric: (sample) => sample.memoryUtilizationPercent, tone: 'brand' }
+        ]}
+      />
+    );
+
+    const chart = screen.getByRole('img', { name: 'GPU and memory history' });
+    expect(chart.querySelectorAll('[data-chart-series-id="gpu"]')).toHaveLength(1);
+    expect(chart.querySelectorAll('[data-chart-series-id="memory"]')).toHaveLength(1);
+    expect(chart.querySelector('[data-chart-point-value="0"]')).toBeNull();
+  });
+
+  it('marks inferred timestamp gaps when samples arrive beyond the polling gap threshold', () => {
+    render(
+      <TimeSeriesChart
+        ariaLabel="Time gap history"
+        pollingIntervalSeconds={30}
+        range={{ min: 0, max: 100 }}
+        samples={[
+          { receivedAt: '2026-06-04T00:00:00.000Z', gpuUtilizationPercent: 10 },
+          { receivedAt: '2026-06-04T00:00:30.000Z', gpuUtilizationPercent: 20 },
+          { receivedAt: '2026-06-04T00:05:00.000Z', gpuUtilizationPercent: 30 },
+          { receivedAt: '2026-06-04T00:05:30.000Z', gpuUtilizationPercent: 40 }
+        ]}
+        series={[{ id: 'gpu', label: 'GPU', metric: 'gpuUtilizationPercent' }]}
+      />
+    );
+
+    const chart = screen.getByRole('img', { name: 'Time gap history' });
+    expect(chart.querySelectorAll('[data-chart-series-id="gpu"]')).toHaveLength(2);
+    expect(chart.querySelectorAll('[data-chart-gap="time"]')).toHaveLength(1);
+    expect(chart.querySelector('[data-chart-gap-seconds="270"]')).toBeDefined();
   });
 
 });

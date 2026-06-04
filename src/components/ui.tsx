@@ -262,6 +262,326 @@ export const MiniLineChart = ({ ariaLabel, density = 'full', emptyLabel = 'Not e
   );
 };
 
+
+type TimeSeriesChartDensity = 'full' | 'compact';
+type TimeSeriesChartTone = 'accent' | 'brand' | 'warning' | 'success';
+type TimeSeriesChartSample = {
+  receivedAt?: string | number | Date | null;
+  timestamp?: string | number | Date | null;
+  [key: string]: unknown;
+};
+
+export type TimeSeriesMetricSelector<T extends TimeSeriesChartSample> = keyof T | ((sample: T) => number | null | undefined);
+export type TimeSeriesTimestampSelector<T extends TimeSeriesChartSample> = keyof T | ((sample: T) => string | number | Date | null | undefined);
+
+export type TimeSeriesChartSeries<T extends TimeSeriesChartSample = TimeSeriesChartSample> = {
+  id: string;
+  label: string;
+  metric: TimeSeriesMetricSelector<T>;
+  tone?: TimeSeriesChartTone;
+};
+
+export type TimeSeriesChartRange = {
+  max?: number;
+  min?: number;
+};
+
+type TimeSeriesChartProps<T extends TimeSeriesChartSample> = {
+  ariaLabel: string;
+  density?: TimeSeriesChartDensity;
+  emptyLabel?: string;
+  gapThresholdSeconds?: number;
+  height?: number;
+  pollingIntervalSeconds?: number | null;
+  range?: TimeSeriesChartRange;
+  samples: T[];
+  series: Array<TimeSeriesChartSeries<T>>;
+  timestamp?: TimeSeriesTimestampSelector<T>;
+};
+
+type TimeSeriesPreparedSample<T extends TimeSeriesChartSample> = {
+  sample: T;
+  timestampMs: number;
+  x: number;
+};
+
+type TimeSeriesPoint = {
+  seriesId: string;
+  timestampMs: number;
+  value: number;
+  x: number;
+  y: number;
+};
+
+type TimeSeriesGap = {
+  deltaSeconds?: number;
+  key: string;
+  reason: 'metric-null' | 'time';
+  x: number;
+};
+
+type TimeSeriesRenderableSeries = {
+  gaps: TimeSeriesGap[];
+  id: string;
+  label: string;
+  points: TimeSeriesPoint[];
+  segments: TimeSeriesPoint[][];
+  tone: TimeSeriesChartTone;
+};
+
+const timeSeriesToneByIndex: TimeSeriesChartTone[] = ['accent', 'brand', 'warning', 'success'];
+
+const readTimeSeriesTimestamp = <T extends TimeSeriesChartSample>(sample: T, selector?: TimeSeriesTimestampSelector<T>) => {
+  const rawValue =
+    typeof selector === 'function'
+      ? selector(sample)
+      : selector
+        ? sample[selector]
+        : (sample.receivedAt ?? sample.timestamp);
+
+  if (rawValue instanceof Date) {
+    return rawValue.getTime();
+  }
+  if (typeof rawValue === 'number') {
+    return rawValue;
+  }
+  if (typeof rawValue === 'string') {
+    return Date.parse(rawValue);
+  }
+  return Number.NaN;
+};
+
+const readTimeSeriesMetric = <T extends TimeSeriesChartSample>(sample: T, selector: TimeSeriesMetricSelector<T>) => {
+  const rawValue = typeof selector === 'function' ? selector(sample) : sample[selector];
+  return typeof rawValue === 'number' && Number.isFinite(rawValue) ? rawValue : null;
+};
+
+const resolveTimeSeriesValueDomain = (values: number[], range?: TimeSeriesChartRange) => {
+  const rangeMin = typeof range?.min === 'number' && Number.isFinite(range.min) ? range.min : undefined;
+  const rangeMax = typeof range?.max === 'number' && Number.isFinite(range.max) ? range.max : undefined;
+  const min = rangeMin ?? Math.min(...values);
+  const max = rangeMax ?? Math.max(...values);
+
+  return min <= max ? { min, max } : { min: max, max: min };
+};
+
+const timeSeriesY = (value: number, min: number, max: number, height: number) => {
+  const verticalPadding = 10;
+  const usableHeight = height - verticalPadding * 2;
+  const ratio = max === min ? 0.5 : (value - min) / (max - min);
+  return Number((height - verticalPadding - ratio * usableHeight).toFixed(2));
+};
+
+const timeSeriesPath = (segment: TimeSeriesPoint[]) => segment.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ');
+
+const timeGapThresholdSeconds = (pollingIntervalSeconds?: number | null, gapThresholdSeconds?: number) => {
+  if (typeof gapThresholdSeconds === 'number' && Number.isFinite(gapThresholdSeconds)) {
+    return gapThresholdSeconds;
+  }
+
+  const pollingSeconds = typeof pollingIntervalSeconds === 'number' && Number.isFinite(pollingIntervalSeconds) ? pollingIntervalSeconds : 60;
+  return Math.max(pollingSeconds * 2, 120);
+};
+
+const buildTimeSeries = <T extends TimeSeriesChartSample>({
+  gapThresholdSeconds,
+  height,
+  pollingIntervalSeconds,
+  range,
+  samples,
+  series,
+  timestamp,
+  width
+}: {
+  gapThresholdSeconds?: number;
+  height: number;
+  pollingIntervalSeconds?: number | null;
+  range?: TimeSeriesChartRange;
+  samples: T[];
+  series: Array<TimeSeriesChartSeries<T>>;
+  timestamp?: TimeSeriesTimestampSelector<T>;
+  width: number;
+}) => {
+  const orderedSamples = samples
+    .map((sample) => ({ sample, timestampMs: readTimeSeriesTimestamp(sample, timestamp) }))
+    .filter((sample): sample is { sample: T; timestampMs: number } => Number.isFinite(sample.timestampMs))
+    .sort((left, right) => left.timestampMs - right.timestampMs);
+
+  if (orderedSamples.length === 0 || series.length === 0) {
+    return [];
+  }
+
+  const numericValues = orderedSamples.flatMap(({ sample }) => series.map((entry) => readTimeSeriesMetric(sample, entry.metric)).filter((value): value is number => value !== null));
+
+  if (numericValues.length === 0) {
+    return [];
+  }
+
+  const firstTimestamp = orderedSamples[0].timestampMs;
+  const lastTimestamp = orderedSamples[orderedSamples.length - 1].timestampMs;
+  const timeRange = lastTimestamp - firstTimestamp;
+  const preparedSamples: Array<TimeSeriesPreparedSample<T>> = orderedSamples.map(({ sample, timestampMs }) => ({
+    sample,
+    timestampMs,
+    x: Number((timeRange === 0 ? width / 2 : ((timestampMs - firstTimestamp) / timeRange) * width).toFixed(2))
+  }));
+  const valueDomain = resolveTimeSeriesValueDomain(numericValues, range);
+  const thresholdSeconds = timeGapThresholdSeconds(pollingIntervalSeconds, gapThresholdSeconds);
+
+  return series.map((entry, seriesIndex): TimeSeriesRenderableSeries => {
+    const segments: TimeSeriesPoint[][] = [];
+    const gaps: TimeSeriesGap[] = [];
+    const points: TimeSeriesPoint[] = [];
+    let currentSegment: TimeSeriesPoint[] = [];
+    let previousSample: TimeSeriesPreparedSample<T> | null = null;
+
+    for (const preparedSample of preparedSamples) {
+      if (previousSample) {
+        const deltaSeconds = (preparedSample.timestampMs - previousSample.timestampMs) / 1000;
+        if (deltaSeconds > thresholdSeconds) {
+          if (currentSegment.length > 0) {
+            segments.push(currentSegment);
+            currentSegment = [];
+          }
+          gaps.push({
+            deltaSeconds: Math.round(deltaSeconds),
+            key: `${entry.id}-time-${previousSample.timestampMs}-${preparedSample.timestampMs}`,
+            reason: 'time',
+            x: Number(((previousSample.x + preparedSample.x) / 2).toFixed(2))
+          });
+        }
+      }
+
+      const value = readTimeSeriesMetric(preparedSample.sample, entry.metric);
+      if (value === null) {
+        if (currentSegment.length > 0) {
+          segments.push(currentSegment);
+          currentSegment = [];
+        }
+        gaps.push({ key: `${entry.id}-null-${preparedSample.timestampMs}`, reason: 'metric-null', x: preparedSample.x });
+        previousSample = preparedSample;
+        continue;
+      }
+
+      const point = {
+        seriesId: entry.id,
+        timestampMs: preparedSample.timestampMs,
+        value,
+        x: preparedSample.x,
+        y: timeSeriesY(value, valueDomain.min, valueDomain.max, height)
+      };
+      currentSegment.push(point);
+      points.push(point);
+      previousSample = preparedSample;
+    }
+
+    if (currentSegment.length > 0) {
+      segments.push(currentSegment);
+    }
+
+    return {
+      gaps,
+      id: entry.id,
+      label: entry.label,
+      points,
+      segments,
+      tone: entry.tone ?? timeSeriesToneByIndex[seriesIndex % timeSeriesToneByIndex.length]
+    };
+  });
+};
+
+export const TimeSeriesChart = <T extends TimeSeriesChartSample,>({
+  ariaLabel,
+  density = 'full',
+  emptyLabel = 'Not enough samples',
+  gapThresholdSeconds,
+  height,
+  pollingIntervalSeconds,
+  range,
+  samples,
+  series,
+  timestamp
+}: TimeSeriesChartProps<T>) => {
+  const width = density === 'compact' ? 320 : 560;
+  const chartHeight = height ?? (density === 'compact' ? 88 : 140);
+  const renderableSeries = buildTimeSeries({
+    gapThresholdSeconds,
+    height: chartHeight,
+    pollingIntervalSeconds,
+    range,
+    samples,
+    series,
+    timestamp,
+    width
+  });
+  const hasPoints = renderableSeries.some((entry) => entry.points.length > 0);
+
+  if (!hasPoints) {
+    return <div className={`time-series-chart time-series-chart-${density} time-series-chart-empty`}>{emptyLabel}</div>;
+  }
+
+  const gapTop = 10;
+  const gapBottom = chartHeight - gapTop;
+
+  return (
+    <div className={`time-series-chart time-series-chart-${density}`}>
+      <svg aria-label={ariaLabel} className="time-series-chart-svg" height={chartHeight} role="img" viewBox={`0 0 ${width} ${chartHeight}`} width={width}>
+        <title>{ariaLabel}</title>
+        {[0.25, 0.5, 0.75].map((ratio) => (
+          <line className="time-series-chart-grid" key={ratio} x1="0" x2={width} y1={Number((chartHeight * ratio).toFixed(2))} y2={Number((chartHeight * ratio).toFixed(2))} />
+        ))}
+        {renderableSeries.flatMap((entry) =>
+          entry.gaps.map((gap) => (
+            <line
+              className={`time-series-chart-gap time-series-chart-series-${entry.tone}`}
+              data-chart-gap={gap.reason}
+              data-chart-gap-seconds={gap.deltaSeconds === undefined ? undefined : String(gap.deltaSeconds)}
+              key={gap.key}
+              x1={gap.x}
+              x2={gap.x}
+              y1={gapTop}
+              y2={gapBottom}
+            />
+          ))
+        )}
+        {renderableSeries.flatMap((entry) =>
+          entry.segments
+            .filter((segment) => segment.length > 1)
+            .map((segment, segmentIndex) => (
+              <path
+                className={`time-series-chart-line time-series-chart-series-${entry.tone}`}
+                d={timeSeriesPath(segment)}
+                data-chart-series-id={entry.id}
+                fill="none"
+                key={`${entry.id}-${segmentIndex}`}
+              />
+            ))
+        )}
+        {renderableSeries.flatMap((entry) =>
+          entry.points.map((point) => (
+            <circle
+              className={`time-series-chart-point time-series-chart-series-${entry.tone}`}
+              cx={point.x}
+              cy={point.y}
+              data-chart-point-series-id={point.seriesId}
+              data-chart-point-value={String(point.value)}
+              key={`${point.seriesId}-${point.timestampMs}-${point.value}`}
+              r={density === 'compact' ? 2.2 : 2.8}
+            />
+          ))
+        )}
+      </svg>
+      <div aria-hidden="true" className="time-series-chart-legend">
+        {renderableSeries.map((entry) => (
+          <span className={`time-series-chart-legend-item time-series-chart-series-${entry.tone}`} key={entry.id}>
+            {entry.label}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 export const RightDrawer = ({
   ariaLabel,
   children,
