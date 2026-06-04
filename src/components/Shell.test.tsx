@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { useUiStore } from '../lib/store';
@@ -40,6 +40,28 @@ describe('Shell density mode', () => {
     useUiStore.getState().toggleDensityMode();
 
     expect(useUiStore.getState().densityMode).toBe('full');
+  });
+
+  it('renders the Live Monitor tab and updates active history state', () => {
+    render(
+      <Shell overview={overviewFixture}>
+        <section aria-label="Screen content">Metrics stay visible</section>
+      </Shell>
+    );
+
+    const navigation = screen.getByRole('navigation');
+    expect(within(navigation).getAllByRole('button').map((button) => button.textContent)).toEqual([
+      'Overview',
+      'Server Detail',
+      'Live Monitor',
+      'Process Table',
+      'Settings'
+    ]);
+
+    fireEvent.click(within(navigation).getByRole('button', { name: 'Live Monitor' }));
+
+    expect(useUiStore.getState().activeTab).toBe('history');
+    expect(useUiStore.getState().activeScreen).toBe('history');
   });
 
   it('renders Display mode controls and applies the root density attribute', () => {

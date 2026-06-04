@@ -1,6 +1,6 @@
 export type ServerStatus = 'disabled' | 'idle' | 'polling' | 'online' | 'stale' | 'offline' | 'error' | string;
 
-export type TabId = 'overview' | 'detail' | 'processes' | 'settings';
+export type TabId = 'overview' | 'detail' | 'history' | 'processes' | 'settings';
 
 export interface Server {
   id: string;
@@ -110,6 +110,45 @@ export interface ServerDetailDto {
   receivedAt: string | null;
   warnings: string[];
   gpus: GpuCardDto[];
+}
+
+export type GpuHistoryRange = '1h' | '6h' | '24h';
+
+export interface GpuHistorySampleDto {
+  receivedAt: string;
+  memoryTotalMiB: number | null;
+  memoryUsedMiB: number | null;
+  memoryFreeMiB: number | null;
+  gpuUtilizationPercent: number | null;
+  memoryUtilizationPercent: number | null;
+  encoderUtilizationPercent: number | null;
+  decoderUtilizationPercent: number | null;
+  jpegUtilizationPercent: number | null;
+  ofaUtilizationPercent: number | null;
+  temperatureCelsius: number | null;
+  powerDrawWatt: number | null;
+  powerLimitWatt: number | null;
+  pcieRxKibPerSec: number | null;
+  pcieTxKibPerSec: number | null;
+}
+
+export interface GpuHistorySeriesDto {
+  serverId: string;
+  serverName: string;
+  gpuIndex: number;
+  gpuUuid: string | null;
+  name: string | null;
+  samples: GpuHistorySampleDto[];
+}
+
+export interface GpuHistoryResponseDto {
+  serverId: string;
+  serverName: string;
+  pollingIntervalSeconds: number;
+  range: GpuHistoryRange;
+  startedAt: string;
+  finishedAt: string;
+  series: GpuHistorySeriesDto[];
 }
 
 export interface ProcessRowDto {

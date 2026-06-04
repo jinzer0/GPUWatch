@@ -1,6 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
 import type {
   ConnectionTestResultDto,
+  GpuHistoryRange,
+  GpuHistoryResponseDto,
   ProcessRowDto,
   Server,
   ServerDetailDto,
@@ -17,6 +19,10 @@ interface CommandMap {
   set_server_enabled: { args: { id: string; enabled: boolean }; result: Server };
   seed_demo_data: { args: undefined; result: ServerOverviewDto[] };
   get_server_detail: { args: { id: string }; result: ServerDetailDto | null };
+  list_gpu_history: {
+    args: { serverId: string; gpuIndex?: number | null; gpuUuid?: string | null; range: GpuHistoryRange };
+    result: GpuHistoryResponseDto;
+  };
   list_processes: { args: undefined; result: ProcessRowDto[] };
   test_connection: { args: { id: string }; result: ConnectionTestResultDto };
   refresh_server: { args: { id: string }; result: ConnectionTestResultDto };
@@ -64,6 +70,25 @@ export function getServerDetail(id: string): Promise<ServerDetailDto | null> {
   return callCommand('get_server_detail', { id });
 }
 
+export function listGpuHistory(
+  serverId: string | null | undefined,
+  gpuIndex: number | null | undefined,
+  gpuUuid: string | null | undefined,
+  range: GpuHistoryRange
+): Promise<GpuHistoryResponseDto> {
+  const requiredServerId = serverId?.trim();
+  if (!requiredServerId) {
+    return Promise.reject(new Error('serverId is required to list GPU history.'));
+  }
+
+  return callCommand('list_gpu_history', {
+    serverId: requiredServerId,
+    gpuIndex: gpuIndex ?? null,
+    gpuUuid: gpuUuid ?? null,
+    range
+  });
+}
+
 export function listProcesses(): Promise<ProcessRowDto[]> {
   return callCommand('list_processes');
 }
@@ -81,5 +106,11 @@ export const queryKeys = {
   overview: ['overview'] as const,
   servers: ['servers'] as const,
   detail: (id: string) => ['server-detail', id] as const,
+  gpuHistory: (
+    serverId: string | null | undefined,
+    gpuIndex: number | null | undefined,
+    gpuUuid: string | null | undefined,
+    range: GpuHistoryRange
+  ) => ['gpu-history', serverId ?? null, gpuIndex ?? null, gpuUuid ?? null, range] as const,
   processes: ['processes'] as const
 };

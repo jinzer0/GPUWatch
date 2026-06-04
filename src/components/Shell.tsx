@@ -6,6 +6,7 @@ import type { ServerOverviewDto, TabId } from '../lib/types';
 const tabs: Array<{ id: TabId; label: string }> = [
   { id: 'overview', label: 'Overview' },
   { id: 'detail', label: 'Server Detail' },
+  { id: 'history', label: 'Live Monitor' },
   { id: 'processes', label: 'Process Table' },
   { id: 'settings', label: 'Settings' }
 ];
