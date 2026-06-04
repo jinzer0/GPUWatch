@@ -32,7 +32,7 @@ Warnings for `gpu_extra_csv`, `mig_list`, `dmon`, `dmon_pcie`, `pmon`, or `ps` m
 
 ## Unknown Or Null Metrics
 
-`nvidia-smi` can print `N/A`, `-`, blank values, or unsupported markers when a metric isn't exposed by the driver, GPU, or MIG mode. GPUWatcher stores those values as unknown or `null`, never as zero. This can affect memory, power, temperature, utilization, clock, MIG, PCIe, runtime, parent PID, and process fields.
+`nvidia-smi` can print `N/A`, `-`, blank values, or unsupported markers when a metric isn't exposed by the driver, GPU, or MIG mode. GPUWatcher stores those values as unknown or `null`, never as zero. This can affect memory, power, temperature, utilization, clock, MIG, PCIe, runtime, parent PID, and process fields. History charts render null metrics as gaps or unknown states instead of zero-valued samples.
 
 ## Process Rows Look Different From nvitop
 
@@ -44,8 +44,16 @@ GPUWatcher combines `nvidia-smi --query-compute-apps`, optional `pmon`, optional
 
 ## Latest Success Still Visible After Failure
 
-This is expected v0.1 behavior. Failed polls update health and error metadata and preserve the latest successful snapshot as stale. They also don't add Server Detail live mini chart samples, because chart history is based on successful snapshots only.
+This is expected v0.1 behavior. Failed polls update health and error metadata and preserve the latest successful snapshot as stale. They don't append stored GPU history samples or session live fallback samples, so charts show absent history points or time gaps instead of durable failed samples.
 
-## Live Mini Charts Reset After Restart
+## Missing History Points Or Gaps
 
-Server Detail mini charts are memory-only and session-only. GPUWatcher keeps at most 120 successful samples per server and GPU index, deduplicates by timestamp, and clears the history when the app restarts. Compact or full display mode is also session-only and isn't saved as a preference.
+Stored GPU history keeps compact per-GPU samples for a fixed 24 hours in local SQLite. Samples are appended only after successful polls. If a poll fails, the app records health and error metadata, keeps the last successful snapshot, and leaves a gap for that poll time.
+
+Null or unknown metrics also create chart gaps or unknown labels. GPUWatcher doesn't fabricate zeroes for missing `nvidia-smi`, optional metric, or disappeared process data.
+
+## Live Monitor And Server Detail History
+
+Live Monitor reads stored GPU history from local SQLite for ranges within the fixed 24h retention window. Server Detail prefers stored 1h history and labels it as stored history. If stored history is still loading or empty, Server Detail falls back to current-session live samples and labels that fallback clearly.
+
+Stored history is GPU-level metric history. It isn't a long-term audit log, process timeline, process command store, Prometheus exporter, or raw snapshot archive.
