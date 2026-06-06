@@ -3,11 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "dist-electron/electron/main.js",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5173",
     "build": "tsc && vite build",
     "test": "vitest run",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "electron:build": "tsc -p tsconfig.electron.json",
+    "electron:dev": "npm run electron:build && VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron dist-electron/electron/main.js",
+    "electron:pack": "npm run build && npm run electron:build && npm run helper:build && electron-builder --dir",
+    "helper:build": "cargo build --manifest-path crates/gpuwatcher-helper/Cargo.toml"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.11",
@@ -19,15 +24,43 @@
   "devDependencies": {
     "@tauri-apps/cli": "^2.9.5",
     "@testing-library/react": "^16.3.0",
+    "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
     "autoprefixer": "^10.4.22",
+    "electron": "^42.3.3",
+    "electron-builder": "^26.8.1",
     "jsdom": "^27.2.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.18",
     "typescript": "^5.9.3",
     "vite": "^7.2.4",
     "vitest": "^4.0.14"
+  },
+  "build": {
+    "appId": "com.gpuwatcher.app",
+    "productName": "GPUWatcher",
+    "asar": true,
+    "directories": {
+      "output": "release/electron"
+    },
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "crates/gpuwatcher-helper/target/debug/gpuwatcher-helper",
+        "to": "gpuwatcher-helper/gpuwatcher-helper"
+      }
+    ],
+    "mac": {
+      "target": [
+        "dir"
+      ],
+      "identity": null
+    }
   }
 }

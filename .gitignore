@@ -4,6 +4,8 @@
 # Node / Vite
 node_modules/
 dist/
+dist-electron/
+release/
 coverage/
 .vite/
 npm-debug.log*
