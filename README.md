@@ -1,6 +1,6 @@
 # GPUWatcher
 
-macOS에서 SSH로 Linux NVIDIA GPU 서버 상태를 확인하는 Tauri 데스크톱 유틸리티입니다.
+macOS에서 SSH로 Linux NVIDIA GPU 서버 상태를 확인하는 데스크톱 유틸리티입니다. 현재는 Tauri 앱을 유지하면서 Electron 전환을 함께 검증하는 임시 dual-run 단계입니다.
 
 ## Contents
 
@@ -25,7 +25,7 @@ GPU 서버의 현재 사용 가능 여부, 프로세스 점유 상태, 최근 24
 npm install
 ```
 
-macOS 데스크톱 앱을 개발 모드로 실행합니다.
+macOS Tauri 데스크톱 앱을 개발 모드로 실행합니다.
 
 ```bash
 npm run tauri dev
@@ -37,6 +37,31 @@ npm run tauri dev
 npm run dev
 ```
 
+Electron 전환 경로도 같은 프론트엔드를 사용합니다. 개발 중에는 먼저 Vite dev server를 실행한 뒤 Electron shell을 시작합니다.
+
+```bash
+npm run dev
+npm run electron:dev
+```
+
+Electron main/preload만 타입 체크하고 빌드하려면 다음 명령을 사용합니다.
+
+```bash
+npm run electron:build
+```
+
+Rust helper binary만 빌드하려면 다음 명령을 사용합니다.
+
+```bash
+npm run helper:build
+```
+
+로컬 Electron package smoke용 앱 디렉터리는 다음 명령으로 만듭니다. 이 단계는 notarized release가 아니라, signing을 건너뛴 로컬 unsigned package입니다.
+
+```bash
+npm run electron:pack
+```
+
 로컬 테스트와 빌드는 다음 명령으로 확인합니다.
 
 ```bash
@@ -45,10 +70,14 @@ npm run test
 npm run build
 ```
 
+Electron package는 helper binary를 app resources 아래 `gpuwatcher-helper/gpuwatcher-helper` 위치에 둡니다. 개발 모드에서는 `GPUWATCHER_HELPER_PATH`가 있으면 그 값을 먼저 쓰고, 없으면 Cargo debug target 경로를 찾습니다.
+
+로컬 SQLite는 Tauri와 Electron 모두 기존 데이터를 보존하기 위해 `~/Library/Application Support/GPUWatcher/gpuwatcher.sqlite3` 경로를 기준으로 사용합니다. Electron의 `userData` 앱별 경로로 옮기지 않습니다.
+
 ## Features
 
 - SSH 기반으로 Linux NVIDIA GPU 서버의 최신 GPU 상태를 수집합니다.
-- 원격 서버에 GPUWatcher, nvitop, Python 수집기, 저장소 파일을 설치하지 않아도 됩니다.
+- 원격 서버에 GPUWatcher, nvitop, Python, collector package, 저장소 파일을 설치하지 않아도 됩니다.
 - `nvidia-smi` 기반 GPU 메모리, 사용률, 온도, 전력 정보를 표시합니다.
 - 선택적 `gpu_extra_csv`, `mig_list`, `dmon`, `dmon_pcie`, `pmon`, `ps` 섹션이 가능하면 더 풍부한 지표와 프로세스 정보를 더합니다.
 - 선택 섹션 실패는 기본 GPU CSV가 성공하면 치명적 오류가 아니라 경고와 `unknown` 또는 `null` 값으로 표시됩니다.

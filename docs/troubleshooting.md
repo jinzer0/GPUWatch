@@ -20,7 +20,7 @@
 ssh -o BatchMode=yes USER@HOST 'command -v nvidia-smi && nvidia-smi --query-gpu=index,name --format=csv,noheader,nounits'
 ```
 
-The remote host doesn't need GPUWatcher, nvitop, Python, or a collector package installed.
+The remote host doesn't need GPUWatcher, nvitop, Python, collector packages, or repository files installed.
 
 ## Base GPU Query Failed
 
@@ -41,6 +41,40 @@ GPUWatcher combines `nvidia-smi --query-compute-apps`, optional `pmon`, optional
 ## Malformed Remote Output
 
 `protocol_malformed_output` means the backend couldn't parse the sectioned stdout from its fixed SSH script. This is different from malformed JSON: new no-install collection doesn't expect the remote host to print a protocol JSON envelope.
+
+## Helper Missing In Electron
+
+`missing_helper` means the Electron main process couldn't find the local Rust helper binary. In development, set `GPUWATCHER_HELPER_PATH` to a built helper or run `npm run helper:build` so the Cargo debug target exists. In a packaged app, confirm the helper was copied outside ASAR under app resources at `gpuwatcher-helper/gpuwatcher-helper`.
+
+This is a local macOS packaging or development setup issue. The remote host still doesn't need GPUWatcher, nvitop, Python, collector packages, or repository files installed.
+
+## Helper Timeout In Electron
+
+`helper_timeout` means Electron started the helper but didn't receive a response before the action timeout. Local database and read-model actions use a 10 second timeout class. SSH collection actions use a 60 second timeout class because they wait on network SSH and `nvidia-smi`.
+
+If the timeout happens on an SSH action, first confirm `ssh -o BatchMode=yes USER@HOST true` and the base `nvidia-smi` query work in Terminal. If it happens on a local action, rebuild the helper and check whether the local database path is reachable.
+
+## Invalid Helper JSON In Electron
+
+`malformed_helper_stdout` means the helper process exited successfully but stdout wasn't exactly one helper response JSON envelope, or the JSON shape didn't match the helper contract. Rebuild the helper with `npm run helper:build`, then run Electron again. Extra logging printed to stdout can cause this error; helper diagnostics should go to stderr.
+
+This is different from `protocol_malformed_output`, which refers to parsing fixed SSH command sections from the remote host.
+
+## Backend Unavailable In Browser Or Electron
+
+`backend_unavailable` means the frontend is running without a supported command backend for that action. A plain Vite browser can still show static app identity and read-only empty states, but save, delete, test connection, refresh, and seed actions need Tauri or Electron.
+
+For Tauri, run `npm run tauri dev`. For Electron during migration, run `npm run dev` in one terminal and `npm run electron:dev` in another.
+
+## Local Electron Package Is Unsigned
+
+`npm run electron:pack` creates a local package directory for smoke testing with macOS signing skipped. It isn't a notarized release. If macOS blocks opening the app, treat it as a local unsigned package issue rather than a remote GPU server setup issue.
+
+## Database Path Or Data Preservation
+
+GPUWatcher keeps the canonical SQLite database at `~/Library/Application Support/GPUWatcher/gpuwatcher.sqlite3`. The Electron migration shouldn't move it to Electron `userData` or a new app-name path.
+
+If saved servers or history appear missing after switching runtimes, confirm that path exists and that the app process can read it. Existing database migration backups are written beside the database before migration when needed.
 
 ## Latest Success Still Visible After Failure
 
