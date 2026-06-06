@@ -285,7 +285,8 @@ mod tests {
             protocol_version: 1,
             schema_version: 1,
             received_at: "2026-06-01T00:00:00Z".to_string(),
-            raw_json: include_str!("../../fixtures/protocol/v1/success_multi_gpu.json").to_string(),
+            raw_json: include_str!("../../../fixtures/protocol/v1/success_multi_gpu.json")
+                .to_string(),
             parsed_summary_json: "{}".to_string(),
         };
         let mut snapshots = HashMap::new();
@@ -304,7 +305,8 @@ mod tests {
             protocol_version: 1,
             schema_version: 1,
             received_at: "2026-06-01T00:00:00Z".to_string(),
-            raw_json: include_str!("../../fixtures/protocol/v1/success_multi_gpu.json").to_string(),
+            raw_json: include_str!("../../../fixtures/protocol/v1/success_multi_gpu.json")
+                .to_string(),
             parsed_summary_json: "{}".to_string(),
         };
         let mut snapshots = HashMap::new();

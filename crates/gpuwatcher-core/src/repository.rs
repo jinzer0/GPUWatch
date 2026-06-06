@@ -853,8 +853,8 @@ mod tests {
 
     fn success_fixture(path: &str) -> (String, SuccessEnvelope) {
         let raw = match path {
-            "single" => include_str!("../../fixtures/protocol/v1/success_single_gpu.json"),
-            "multi" => include_str!("../../fixtures/protocol/v1/success_multi_gpu.json"),
+            "single" => include_str!("../../../fixtures/protocol/v1/success_single_gpu.json"),
+            "multi" => include_str!("../../../fixtures/protocol/v1/success_multi_gpu.json"),
             _ => panic!("unknown fixture"),
         };
         let ParsedCollectorPayload::Success(success) = parse_collector_json(raw).expect("parse")
@@ -1525,7 +1525,7 @@ mod tests {
         let server = repository
             .save_server(sample_server_input())
             .expect("server saved");
-        let raw = include_str!("../../fixtures/protocol/v1/success_single_gpu.json");
+        let raw = include_str!("../../../fixtures/protocol/v1/success_single_gpu.json");
         let ParsedCollectorPayload::Success(success) = parse_collector_json(raw).expect("parse")
         else {
             panic!("expected success")

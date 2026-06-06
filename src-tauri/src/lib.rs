@@ -1,15 +1,9 @@
-pub mod command_runner;
+pub use gpuwatcher_core::{
+    command_runner, config, error, models, no_install_collector, nvidia_smi, protocol, read_model,
+    repository, scheduler, service, state, AppState,
+};
+
 pub mod commands;
-pub mod config;
-pub mod error;
-pub mod models;
-pub mod no_install_collector;
-pub mod nvidia_smi;
-pub mod protocol;
-pub mod read_model;
-pub mod repository;
-pub mod scheduler;
-pub mod state;
 
 use tauri::Manager;
 

@@ -67,7 +67,7 @@ mod tests {
 
     #[test]
     fn valid_success_fixture_parses() {
-        let raw = include_str!("../../fixtures/protocol/v1/success_multi_gpu.json");
+        let raw = include_str!("../../../fixtures/protocol/v1/success_multi_gpu.json");
         let parsed = parse_collector_json(raw).expect("fixture should parse");
         match parsed {
             ParsedCollectorPayload::Success(success) => assert_eq!(success.gpus.len(), 2),
@@ -77,7 +77,7 @@ mod tests {
 
     #[test]
     fn rich_optional_metrics_fixture_parses() {
-        let raw = include_str!("../../fixtures/protocol/v1/success_rich_optional_metrics.json");
+        let raw = include_str!("../../../fixtures/protocol/v1/success_rich_optional_metrics.json");
         let parsed = parse_collector_json(raw).expect("rich optional metrics fixture should parse");
         let ParsedCollectorPayload::Success(success) = parsed else {
             panic!("expected success");
@@ -106,7 +106,7 @@ mod tests {
 
     #[test]
     fn optional_metrics_are_missing_or_null_safe() {
-        let old_raw = include_str!("../../fixtures/protocol/v1/success_single_gpu.json");
+        let old_raw = include_str!("../../../fixtures/protocol/v1/success_single_gpu.json");
         let ParsedCollectorPayload::Success(old_success) =
             parse_collector_json(old_raw).expect("old fixture should parse")
         else {
@@ -121,8 +121,9 @@ mod tests {
             None
         );
 
-        let null_raw =
-            include_str!("../../fixtures/protocol/v1/success_optional_metrics_missing_null.json");
+        let null_raw = include_str!(
+            "../../../fixtures/protocol/v1/success_optional_metrics_missing_null.json"
+        );
         let ParsedCollectorPayload::Success(null_success) =
             parse_collector_json(null_raw).expect("null optional metrics fixture should parse")
         else {
@@ -140,7 +141,7 @@ mod tests {
     #[test]
     fn protocol_schema_artifact_is_present() {
         let schema: Value =
-            serde_json::from_str(include_str!("../../schemas/gpuwatcher-v1.schema.json"))
+            serde_json::from_str(include_str!("../../../schemas/gpuwatcher-v1.schema.json"))
                 .expect("schema JSON parses");
         assert_eq!(
             schema.get("title").and_then(Value::as_str),
@@ -155,7 +156,7 @@ mod tests {
     #[test]
     fn protocol_schema_lists_optional_rich_metrics_without_requiring_them() {
         let schema: Value =
-            serde_json::from_str(include_str!("../../schemas/gpuwatcher-v1.schema.json"))
+            serde_json::from_str(include_str!("../../../schemas/gpuwatcher-v1.schema.json"))
                 .expect("schema JSON parses");
         let gpu = &schema["$defs"]["gpu"];
         let process = &schema["$defs"]["process"];
@@ -203,7 +204,7 @@ mod tests {
 
     #[test]
     fn collector_error_fixture_parses_as_collector_error() {
-        let raw = include_str!("../../fixtures/protocol/v1/collector_nvml_unavailable.json");
+        let raw = include_str!("../../../fixtures/protocol/v1/collector_nvml_unavailable.json");
         let parsed = parse_collector_json(raw).expect("collector error should parse");
         match parsed {
             ParsedCollectorPayload::CollectorError(error) => {
@@ -215,21 +216,21 @@ mod tests {
 
     #[test]
     fn malformed_json_is_deterministic_error() {
-        let raw = include_str!("../../fixtures/protocol/v1/malformed_json.txt");
+        let raw = include_str!("../../../fixtures/protocol/v1/malformed_json.txt");
         let error = parse_collector_json(raw).expect_err("fixture should fail");
         assert_eq!(error.error_type, "protocol_malformed_json");
     }
 
     #[test]
     fn missing_required_field_is_schema_error() {
-        let raw = include_str!("../../fixtures/protocol/v1/missing_required_field.json");
+        let raw = include_str!("../../../fixtures/protocol/v1/missing_required_field.json");
         let error = parse_collector_json(raw).expect_err("fixture should fail");
         assert_eq!(error.error_type, "protocol_schema_invalid");
     }
 
     #[test]
     fn unsupported_version_is_rejected() {
-        let raw = include_str!("../../fixtures/protocol/v1/unsupported_protocol_version.json");
+        let raw = include_str!("../../../fixtures/protocol/v1/unsupported_protocol_version.json");
         let error = parse_collector_json(raw).expect_err("fixture should fail");
         assert_eq!(error.error_type, "protocol_unsupported_version");
     }
