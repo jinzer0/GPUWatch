@@ -23,6 +23,15 @@ impl Repository {
         Self::from_connection(Connection::open(path)?)
     }
 
+    pub fn path_requires_legacy_collector_command_drop(path: &Path) -> Result<bool, AppError> {
+        if !path.exists() {
+            return Ok(false);
+        }
+
+        let conn = Connection::open(path)?;
+        column_exists(&conn, "servers", "collector_command")
+    }
+
     #[cfg(test)]
     pub fn in_memory() -> Result<Self, AppError> {
         let repository = Self::from_connection(Connection::open_in_memory()?)?;

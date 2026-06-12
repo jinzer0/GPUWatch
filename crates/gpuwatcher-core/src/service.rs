@@ -445,6 +445,59 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn poll_server_failure_preserves_latest_success_and_history_gap() {
+        let state = test_state();
+        let server = save_test_server(&state);
+        let (raw_json, success) = success_snapshot();
+        let success_collector = MockCollector {
+            outcome: MockOutcome::Success(raw_json.clone(), success),
+        };
+        poll_server_owned_with_collector(&state, &success_collector, server.clone())
+            .await
+            .expect("success poll");
+
+        let failure_collector = MockCollector {
+            outcome: MockOutcome::Error(AppError::new(
+                "collector",
+                "remote_gpu_query_failed",
+                "base nvidia-smi GPU query failed",
+            )),
+        };
+        let result = poll_server_owned_with_collector(&state, &failure_collector, server.clone())
+            .await
+            .expect("failure poll");
+
+        assert!(!result.ok);
+        assert_eq!(result.status, "error");
+        assert_eq!(
+            result.error_type.as_deref(),
+            Some("remote_gpu_query_failed")
+        );
+        let repository = state.repository.lock().expect("repository mutex poisoned");
+        let snapshot = repository
+            .latest_snapshot(&server.id)
+            .expect("snapshot lookup")
+            .expect("snapshot preserved");
+        assert_eq!(snapshot.raw_json, raw_json);
+        assert_eq!(
+            repository
+                .gpu_history_sample_count(&server.id)
+                .expect("history count"),
+            2
+        );
+        let health = repository
+            .get_health(&server.id)
+            .expect("health lookup")
+            .expect("health stored");
+        assert_eq!(health.status, "stale");
+        assert_eq!(
+            health.last_error_type.as_deref(),
+            Some("remote_gpu_query_failed")
+        );
+        assert!(health.last_success_at.is_some());
+    }
+
+    #[tokio::test]
     async fn poll_server_discards_success_when_config_revision_changes() {
         let state = test_state();
         let server = save_test_server(&state);

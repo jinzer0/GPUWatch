@@ -1015,18 +1015,18 @@ mod tests {
     #[test]
     fn normal_rtx_5090_outputs_parse() {
         let result = parse_nvidia_smi_outputs(NvidiaSmiOutputs {
-            gpu_csv: include_str!("../../../src-tauri/fixtures/nvidia-smi/gpu_csv_rtx_5090.csv"),
+            gpu_csv: include_str!("../../../fixtures/nvidia-smi/gpu_csv_rtx_5090.csv"),
             compute_apps_csv: Some(include_str!(
-                "../../../src-tauri/fixtures/nvidia-smi/compute_apps_rtx_5090.csv"
+                "../../../fixtures/nvidia-smi/compute_apps_rtx_5090.csv"
             )),
             pmon: Some(include_str!(
-                "../../../src-tauri/fixtures/nvidia-smi/pmon_rtx_5090.txt"
+                "../../../fixtures/nvidia-smi/pmon_rtx_5090.txt"
             )),
             dmon: Some(include_str!(
-                "../../../src-tauri/fixtures/nvidia-smi/dmon_rtx_5090.txt"
+                "../../../fixtures/nvidia-smi/dmon_rtx_5090.txt"
             )),
             ps: Some(include_str!(
-                "../../../src-tauri/fixtures/nvidia-smi/ps_rtx_5090.txt"
+                "../../../fixtures/nvidia-smi/ps_rtx_5090.txt"
             )),
             ..NvidiaSmiOutputs::default()
         })
@@ -1058,10 +1058,10 @@ mod tests {
     fn unknown_values_parse_as_none() {
         let result = parse_nvidia_smi_outputs(NvidiaSmiOutputs {
             gpu_csv: include_str!(
-                "../../../src-tauri/fixtures/nvidia-smi/gpu_csv_unknown_values.csv"
+                "../../../fixtures/nvidia-smi/gpu_csv_unknown_values.csv"
             ),
             compute_apps_csv: Some(include_str!(
-                "../../../src-tauri/fixtures/nvidia-smi/compute_apps_unknown_values.csv"
+                "../../../fixtures/nvidia-smi/compute_apps_unknown_values.csv"
             )),
             ..NvidiaSmiOutputs::default()
         })
@@ -1081,9 +1081,9 @@ mod tests {
     #[test]
     fn empty_compute_apps_output_is_empty_process_list() {
         let result = parse_nvidia_smi_outputs(NvidiaSmiOutputs {
-            gpu_csv: include_str!("../../../src-tauri/fixtures/nvidia-smi/gpu_csv_rtx_5090.csv"),
+            gpu_csv: include_str!("../../../fixtures/nvidia-smi/gpu_csv_rtx_5090.csv"),
             compute_apps_csv: Some(include_str!(
-                "../../../src-tauri/fixtures/nvidia-smi/compute_apps_empty.csv"
+                "../../../fixtures/nvidia-smi/compute_apps_empty.csv"
             )),
             ..NvidiaSmiOutputs::default()
         })
@@ -1095,9 +1095,9 @@ mod tests {
     #[test]
     fn pmon_graphics_only_process_is_included() {
         let result = parse_nvidia_smi_outputs(NvidiaSmiOutputs {
-            gpu_csv: include_str!("../../../src-tauri/fixtures/nvidia-smi/gpu_csv_rtx_5090.csv"),
+            gpu_csv: include_str!("../../../fixtures/nvidia-smi/gpu_csv_rtx_5090.csv"),
             pmon: Some(include_str!(
-                "../../../src-tauri/fixtures/nvidia-smi/pmon_graphics_only.txt"
+                "../../../fixtures/nvidia-smi/pmon_graphics_only.txt"
             )),
             ..NvidiaSmiOutputs::default()
         })
@@ -1112,9 +1112,9 @@ mod tests {
     #[test]
     fn pmon_live_um_graphics_only_process_uses_header_for_fb_memory() {
         let result = parse_nvidia_smi_outputs(NvidiaSmiOutputs {
-            gpu_csv: include_str!("../../../src-tauri/fixtures/nvidia-smi/gpu_csv_rtx_5090.csv"),
+            gpu_csv: include_str!("../../../fixtures/nvidia-smi/gpu_csv_rtx_5090.csv"),
             pmon: Some(include_str!(
-                "../../../src-tauri/fixtures/nvidia-smi/pmon_live_um_graphics_only.txt"
+                "../../../fixtures/nvidia-smi/pmon_live_um_graphics_only.txt"
             )),
             ..NvidiaSmiOutputs::default()
         })
@@ -1130,7 +1130,7 @@ mod tests {
     #[test]
     fn malformed_base_gpu_csv_returns_typed_error() {
         let error = parse_nvidia_smi_outputs(NvidiaSmiOutputs {
-            gpu_csv: include_str!("../../../src-tauri/fixtures/nvidia-smi/gpu_csv_malformed.csv"),
+            gpu_csv: include_str!("../../../fixtures/nvidia-smi/gpu_csv_malformed.csv"),
             ..NvidiaSmiOutputs::default()
         })
         .expect_err("malformed base GPU CSV should fail");
@@ -1142,9 +1142,9 @@ mod tests {
     #[test]
     fn optional_malformed_dmon_collects_warning_without_blocking() {
         let result = parse_nvidia_smi_outputs(NvidiaSmiOutputs {
-            gpu_csv: include_str!("../../../src-tauri/fixtures/nvidia-smi/gpu_csv_rtx_5090.csv"),
+            gpu_csv: include_str!("../../../fixtures/nvidia-smi/gpu_csv_rtx_5090.csv"),
             dmon: Some(include_str!(
-                "../../../src-tauri/fixtures/nvidia-smi/dmon_malformed.txt"
+                "../../../fixtures/nvidia-smi/dmon_malformed.txt"
             )),
             ..NvidiaSmiOutputs::default()
         })
@@ -1161,9 +1161,9 @@ mod tests {
     #[test]
     fn dmon_live_pucm_noheader_uses_long_csv_clock_indices() {
         let result = parse_nvidia_smi_outputs(NvidiaSmiOutputs {
-            gpu_csv: include_str!("../../../src-tauri/fixtures/nvidia-smi/gpu_csv_rtx_5090.csv"),
+            gpu_csv: include_str!("../../../fixtures/nvidia-smi/gpu_csv_rtx_5090.csv"),
             dmon: Some(include_str!(
-                "../../../src-tauri/fixtures/nvidia-smi/dmon_live_pucm_noheader.csv"
+                "../../../fixtures/nvidia-smi/dmon_live_pucm_noheader.csv"
             )),
             ..NvidiaSmiOutputs::default()
         })
@@ -1183,12 +1183,12 @@ mod tests {
     #[test]
     fn disappeared_pid_does_not_panic_or_drop_process() {
         let result = parse_nvidia_smi_outputs(NvidiaSmiOutputs {
-            gpu_csv: include_str!("../../../src-tauri/fixtures/nvidia-smi/gpu_csv_rtx_5090.csv"),
+            gpu_csv: include_str!("../../../fixtures/nvidia-smi/gpu_csv_rtx_5090.csv"),
             compute_apps_csv: Some(include_str!(
-                "../../../src-tauri/fixtures/nvidia-smi/compute_apps_disappeared_pid.csv"
+                "../../../fixtures/nvidia-smi/compute_apps_disappeared_pid.csv"
             )),
             ps: Some(include_str!(
-                "../../../src-tauri/fixtures/nvidia-smi/ps_disappeared_pid.txt"
+                "../../../fixtures/nvidia-smi/ps_disappeared_pid.txt"
             )),
             ..NvidiaSmiOutputs::default()
         })
@@ -1205,7 +1205,7 @@ mod tests {
     #[test]
     fn gpu_csv_identity_and_clocks_are_persisted_on_gpus() {
         let result = parse_nvidia_smi_outputs(NvidiaSmiOutputs {
-            gpu_csv: include_str!("../../../src-tauri/fixtures/nvidia-smi/gpu_csv_rtx_5090.csv"),
+            gpu_csv: include_str!("../../../fixtures/nvidia-smi/gpu_csv_rtx_5090.csv"),
             ..NvidiaSmiOutputs::default()
         })
         .expect("GPU CSV should parse");
@@ -1248,7 +1248,7 @@ mod tests {
     #[test]
     fn pmon_type_maps_process_kind_and_updates_compute_rows() {
         let result = parse_nvidia_smi_outputs(NvidiaSmiOutputs {
-            gpu_csv: include_str!("../../../src-tauri/fixtures/nvidia-smi/gpu_csv_rtx_5090.csv"),
+            gpu_csv: include_str!("../../../fixtures/nvidia-smi/gpu_csv_rtx_5090.csv"),
             compute_apps_csv: Some("GPU-50900000-0000-0000-0000-000000000000, 1234, python train.py, 512"),
             pmon: Some("# gpu        pid  type    sm   mem   enc   dec   jpg   ofa   fb  ccpm command\n    0       1234     G    25     8     -     -     -     -  512     - gnome-shell\n    1       9999     -     -     -     -     -     -     -    -     - mystery"),
             ..NvidiaSmiOutputs::default()
@@ -1274,7 +1274,7 @@ mod tests {
     #[test]
     fn compute_apps_only_rows_default_to_compute_process_kind() {
         let result = parse_nvidia_smi_outputs(NvidiaSmiOutputs {
-            gpu_csv: include_str!("../../../src-tauri/fixtures/nvidia-smi/gpu_csv_rtx_5090.csv"),
+            gpu_csv: include_str!("../../../fixtures/nvidia-smi/gpu_csv_rtx_5090.csv"),
             compute_apps_csv: Some(
                 "GPU-50900000-0000-0000-0000-000000000000, 1234, python train.py, 512",
             ),
@@ -1293,15 +1293,15 @@ mod tests {
     #[test]
     fn optional_gpu_extra_mig_and_pcie_sections_enrich_gpus() {
         let result = parse_nvidia_smi_outputs(NvidiaSmiOutputs {
-            gpu_csv: include_str!("../../../src-tauri/fixtures/nvidia-smi/gpu_csv_rtx_5090.csv"),
+            gpu_csv: include_str!("../../../fixtures/nvidia-smi/gpu_csv_rtx_5090.csv"),
             gpu_extra_csv: Some(include_str!(
-                "../../../src-tauri/fixtures/nvidia-smi/gpu_extra_rtx_5090.csv"
+                "../../../fixtures/nvidia-smi/gpu_extra_rtx_5090.csv"
             )),
             mig_list: Some(include_str!(
-                "../../../src-tauri/fixtures/nvidia-smi/mig_list_disabled.txt"
+                "../../../fixtures/nvidia-smi/mig_list_disabled.txt"
             )),
             dmon_pcie: Some(include_str!(
-                "../../../src-tauri/fixtures/nvidia-smi/dmon_pcie_rtx_5090.txt"
+                "../../../fixtures/nvidia-smi/dmon_pcie_rtx_5090.txt"
             )),
             ..NvidiaSmiOutputs::default()
         })
@@ -1326,7 +1326,7 @@ mod tests {
     fn mig_list_counts_basic_instances_by_physical_gpu() {
         let result = parse_nvidia_smi_outputs(NvidiaSmiOutputs {
             gpu_csv: "0, GPU-aaaa, 00000000:65:00.0, NVIDIA A100, 535.129.03, 40960, 1024, 39936, 12, 4, 41, 88.50, 400.00, 30, 1410, 1215\n1, GPU-bbbb, 00000000:66:00.0, NVIDIA A100, 535.129.03, 40960, 0, 40960, 0, 0, 35, 50.00, 400.00, 30, 1410, 1215",
-            mig_list: Some(include_str!("../../../src-tauri/fixtures/nvidia-smi/mig_list_enabled.txt")),
+            mig_list: Some(include_str!("../../../fixtures/nvidia-smi/mig_list_enabled.txt")),
             ..NvidiaSmiOutputs::default()
         })
         .expect("MIG list should parse");
@@ -1339,10 +1339,10 @@ mod tests {
     fn optional_gpu_extra_unknown_values_stay_none_with_warning_for_bad_numbers() {
         let result = parse_nvidia_smi_outputs(NvidiaSmiOutputs {
             gpu_csv: include_str!(
-                "../../../src-tauri/fixtures/nvidia-smi/gpu_csv_unknown_values.csv"
+                "../../../fixtures/nvidia-smi/gpu_csv_unknown_values.csv"
             ),
             gpu_extra_csv: Some(include_str!(
-                "../../../src-tauri/fixtures/nvidia-smi/gpu_extra_unknown_values.csv"
+                "../../../fixtures/nvidia-smi/gpu_extra_unknown_values.csv"
             )),
             dmon_pcie: Some("0, -, abc"),
             ..NvidiaSmiOutputs::default()
@@ -1369,9 +1369,9 @@ mod tests {
     #[test]
     fn dmon_extra_utilization_columns_are_captured_when_present() {
         let result = parse_nvidia_smi_outputs(NvidiaSmiOutputs {
-            gpu_csv: include_str!("../../../src-tauri/fixtures/nvidia-smi/gpu_csv_rtx_5090.csv"),
+            gpu_csv: include_str!("../../../fixtures/nvidia-smi/gpu_csv_rtx_5090.csv"),
             dmon: Some(include_str!(
-                "../../../src-tauri/fixtures/nvidia-smi/dmon_extra_utilization.txt"
+                "../../../fixtures/nvidia-smi/dmon_extra_utilization.txt"
             )),
             ..NvidiaSmiOutputs::default()
         })
@@ -1387,12 +1387,12 @@ mod tests {
     #[test]
     fn pmon_utilization_columns_enrich_processes_null_preserving() {
         let result = parse_nvidia_smi_outputs(NvidiaSmiOutputs {
-            gpu_csv: include_str!("../../../src-tauri/fixtures/nvidia-smi/gpu_csv_rtx_5090.csv"),
+            gpu_csv: include_str!("../../../fixtures/nvidia-smi/gpu_csv_rtx_5090.csv"),
             compute_apps_csv: Some(include_str!(
-                "../../../src-tauri/fixtures/nvidia-smi/compute_apps_rtx_5090.csv"
+                "../../../fixtures/nvidia-smi/compute_apps_rtx_5090.csv"
             )),
             pmon: Some(include_str!(
-                "../../../src-tauri/fixtures/nvidia-smi/pmon_utilization_placeholders.txt"
+                "../../../fixtures/nvidia-smi/pmon_utilization_placeholders.txt"
             )),
             ..NvidiaSmiOutputs::default()
         })
@@ -1408,15 +1408,15 @@ mod tests {
     #[test]
     fn ps_etimes_sets_runtime_seconds_and_parent_pid_with_etime_fallback() {
         let result = parse_nvidia_smi_outputs(NvidiaSmiOutputs {
-            gpu_csv: include_str!("../../../src-tauri/fixtures/nvidia-smi/gpu_csv_rtx_5090.csv"),
+            gpu_csv: include_str!("../../../fixtures/nvidia-smi/gpu_csv_rtx_5090.csv"),
             compute_apps_csv: Some(include_str!(
-                "../../../src-tauri/fixtures/nvidia-smi/compute_apps_rtx_5090.csv"
+                "../../../fixtures/nvidia-smi/compute_apps_rtx_5090.csv"
             )),
             pmon: Some(include_str!(
-                "../../../src-tauri/fixtures/nvidia-smi/pmon_graphics_only.txt"
+                "../../../fixtures/nvidia-smi/pmon_graphics_only.txt"
             )),
             ps: Some(include_str!(
-                "../../../src-tauri/fixtures/nvidia-smi/ps_etimes_rtx_5090.txt"
+                "../../../fixtures/nvidia-smi/ps_etimes_rtx_5090.txt"
             )),
             ..NvidiaSmiOutputs::default()
         })
