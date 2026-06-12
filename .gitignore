@@ -13,9 +13,8 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Rust / Tauri build output
+# Rust build output
 target/
-src-tauri/target/
 
 # Local databases and runtime state
 *.db
@@ -39,6 +38,7 @@ __pycache__/
 
 # Local agent and browser QA artifacts
 .sisyphus/
+.omo/
 .playwright-mcp/
 
 # User files
