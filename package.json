@@ -8,21 +8,19 @@
     "dev": "vite --host 127.0.0.1 --port 5173",
     "build": "tsc && vite build",
     "test": "vitest run",
-    "tauri": "tauri",
     "electron:build": "tsc -p tsconfig.electron.json",
     "electron:dev": "npm run electron:build && VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron dist-electron/electron/main.js",
     "electron:pack": "npm run build && npm run electron:build && npm run helper:build && electron-builder --dir",
-    "helper:build": "cargo build --manifest-path crates/gpuwatcher-helper/Cargo.toml"
+    "helper:build": "cargo build --manifest-path crates/gpuwatcher-helper/Cargo.toml",
+    "smoke:electron:first-run": "node smoke/electron-first-run-ui-parity.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.11",
-    "@tauri-apps/api": "^2.9.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "zustand": "^5.0.8"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.9.5",
     "@testing-library/react": "^16.3.0",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
