@@ -1,15 +1,15 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
-import { helperContract, type HelperResponseEnvelope } from './helperContract.js';
+import { rendererHelperContract, type HelperResponseEnvelope } from './helperContract.js';
 import { channelForPreloadMethod } from './ipc.js';
 
 export type GpuwatcherPreloadApi = {
-  [Method in (typeof helperContract)[number]['electronPreloadMethod']]: (payload?: object) => Promise<HelperResponseEnvelope>;
+  [Method in (typeof rendererHelperContract)[number]['electronPreloadMethod']]: (payload?: object) => Promise<HelperResponseEnvelope>;
 };
 
 export function createGpuwatcherBridge(invoke: (channel: string, payload: object) => Promise<HelperResponseEnvelope>): GpuwatcherPreloadApi {
   return Object.fromEntries(
-    helperContract.map((entry) => [
+    rendererHelperContract.map((entry) => [
       entry.electronPreloadMethod,
       (payload: object = {}) => invoke(channelForPreloadMethod(entry.electronPreloadMethod), payload)
     ])

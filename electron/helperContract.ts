@@ -11,7 +11,10 @@ export type HelperAction =
   | 'list_processes'
   | 'test_connection'
   | 'refresh_server'
+  | 'poll_due_servers'
   | 'health';
+
+export type ActionVisibility = 'renderer' | 'main-only';
 
 export type TimeoutClass = 'local-10s' | 'ssh-60s';
 
@@ -46,9 +49,9 @@ export type HelperResponseEnvelope<Data = unknown> =
 
 export interface HelperContractEntry {
   frontendApi: string | null;
-  tauriCommand: string | null;
   helperAction: HelperAction;
-  electronPreloadMethod: string;
+  visibility: ActionVisibility;
+  electronPreloadMethod: string | null;
   timeoutClass: TimeoutClass;
   dbMutation: DbMutation;
   pollingOverlapKey: PollingOverlapKey;
@@ -66,8 +69,8 @@ export const HELPER_RESPONSE_ENVELOPE =
 export const helperContract = [
   {
     frontendApi: 'initializeApp',
-    tauriCommand: 'initialize_app',
     helperAction: 'initialize_app',
+    visibility: 'renderer',
     electronPreloadMethod: 'initializeApp',
     timeoutClass: 'local-10s',
     dbMutation: 'none',
@@ -75,12 +78,12 @@ export const helperContract = [
     helperEnvelope: 'request:{action:string,payload:object};response:{ok:true,data}|{ok:false,error:{layer,type,message}}',
     migrationStatus: 'migrate',
     fallbackBehavior: 'Return the same overview list as list_overview; preload exposes an action-specific initializeApp method.',
-    notes: 'Tauri currently delegates initialize_app directly to list_overview.'
+    notes: 'Initial app load delegates to the same overview data surface as list_overview.'
   },
   {
     frontendApi: 'listOverview',
-    tauriCommand: 'list_overview',
     helperAction: 'list_overview',
+    visibility: 'renderer',
     electronPreloadMethod: 'listOverview',
     timeoutClass: 'local-10s',
     dbMutation: 'none',
@@ -92,8 +95,8 @@ export const helperContract = [
   },
   {
     frontendApi: 'listServers',
-    tauriCommand: 'list_servers',
     helperAction: 'list_servers',
+    visibility: 'renderer',
     electronPreloadMethod: 'listServers',
     timeoutClass: 'local-10s',
     dbMutation: 'none',
@@ -105,8 +108,8 @@ export const helperContract = [
   },
   {
     frontendApi: 'saveServer',
-    tauriCommand: 'save_server',
     helperAction: 'save_server',
+    visibility: 'renderer',
     electronPreloadMethod: 'saveServer',
     timeoutClass: 'local-10s',
     dbMutation: 'servers-write',
@@ -118,8 +121,8 @@ export const helperContract = [
   },
   {
     frontendApi: 'deleteServer',
-    tauriCommand: 'delete_server',
     helperAction: 'delete_server',
+    visibility: 'renderer',
     electronPreloadMethod: 'deleteServer',
     timeoutClass: 'local-10s',
     dbMutation: 'servers-delete',
@@ -131,8 +134,8 @@ export const helperContract = [
   },
   {
     frontendApi: 'setServerEnabled',
-    tauriCommand: 'set_server_enabled',
     helperAction: 'set_server_enabled',
+    visibility: 'renderer',
     electronPreloadMethod: 'setServerEnabled',
     timeoutClass: 'local-10s',
     dbMutation: 'server-enabled-write',
@@ -144,8 +147,8 @@ export const helperContract = [
   },
   {
     frontendApi: 'seedDemoData',
-    tauriCommand: 'seed_demo_data',
     helperAction: 'seed_demo_data',
+    visibility: 'renderer',
     electronPreloadMethod: 'seedDemoData',
     timeoutClass: 'local-10s',
     dbMutation: 'demo-seed-write',
@@ -157,21 +160,21 @@ export const helperContract = [
   },
   {
     frontendApi: 'getServerDetail',
-    tauriCommand: 'get_server_detail',
     helperAction: 'get_server_detail',
+    visibility: 'renderer',
     electronPreloadMethod: 'getServerDetail',
     timeoutClass: 'local-10s',
     dbMutation: 'none',
     pollingOverlapKey: 'none',
     helperEnvelope: 'request:{action:string,payload:object};response:{ok:true,data}|{ok:false,error:{layer,type,message}}',
     migrationStatus: 'migrate',
-    fallbackBehavior: 'Return null data when the server id is not found, matching Tauri behavior.',
+    fallbackBehavior: 'Return null data when the server id is not found, matching the existing desktop behavior.',
     notes: 'Reads one server, health, and latest snapshot to build ServerDetailDto.'
   },
   {
     frontendApi: 'listGpuHistory',
-    tauriCommand: 'list_gpu_history',
     helperAction: 'list_gpu_history',
+    visibility: 'renderer',
     electronPreloadMethod: 'listGpuHistory',
     timeoutClass: 'local-10s',
     dbMutation: 'none',
@@ -183,8 +186,8 @@ export const helperContract = [
   },
   {
     frontendApi: 'listProcesses',
-    tauriCommand: 'list_processes',
     helperAction: 'list_processes',
+    visibility: 'renderer',
     electronPreloadMethod: 'listProcesses',
     timeoutClass: 'local-10s',
     dbMutation: 'none',
@@ -196,8 +199,8 @@ export const helperContract = [
   },
   {
     frontendApi: 'testConnection',
-    tauriCommand: 'test_connection',
     helperAction: 'test_connection',
+    visibility: 'renderer',
     electronPreloadMethod: 'testConnection',
     timeoutClass: 'ssh-60s',
     dbMutation: 'none',
@@ -209,8 +212,8 @@ export const helperContract = [
   },
   {
     frontendApi: 'refreshServer',
-    tauriCommand: 'refresh_server',
     helperAction: 'refresh_server',
+    visibility: 'renderer',
     electronPreloadMethod: 'refreshServer',
     timeoutClass: 'ssh-60s',
     dbMutation: 'poll-health-start-and-result-write',
@@ -222,8 +225,21 @@ export const helperContract = [
   },
   {
     frontendApi: null,
-    tauriCommand: null,
+    helperAction: 'poll_due_servers',
+    visibility: 'main-only',
+    electronPreloadMethod: null,
+    timeoutClass: 'ssh-60s',
+    dbMutation: 'poll-health-start-and-result-write',
+    pollingOverlapKey: 'electron-main-scheduler',
+    helperEnvelope: 'request:{action:string,payload:object};response:{ok:true,data}|{ok:false,error:{layer,type,message}}',
+    migrationStatus: 'electron-main-only',
+    fallbackBehavior: 'Return a structured main_scheduler_owned error if called directly; renderer bridge and IPC do not expose it.',
+    notes: 'Electron main performs due polling with list_servers, get_server_detail, and refresh_server without adding a renderer-callable polling method.'
+  },
+  {
+    frontendApi: null,
     helperAction: 'health',
+    visibility: 'renderer',
     electronPreloadMethod: 'helperHealth',
     timeoutClass: 'local-10s',
     dbMutation: 'none',
@@ -235,6 +251,14 @@ export const helperContract = [
   }
 ] as const satisfies readonly HelperContractEntry[];
 
-export const tauriCommandContract = helperContract.filter((entry) => entry.tauriCommand !== null);
-
 export const frontendApiContract = helperContract.filter((entry) => entry.frontendApi !== null);
+
+export const rendererHelperContract = helperContract.filter(
+  (entry): entry is (typeof helperContract)[number] & { visibility: 'renderer'; electronPreloadMethod: string } =>
+    entry.visibility === 'renderer'
+);
+
+export const mainOnlyHelperContract = helperContract.filter(
+  (entry): entry is (typeof helperContract)[number] & { visibility: 'main-only'; electronPreloadMethod: null } =>
+    entry.visibility === 'main-only'
+);

@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron';
 
 import {
-  helperContract,
+  rendererHelperContract,
   type HelperAction,
   type HelperRequestEnvelope,
   type HelperResponseEnvelope
@@ -17,7 +17,7 @@ export const IPC_SCAFFOLD_STATUS = {
   scheduler: 'implemented-task-8'
 } as const;
 
-export const helperIpcChannels = helperContract.map((entry) => ({
+export const helperIpcChannels = rendererHelperContract.map((entry) => ({
   action: entry.helperAction,
   method: entry.electronPreloadMethod,
   channel: `${IPC_CHANNEL_PREFIX}${entry.electronPreloadMethod}`
