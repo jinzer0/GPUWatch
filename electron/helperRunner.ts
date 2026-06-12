@@ -12,6 +12,7 @@ export const HELPER_TIMEOUT_MS: Record<TimeoutClass, number> = {
 };
 
 export interface HelperRunner {
+  cancelActive?(): void;
   run<Action extends HelperAction, Payload extends object, Data = unknown>(
     request: HelperRequestEnvelope<Action, Payload>
   ): Promise<HelperResponseEnvelope<Data>>;
@@ -113,6 +114,19 @@ function validateHelperResponse(value: unknown): value is HelperResponseEnvelope
   return false;
 }
 
+function killHelperProcess(child: ChildProcessWithoutNullStreams, signal: NodeJS.Signals): void {
+  if (process.platform !== 'win32' && child.pid) {
+    try {
+      process.kill(-child.pid, signal);
+      return;
+    } catch {
+      // Fall back to killing the direct child if process-group signaling is unavailable.
+    }
+  }
+
+  child.kill(signal);
+}
+
 function runProcess(
   child: ChildProcessWithoutNullStreams,
   request: HelperRequestEnvelope<HelperAction, object>,
@@ -121,8 +135,10 @@ function runProcess(
 ): Promise<HelperResponseEnvelope> {
   return new Promise((resolve) => {
     let settled = false;
+    let timedOut = false;
     let stdout = '';
     let stderr = '';
+    let forceKillTimer: ReturnType<typeof setTimeout> | null = null;
 
     const finish = (response: HelperResponseEnvelope) => {
       if (settled) {
@@ -131,17 +147,23 @@ function runProcess(
 
       settled = true;
       clearTimeout(timer);
+      if (forceKillTimer) {
+        clearTimeout(forceKillTimer);
+      }
       resolve(response);
     };
 
+    const timeoutResponse = () =>
+      contractError('helper_timeout', `Helper action ${request.action} timed out after ${timeoutMs} ms while running ${helperPath}.`);
+
     const timer = setTimeout(() => {
-      child.kill('SIGTERM');
-      finish(
-        contractError(
-          'helper_timeout',
-          `Helper action ${request.action} timed out after ${timeoutMs} ms while running ${helperPath}.`
-        )
-      );
+      timedOut = true;
+      killHelperProcess(child, 'SIGTERM');
+      forceKillTimer = setTimeout(() => {
+        if (!settled) {
+          killHelperProcess(child, 'SIGKILL');
+        }
+      }, 1000);
     }, timeoutMs);
 
     child.stdout.setEncoding('utf8');
@@ -157,6 +179,11 @@ function runProcess(
     });
     child.on('close', (code, signal) => {
       if (settled) {
+        return;
+      }
+
+      if (timedOut) {
+        finish(timeoutResponse());
         return;
       }
 
@@ -187,8 +214,14 @@ function runProcess(
 
 export function createHelperRunner(options: HelperRunnerOptions = {}): HelperRunner {
   const timeoutMsByClass = { ...HELPER_TIMEOUT_MS, ...options.timeoutMsByClass };
+  const activeChildren = new Set<ChildProcessWithoutNullStreams>();
 
   return {
+    cancelActive() {
+      for (const child of activeChildren) {
+        killHelperProcess(child, 'SIGTERM');
+      }
+    },
     async run<Action extends HelperAction, Payload extends object, Data = unknown>(
       request: HelperRequestEnvelope<Action, Payload>
     ): Promise<HelperResponseEnvelope<Data>> {
@@ -208,10 +241,16 @@ export function createHelperRunner(options: HelperRunnerOptions = {}): HelperRun
       try {
         const child = spawn(helperPath, [], {
           cwd: options.cwd ?? process.cwd(),
+          detached: process.platform !== 'win32',
           shell: false,
           stdio: ['pipe', 'pipe', 'pipe']
         });
-        return (await runProcess(child, request, timeoutMs, helperPath)) as HelperResponseEnvelope<Data>;
+        activeChildren.add(child);
+        try {
+          return (await runProcess(child, request, timeoutMs, helperPath)) as HelperResponseEnvelope<Data>;
+        } finally {
+          activeChildren.delete(child);
+        }
       } catch (error) {
         return contractError(
           'helper_runner_error',

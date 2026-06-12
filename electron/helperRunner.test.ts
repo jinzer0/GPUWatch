@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -12,6 +12,21 @@ async function createExecutableScript(source: string): Promise<string> {
   await writeFile(scriptPath, `#!/usr/bin/env node\n${source}`, 'utf8');
   await chmod(scriptPath, 0o755);
   return scriptPath;
+}
+
+async function waitForFile(filePath: string): Promise<string> {
+  const deadline = Date.now() + 3000;
+  let lastError: unknown;
+  while (Date.now() < deadline) {
+    try {
+      return await readFile(filePath, 'utf8');
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+  }
+
+  throw lastError;
 }
 
 describe('Electron helper runner', () => {
@@ -99,6 +114,37 @@ setTimeout(() => process.stdout.write(JSON.stringify({ ok: true, data: {} })), 1
         message: expect.stringContaining('timed out after 20 ms')
       });
     }
+  });
+
+  it('kills timed-out helper children before resolving the timeout response', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'gpuwatcher-helper-timeout-test-'));
+    const pidPath = path.join(directory, 'helper.pid');
+    const helperPath = path.join(directory, 'fake-timeout-helper.sh');
+    await writeFile(
+      helperPath,
+      `#!/bin/sh
+printf "%s" "$$" > ${JSON.stringify(pidPath)}
+trap '' TERM
+while true; do sleep 1; done
+`,
+      'utf8'
+    );
+    await chmod(helperPath, 0o755);
+    const runner = createHelperRunner({ env: { [HELPER_PATH_ENV]: helperPath }, timeoutMsByClass: { 'ssh-60s': 2000 } });
+
+    const pendingResponse = runner.run({ action: 'refresh_server', payload: { id: 'server-1' } });
+    const childPid = Number(await waitForFile(pidPath));
+    const response = await pendingResponse;
+
+    expect(response.ok).toBe(false);
+    if (!response.ok) {
+      expect(response.error).toEqual({
+        layer: 'helper_contract',
+        type: 'helper_timeout',
+        message: expect.stringContaining('timed out after 2000 ms')
+      });
+    }
+    expect(() => process.kill(childPid, 0)).toThrow();
   });
 
   it('returns structured malformed stdout errors instead of throwing', async () => {

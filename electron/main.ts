@@ -21,7 +21,7 @@ async function createMainWindow(): Promise<void> {
     minWidth: 1024,
     minHeight: 720,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, 'preload-runtime.cjs'),
       nodeIntegration: false,
       contextIsolation: true
     }
@@ -43,7 +43,7 @@ const helperRunner = createHelperRunner({ isPackaged: app.isPackaged, resourcesP
 registerIpcScaffold(helperRunner, scheduler);
 
 app.whenReady().then(async () => {
-  scheduler.start();
+  scheduler.start(helperRunner);
   await createMainWindow();
 
   app.on('activate', async () => {
