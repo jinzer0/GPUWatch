@@ -3,6 +3,9 @@ pub mod contract;
 use serde_json::{json, Value};
 
 use contract::{HelperAction, HELPER_CONTRACT};
+use gpuwatcher_core::error::AppError;
+use gpuwatcher_core::models::ServerInput;
+use gpuwatcher_core::{service, state::AppState};
 
 pub use gpuwatcher_core as core;
 
@@ -10,14 +13,7 @@ const ERROR_LAYER: &str = "helper_contract";
 
 pub fn handle_request(input: &str) -> Value {
     match parse_request(input) {
-        Ok((HelperAction::Health, _payload)) => ok_response(health_data()),
-        Ok((action, _payload)) => error_response(
-            "helper_action_deferred",
-            format!(
-                "helper action '{}' is allowlisted but not implemented in this task",
-                action_name(action)
-            ),
-        ),
+        Ok((action, payload)) => dispatch_action(action, payload),
         Err(error) => error,
     }
 }
@@ -76,6 +72,157 @@ fn parse_request(input: &str) -> Result<(HelperAction, serde_json::Map<String, V
     Ok((action, payload))
 }
 
+fn dispatch_action(action: HelperAction, payload: serde_json::Map<String, Value>) -> Value {
+    match action {
+        HelperAction::Health => ok_response(health_data()),
+        HelperAction::InitializeApp => with_state(payload, |state, payload| {
+            expect_empty_payload(&payload)?;
+            service::initialize_app(&state).and_then(to_value)
+        }),
+        HelperAction::ListOverview => with_state(payload, |state, payload| {
+            expect_empty_payload(&payload)?;
+            service::list_overview(&state).and_then(to_value)
+        }),
+        HelperAction::ListServers => with_state(payload, |state, payload| {
+            expect_empty_payload(&payload)?;
+            service::list_servers(&state).and_then(to_value)
+        }),
+        HelperAction::SaveServer => with_state(payload, |state, payload| {
+            let request: SaveServerPayload = payload_from_map(payload)?;
+            service::save_server(&state, request.input).and_then(to_value)
+        }),
+        HelperAction::DeleteServer => with_state(payload, |state, payload| {
+            let request: IdPayload = payload_from_map(payload)?;
+            service::delete_server(&state, request.id).map(|()| Value::Null)
+        }),
+        HelperAction::SetServerEnabled => with_state(payload, |state, payload| {
+            let request: SetServerEnabledPayload = payload_from_map(payload)?;
+            service::set_server_enabled(&state, request.id, request.enabled).and_then(to_value)
+        }),
+        HelperAction::SeedDemoData => with_state(payload, |state, payload| {
+            expect_empty_payload(&payload)?;
+            service::seed_demo_data(&state).and_then(to_value)
+        }),
+        HelperAction::GetServerDetail => with_state(payload, |state, payload| {
+            let request: IdPayload = payload_from_map(payload)?;
+            service::get_server_detail(&state, request.id).and_then(to_value)
+        }),
+        HelperAction::ListGpuHistory => with_state(payload, |state, payload| {
+            let request: ListGpuHistoryPayload = payload_from_map(payload)?;
+            service::list_gpu_history(
+                &state,
+                request.server_id,
+                request.gpu_index,
+                request.gpu_uuid,
+                request.range,
+            )
+            .and_then(to_value)
+        }),
+        HelperAction::ListProcesses => with_state(payload, |state, payload| {
+            expect_empty_payload(&payload)?;
+            service::list_processes(&state).and_then(to_value)
+        }),
+        HelperAction::TestConnection => with_state(payload, |state, payload| {
+            let request: IdPayload = payload_from_map(payload)?;
+            block_on_service(service::test_connection(&state, request.id)).and_then(to_value)
+        }),
+        HelperAction::RefreshServer => with_state(payload, |state, payload| {
+            let request: IdPayload = payload_from_map(payload)?;
+            block_on_service(service::refresh_server(&state, request.id)).and_then(to_value)
+        }),
+        HelperAction::PollDueServers => error_response(
+            "main_scheduler_owned",
+            "poll_due_servers is main-only; Electron main owns due polling through list_servers, get_server_detail, and refresh_server",
+        ),
+    }
+}
+
+fn with_state(
+    payload: serde_json::Map<String, Value>,
+    action: impl FnOnce(AppState, serde_json::Map<String, Value>) -> Result<Value, AppError>,
+) -> Value {
+    let state = match AppState::open_default() {
+        Ok(state) => state,
+        Err(error) => return app_error_response(error),
+    };
+
+    match action(state, payload) {
+        Ok(data) => ok_response(data),
+        Err(error) => app_error_response(error),
+    }
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SaveServerPayload {
+    input: ServerInput,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct IdPayload {
+    id: String,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SetServerEnabledPayload {
+    id: String,
+    enabled: bool,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ListGpuHistoryPayload {
+    server_id: String,
+    gpu_index: Option<i64>,
+    gpu_uuid: Option<String>,
+    range: String,
+}
+
+fn expect_empty_payload(payload: &serde_json::Map<String, Value>) -> Result<(), AppError> {
+    if payload.is_empty() {
+        Ok(())
+    } else {
+        Err(helper_payload_error(
+            "payload must be empty for this helper action",
+        ))
+    }
+}
+
+fn payload_from_map<T>(payload: serde_json::Map<String, Value>) -> Result<T, AppError>
+where
+    T: serde::de::DeserializeOwned,
+{
+    serde_json::from_value(Value::Object(payload)).map_err(|err| {
+        helper_payload_error(format!("helper request payload has invalid shape: {err}"))
+    })
+}
+
+fn helper_payload_error(message: impl Into<String>) -> AppError {
+    AppError::new(ERROR_LAYER, "invalid_payload", message)
+}
+
+fn block_on_service<T>(
+    future: impl std::future::Future<Output = Result<T, AppError>>,
+) -> Result<T, AppError> {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|err| AppError::new(ERROR_LAYER, "runtime_unavailable", err.to_string()))?;
+    runtime.block_on(future)
+}
+
+fn to_value<T: serde::Serialize>(data: T) -> Result<Value, AppError> {
+    serde_json::to_value(data).map_err(|err| {
+        AppError::new(
+            ERROR_LAYER,
+            "response_serialization_failed",
+            format!("helper response data could not be serialized: {err}"),
+        )
+    })
+}
+
 fn parse_action(action: &str) -> Option<HelperAction> {
     HELPER_CONTRACT
         .iter()
@@ -97,6 +244,7 @@ fn action_name(action: HelperAction) -> &'static str {
         HelperAction::ListProcesses => "list_processes",
         HelperAction::TestConnection => "test_connection",
         HelperAction::RefreshServer => "refresh_server",
+        HelperAction::PollDueServers => "poll_due_servers",
         HelperAction::Health => "health",
     }
 }
@@ -128,6 +276,17 @@ fn error_response(error_type: impl Into<String>, message: impl Into<String>) -> 
             "layer": ERROR_LAYER,
             "type": error_type.into(),
             "message": message.into(),
+        }
+    })
+}
+
+fn app_error_response(error: AppError) -> Value {
+    json!({
+        "ok": false,
+        "error": {
+            "layer": error.layer,
+            "type": error.error_type,
+            "message": error.message,
         }
     })
 }
@@ -167,11 +326,32 @@ mod tests {
     }
 
     #[test]
-    fn allowlisted_non_health_action_is_deferred() {
-        let response = handle_request(r#"{"action":"list_servers","payload":{}}"#);
+    fn poll_due_servers_returns_main_scheduler_owned_error() {
+        let response =
+            handle_request(r#"{"action":"poll_due_servers","payload":{"id":"server-1"}}"#);
 
         assert_eq!(response["ok"], false);
-        assert_eq!(response["error"]["type"], "helper_action_deferred");
+        assert_eq!(response["error"]["type"], "main_scheduler_owned");
+        assert!(response["error"]["message"]
+            .as_str()
+            .expect("error message")
+            .contains("Electron main owns due polling"));
+    }
+
+    #[test]
+    fn poll_due_servers_is_main_only_without_preload_method() {
+        let main_only: Vec<_> = contract::HELPER_CONTRACT
+            .iter()
+            .filter(|entry| entry.visibility == contract::ActionVisibility::MainOnly)
+            .collect();
+
+        assert_eq!(main_only.len(), 1);
+        assert_eq!(main_only[0].helper_action, HelperAction::PollDueServers);
+        assert_eq!(main_only[0].electron_preload_method, None);
+        assert_eq!(
+            main_only[0].polling_overlap_key,
+            contract::PollingOverlapKey::ElectronMainScheduler
+        );
     }
 
     #[test]

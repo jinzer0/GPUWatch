@@ -16,7 +16,15 @@ pub enum HelperAction {
     ListProcesses,
     TestConnection,
     RefreshServer,
+    PollDueServers,
     Health,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ActionVisibility {
+    Renderer,
+    MainOnly,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -84,9 +92,9 @@ pub enum HelperResponseEnvelope {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct HelperContractEntry {
     pub frontend_api: Option<&'static str>,
-    pub tauri_command: Option<&'static str>,
     pub helper_action: HelperAction,
-    pub electron_preload_method: &'static str,
+    pub visibility: ActionVisibility,
+    pub electron_preload_method: Option<&'static str>,
     pub timeout_class: TimeoutClass,
     pub db_mutation: DbMutation,
     pub polling_overlap_key: PollingOverlapKey,
@@ -101,21 +109,21 @@ pub const RESPONSE_ENVELOPE: &str = r#"{"ok":true,"data":...}|{"ok":false,"error
 pub const HELPER_CONTRACT: &[HelperContractEntry] = &[
     HelperContractEntry {
         frontend_api: Some("initializeApp"),
-        tauri_command: Some("initialize_app"),
         helper_action: HelperAction::InitializeApp,
-        electron_preload_method: "initializeApp",
+        visibility: ActionVisibility::Renderer,
+        electron_preload_method: Some("initializeApp"),
         timeout_class: TimeoutClass::Local10s,
         db_mutation: DbMutation::None,
         polling_overlap_key: PollingOverlapKey::None,
         migration_status: MigrationStatus::Migrate,
         fallback_behavior: "Return the same overview list as list_overview.",
-        notes: "Tauri delegates initialize_app directly to list_overview.",
+        notes: "Initial app load delegates directly to list_overview.",
     },
     HelperContractEntry {
         frontend_api: Some("listOverview"),
-        tauri_command: Some("list_overview"),
         helper_action: HelperAction::ListOverview,
-        electron_preload_method: "listOverview",
+        visibility: ActionVisibility::Renderer,
+        electron_preload_method: Some("listOverview"),
         timeout_class: TimeoutClass::Local10s,
         db_mutation: DbMutation::None,
         polling_overlap_key: PollingOverlapKey::None,
@@ -125,9 +133,9 @@ pub const HELPER_CONTRACT: &[HelperContractEntry] = &[
     },
     HelperContractEntry {
         frontend_api: Some("listServers"),
-        tauri_command: Some("list_servers"),
         helper_action: HelperAction::ListServers,
-        electron_preload_method: "listServers",
+        visibility: ActionVisibility::Renderer,
+        electron_preload_method: Some("listServers"),
         timeout_class: TimeoutClass::Local10s,
         db_mutation: DbMutation::None,
         polling_overlap_key: PollingOverlapKey::None,
@@ -137,9 +145,9 @@ pub const HELPER_CONTRACT: &[HelperContractEntry] = &[
     },
     HelperContractEntry {
         frontend_api: Some("saveServer"),
-        tauri_command: Some("save_server"),
         helper_action: HelperAction::SaveServer,
-        electron_preload_method: "saveServer",
+        visibility: ActionVisibility::Renderer,
+        electron_preload_method: Some("saveServer"),
         timeout_class: TimeoutClass::Local10s,
         db_mutation: DbMutation::ServersWrite,
         polling_overlap_key: PollingOverlapKey::ServerId,
@@ -149,9 +157,9 @@ pub const HELPER_CONTRACT: &[HelperContractEntry] = &[
     },
     HelperContractEntry {
         frontend_api: Some("deleteServer"),
-        tauri_command: Some("delete_server"),
         helper_action: HelperAction::DeleteServer,
-        electron_preload_method: "deleteServer",
+        visibility: ActionVisibility::Renderer,
+        electron_preload_method: Some("deleteServer"),
         timeout_class: TimeoutClass::Local10s,
         db_mutation: DbMutation::ServersDelete,
         polling_overlap_key: PollingOverlapKey::ServerId,
@@ -161,9 +169,9 @@ pub const HELPER_CONTRACT: &[HelperContractEntry] = &[
     },
     HelperContractEntry {
         frontend_api: Some("setServerEnabled"),
-        tauri_command: Some("set_server_enabled"),
         helper_action: HelperAction::SetServerEnabled,
-        electron_preload_method: "setServerEnabled",
+        visibility: ActionVisibility::Renderer,
+        electron_preload_method: Some("setServerEnabled"),
         timeout_class: TimeoutClass::Local10s,
         db_mutation: DbMutation::ServerEnabledWrite,
         polling_overlap_key: PollingOverlapKey::ServerId,
@@ -173,9 +181,9 @@ pub const HELPER_CONTRACT: &[HelperContractEntry] = &[
     },
     HelperContractEntry {
         frontend_api: Some("seedDemoData"),
-        tauri_command: Some("seed_demo_data"),
         helper_action: HelperAction::SeedDemoData,
-        electron_preload_method: "seedDemoData",
+        visibility: ActionVisibility::Renderer,
+        electron_preload_method: Some("seedDemoData"),
         timeout_class: TimeoutClass::Local10s,
         db_mutation: DbMutation::DemoSeedWrite,
         polling_overlap_key: PollingOverlapKey::ServerId,
@@ -185,9 +193,9 @@ pub const HELPER_CONTRACT: &[HelperContractEntry] = &[
     },
     HelperContractEntry {
         frontend_api: Some("getServerDetail"),
-        tauri_command: Some("get_server_detail"),
         helper_action: HelperAction::GetServerDetail,
-        electron_preload_method: "getServerDetail",
+        visibility: ActionVisibility::Renderer,
+        electron_preload_method: Some("getServerDetail"),
         timeout_class: TimeoutClass::Local10s,
         db_mutation: DbMutation::None,
         polling_overlap_key: PollingOverlapKey::None,
@@ -197,9 +205,9 @@ pub const HELPER_CONTRACT: &[HelperContractEntry] = &[
     },
     HelperContractEntry {
         frontend_api: Some("listGpuHistory"),
-        tauri_command: Some("list_gpu_history"),
         helper_action: HelperAction::ListGpuHistory,
-        electron_preload_method: "listGpuHistory",
+        visibility: ActionVisibility::Renderer,
+        electron_preload_method: Some("listGpuHistory"),
         timeout_class: TimeoutClass::Local10s,
         db_mutation: DbMutation::None,
         polling_overlap_key: PollingOverlapKey::None,
@@ -209,9 +217,9 @@ pub const HELPER_CONTRACT: &[HelperContractEntry] = &[
     },
     HelperContractEntry {
         frontend_api: Some("listProcesses"),
-        tauri_command: Some("list_processes"),
         helper_action: HelperAction::ListProcesses,
-        electron_preload_method: "listProcesses",
+        visibility: ActionVisibility::Renderer,
+        electron_preload_method: Some("listProcesses"),
         timeout_class: TimeoutClass::Local10s,
         db_mutation: DbMutation::None,
         polling_overlap_key: PollingOverlapKey::None,
@@ -221,9 +229,9 @@ pub const HELPER_CONTRACT: &[HelperContractEntry] = &[
     },
     HelperContractEntry {
         frontend_api: Some("testConnection"),
-        tauri_command: Some("test_connection"),
         helper_action: HelperAction::TestConnection,
-        electron_preload_method: "testConnection",
+        visibility: ActionVisibility::Renderer,
+        electron_preload_method: Some("testConnection"),
         timeout_class: TimeoutClass::Ssh60s,
         db_mutation: DbMutation::None,
         polling_overlap_key: PollingOverlapKey::ServerId,
@@ -233,9 +241,9 @@ pub const HELPER_CONTRACT: &[HelperContractEntry] = &[
     },
     HelperContractEntry {
         frontend_api: Some("refreshServer"),
-        tauri_command: Some("refresh_server"),
         helper_action: HelperAction::RefreshServer,
-        electron_preload_method: "refreshServer",
+        visibility: ActionVisibility::Renderer,
+        electron_preload_method: Some("refreshServer"),
         timeout_class: TimeoutClass::Ssh60s,
         db_mutation: DbMutation::PollHealthStartAndResultWrite,
         polling_overlap_key: PollingOverlapKey::ServerId,
@@ -245,9 +253,21 @@ pub const HELPER_CONTRACT: &[HelperContractEntry] = &[
     },
     HelperContractEntry {
         frontend_api: None,
-        tauri_command: None,
+        helper_action: HelperAction::PollDueServers,
+        visibility: ActionVisibility::MainOnly,
+        electron_preload_method: None,
+        timeout_class: TimeoutClass::Ssh60s,
+        db_mutation: DbMutation::PollHealthStartAndResultWrite,
+        polling_overlap_key: PollingOverlapKey::ElectronMainScheduler,
+        migration_status: MigrationStatus::ElectronMainOnly,
+        fallback_behavior: "Return a structured main_scheduler_owned error if called directly; renderer bridge and IPC do not expose it.",
+        notes: "Electron main performs due polling with list_servers, get_server_detail, and refresh_server without adding a renderer-callable polling method.",
+    },
+    HelperContractEntry {
+        frontend_api: None,
         helper_action: HelperAction::Health,
-        electron_preload_method: "helperHealth",
+        visibility: ActionVisibility::Renderer,
+        electron_preload_method: Some("helperHealth"),
         timeout_class: TimeoutClass::Local10s,
         db_mutation: DbMutation::None,
         polling_overlap_key: PollingOverlapKey::None,
