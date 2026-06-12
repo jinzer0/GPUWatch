@@ -149,13 +149,13 @@ describe('ProcessTableScreen', () => {
   });
 
   it('keeps the screen identity visible when the process API fails', async () => {
-    listProcessesMock.mockRejectedValue(new Error("Cannot read properties of undefined (reading 'invoke')"));
+    listProcessesMock.mockRejectedValue(new Error('GPUWatcher backend is unavailable. Launch the desktop app to use this action.'));
 
     renderProcessTable();
 
     expect(screen.getByText('Process Table')).toBeDefined();
     expect(screen.getByText('GPU memory ledger')).toBeDefined();
-    expect(await screen.findByText("Cannot read properties of undefined (reading 'invoke')")).toBeDefined();
+    expect(await screen.findByText('GPUWatcher backend is unavailable. Launch the desktop app to use this action.')).toBeDefined();
   });
 
   it('keeps the screen identity visible while loading process rows', () => {

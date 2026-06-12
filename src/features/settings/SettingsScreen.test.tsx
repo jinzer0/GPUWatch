@@ -2,17 +2,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { invoke } from '@tauri-apps/api/core';
-
 import { SettingsScreen } from './SettingsScreen';
 import { useUiStore } from '../../lib/store';
 import type { Server, ServerInput } from '../../lib/types';
-
-vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn()
-}));
-
-const invokeMock = vi.mocked(invoke);
 
 const serverFromInput = (input: ServerInput): Server => ({
   id: input.id ?? 'server-1',
@@ -39,19 +31,17 @@ const renderSettings = () => {
 };
 
 describe('SettingsScreen', () => {
+  let saveServerBridge: ReturnType<typeof vi.fn<(payload: { input: ServerInput }) => Promise<{ ok: true; data: Server }>>>;
+
   beforeEach(() => {
     useUiStore.setState({ editingServerId: null, selectedServerId: null });
-    invokeMock.mockReset();
-    invokeMock.mockImplementation((command, args) => {
-      if (command === 'list_servers') {
-        return Promise.resolve([]);
-      }
-      if (command === 'save_server') {
-        const input = (args as { input: ServerInput }).input;
-        return Promise.resolve(serverFromInput(input));
-      }
-      return Promise.resolve(null);
-    });
+    saveServerBridge = vi.fn().mockImplementation((payload: { input: ServerInput }) =>
+      Promise.resolve({ ok: true, data: serverFromInput(payload.input) })
+    );
+    window.gpuwatcher = {
+      listServers: vi.fn().mockResolvedValue({ ok: true, data: [] }),
+      saveServer: saveServerBridge
+    };
   });
 
   it('states no-install SSH requirements and omits legacy command copy', async () => {
@@ -81,12 +71,12 @@ describe('SettingsScreen', () => {
     fireEvent.change(screen.getByLabelText('Polling interval seconds'), { target: { value: '' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save server' }));
 
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith('save_server', expect.any(Object)));
-    const saveCall = invokeMock.mock.calls.find(([command]) => command === 'save_server');
+    await waitFor(() => expect(saveServerBridge).toHaveBeenCalledWith(expect.any(Object)));
+    const saveCall = saveServerBridge.mock.calls[0];
     if (!saveCall) {
-      throw new Error('save_server was not invoked');
+      throw new Error('saveServer was not invoked');
     }
-    const input = (saveCall[1] as { input: ServerInput }).input;
+    const input = (saveCall[0] as { input: ServerInput }).input;
     expect(input).toEqual({
       id: null,
       name: 'Lab host',
@@ -98,7 +88,7 @@ describe('SettingsScreen', () => {
       enabled: true
     });
     expect(input).not.toHaveProperty('collectorCommand');
-    expect(JSON.stringify(saveCall[1])).not.toContain('collectorCommand');
-    expect(JSON.stringify(saveCall[1])).not.toContain('gpuwatcher --json');
+    expect(JSON.stringify(saveCall[0])).not.toContain('collectorCommand');
+    expect(JSON.stringify(saveCall[0])).not.toContain('gpuwatcher --json');
   });
 });

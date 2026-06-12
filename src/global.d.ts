@@ -25,10 +25,16 @@ interface GpuwatcherBridge {
   setServerEnabled?: (payload: { id: string; enabled: boolean }) => Promise<GpuwatcherHelperResponse<Server>>;
   seedDemoData?: (payload?: object) => Promise<GpuwatcherHelperResponse<ServerOverviewDto[]>>;
   getServerDetail?: (payload: { id: string }) => Promise<GpuwatcherHelperResponse<ServerDetailDto | null>>;
-  listGpuHistory?: (payload: object) => Promise<GpuwatcherHelperResponse<GpuHistoryResponseDto>>;
+  listGpuHistory?: (payload: {
+    serverId: string;
+    gpuIndex?: number | null;
+    gpuUuid?: string | null;
+    range: GpuHistoryResponseDto['range'];
+  }) => Promise<GpuwatcherHelperResponse<GpuHistoryResponseDto>>;
   listProcesses?: (payload?: object) => Promise<GpuwatcherHelperResponse<ProcessRowDto[]>>;
   testConnection?: (payload: { id: string }) => Promise<GpuwatcherHelperResponse<ConnectionTestResultDto>>;
   refreshServer?: (payload: { id: string }) => Promise<GpuwatcherHelperResponse<ConnectionTestResultDto>>;
+  helperHealth?: (payload?: object) => Promise<GpuwatcherHelperResponse<unknown>>;
 }
 
 declare global {

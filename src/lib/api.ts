@@ -1,4 +1,3 @@
-import { invoke } from '@tauri-apps/api/core';
 import type {
   ConnectionTestResultDto,
   GpuHistoryRange,
@@ -76,24 +75,10 @@ const commandMeta: {
 };
 
 const backendUnavailableMessage =
-  'GPUWatcher backend is unavailable. Launch the app in Electron or Tauri to use this action.';
+  'GPUWatcher backend is unavailable. Launch the desktop app to use this action.';
 
 function getElectronBridge(): Window['gpuwatcher'] | undefined {
   return typeof window === 'undefined' ? undefined : window.gpuwatcher;
-}
-
-function isTauriRuntimeAvailable(): boolean {
-  if (typeof window === 'undefined') {
-    return false;
-  }
-
-  const candidates = window as Window & {
-    __TAURI_INTERNALS__?: unknown;
-    __TAURI__?: unknown;
-    isTauri?: unknown;
-  };
-
-  return Boolean(candidates.__TAURI_INTERNALS__ ?? candidates.__TAURI__ ?? candidates.isTauri);
 }
 
 function helperErrorToError(error: HelperErrorEnvelope): Error {
@@ -166,16 +151,6 @@ async function callCommand<Name extends keyof CommandMap>(
     }
 
     throw helperErrorToError(response.error);
-  }
-
-  try {
-    return commandArgs === undefined
-      ? await invoke<CommandMap[Name]['result']>(command)
-      : await invoke<CommandMap[Name]['result']>(command, commandArgs);
-  } catch (error) {
-    if (isTauriRuntimeAvailable()) {
-      throw error;
-    }
   }
 
   return noRuntimeFallback<Name>(meta.fallback, commandArgs);

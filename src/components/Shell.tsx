@@ -32,7 +32,7 @@ export const Shell = ({ children, overview }: { children: ReactNode; overview: S
             Remote GPU console
           </h1>
           <p className="mt-4 text-sm leading-6 text-[color:var(--color-muted)]">
-            Live backend DTOs from trusted Tauri commands, shaped into a compact mission-control MVP.
+            Live backend DTOs from the trusted desktop helper, shaped into a compact mission-control MVP.
           </p>
 
           <div className="mt-8 grid grid-cols-2 gap-3">

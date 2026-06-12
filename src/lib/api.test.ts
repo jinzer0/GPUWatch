@@ -1,25 +1,28 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { invoke } from '@tauri-apps/api/core';
-
 import {
+  deleteServer,
   getServerDetail,
   initializeApp,
   listGpuHistory,
   listOverview,
+  listProcesses,
   listServers,
+  refreshServer,
   saveServer,
   seedDemoData,
   setServerEnabled,
   testConnection
 } from './api';
-import type { Server, ServerInput, ServerOverviewDto } from './types';
-
-vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn()
-}));
-
-const invokeMock = vi.mocked(invoke);
+import type {
+  ConnectionTestResultDto,
+  GpuHistoryResponseDto,
+  ProcessRowDto,
+  Server,
+  ServerDetailDto,
+  ServerInput,
+  ServerOverviewDto
+} from './types';
 
 const overviewRow: ServerOverviewDto = {
   id: 'server-1',
@@ -57,30 +60,110 @@ const savedServer: Server = {
   updatedAt: '2026-06-06T00:00:00Z'
 };
 
-function setTauriRuntime(value: unknown = {}): void {
-  Object.defineProperty(window, '__TAURI_INTERNALS__', {
-    configurable: true,
-    value
-  });
-}
+const serverDetail: ServerDetailDto = {
+  server: savedServer,
+  health: {
+    status: 'online',
+    lastErrorType: null,
+    lastErrorMessage: null,
+    lastPollStartedAt: null,
+    lastPollFinishedAt: null,
+    lastSuccessAt: '2026-06-06T00:00:00Z'
+  },
+  collectorHostname: 'saved.local',
+  driverVersion: '550.54',
+  cudaVersion: '12.4',
+  receivedAt: '2026-06-06T00:00:00Z',
+  warnings: [],
+  gpus: []
+};
+
+const gpuHistory: GpuHistoryResponseDto = {
+  serverId: 'server-2',
+  serverName: 'Saved GPU',
+  pollingIntervalSeconds: 30,
+  range: '1h',
+  startedAt: '2026-06-06T00:00:00Z',
+  finishedAt: '2026-06-06T01:00:00Z',
+  series: []
+};
+
+const processRow: ProcessRowDto = {
+  serverId: 'server-2',
+  serverName: 'Saved GPU',
+  stale: false,
+  gpuIndex: 0,
+  pid: 1234,
+  parentPid: null,
+  runtimeSeconds: 60,
+  username: 'alice',
+  command: 'python train.py',
+  gpuUuid: 'GPU-1',
+  processKind: 'compute',
+  gpuMemoryUsedMiB: 1024,
+  gpuUtilizationPercent: 75,
+  gpuSmUtilizationPercent: 70,
+  gpuMemoryUtilizationPercent: 25,
+  gpuEncoderUtilizationPercent: null,
+  gpuDecoderUtilizationPercent: null,
+  cpuPercent: 20,
+  hostMemoryUsedMiB: 2048
+};
+
+const connectionResult: ConnectionTestResultDto = {
+  ok: true,
+  status: 'online',
+  errorType: null,
+  message: 'Connection successful.'
+};
 
 describe('frontend backend transport adapter', () => {
   beforeEach(() => {
-    invokeMock.mockReset();
     delete window.gpuwatcher;
-    delete (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
   });
 
-  it('uses Electron action-specific bridge methods before Tauri invoke', async () => {
-    const listOverviewBridge = vi.fn().mockResolvedValue({ ok: true, data: [overviewRow] });
-    window.gpuwatcher = { listOverview: listOverviewBridge };
-    setTauriRuntime();
-    invokeMock.mockResolvedValue([]);
+  it('calls every exported command-backed function through Electron action-specific bridge methods', async () => {
+    const bridge = {
+      initializeApp: vi.fn().mockResolvedValue({ ok: true, data: [overviewRow] }),
+      listOverview: vi.fn().mockResolvedValue({ ok: true, data: [overviewRow] }),
+      listServers: vi.fn().mockResolvedValue({ ok: true, data: [savedServer] }),
+      saveServer: vi.fn().mockResolvedValue({ ok: true, data: savedServer }),
+      deleteServer: vi.fn().mockResolvedValue({ ok: true, data: undefined }),
+      setServerEnabled: vi.fn().mockResolvedValue({ ok: true, data: savedServer }),
+      seedDemoData: vi.fn().mockResolvedValue({ ok: true, data: [overviewRow] }),
+      getServerDetail: vi.fn().mockResolvedValue({ ok: true, data: serverDetail }),
+      listGpuHistory: vi.fn().mockResolvedValue({ ok: true, data: gpuHistory }),
+      listProcesses: vi.fn().mockResolvedValue({ ok: true, data: [processRow] }),
+      testConnection: vi.fn().mockResolvedValue({ ok: true, data: connectionResult }),
+      refreshServer: vi.fn().mockResolvedValue({ ok: true, data: connectionResult })
+    } satisfies NonNullable<Window['gpuwatcher']>;
+    window.gpuwatcher = bridge;
 
+    await expect(initializeApp()).resolves.toEqual([overviewRow]);
     await expect(listOverview()).resolves.toEqual([overviewRow]);
+    await expect(listServers()).resolves.toEqual([savedServer]);
+    await expect(saveServer(serverInput)).resolves.toEqual(savedServer);
+    await expect(deleteServer('server-2')).resolves.toBeUndefined();
+    await expect(setServerEnabled('server-2', false)).resolves.toEqual(savedServer);
+    await expect(seedDemoData()).resolves.toEqual([overviewRow]);
+    await expect(getServerDetail('server-2')).resolves.toEqual(serverDetail);
+    await expect(listGpuHistory('server-2', 0, 'GPU-1', '1h')).resolves.toEqual(gpuHistory);
+    await expect(listProcesses()).resolves.toEqual([processRow]);
+    await expect(testConnection('server-2')).resolves.toEqual(connectionResult);
+    await expect(refreshServer('server-2')).resolves.toEqual(connectionResult);
 
-    expect(listOverviewBridge).toHaveBeenCalledWith({});
-    expect(invokeMock).not.toHaveBeenCalled();
+    expect(bridge.initializeApp).toHaveBeenCalledWith({});
+    expect(bridge.listOverview).toHaveBeenCalledWith({});
+    expect(bridge.listServers).toHaveBeenCalledWith({});
+    expect(bridge.saveServer).toHaveBeenCalledWith({ input: serverInput });
+    expect(bridge.deleteServer).toHaveBeenCalledWith({ id: 'server-2' });
+    expect(bridge.setServerEnabled).toHaveBeenCalledWith({ id: 'server-2', enabled: false });
+    expect(bridge.seedDemoData).toHaveBeenCalledWith({});
+    expect(bridge.getServerDetail).toHaveBeenCalledWith({ id: 'server-2' });
+    expect(bridge.listGpuHistory).toHaveBeenCalledWith({ serverId: 'server-2', gpuIndex: 0, gpuUuid: 'GPU-1', range: '1h' });
+    expect(bridge.listProcesses).toHaveBeenCalledWith({});
+    expect(bridge.testConnection).toHaveBeenCalledWith({ id: 'server-2' });
+    expect(bridge.refreshServer).toHaveBeenCalledWith({ id: 'server-2' });
   });
 
   it('maps Electron error envelopes to normal typed errors', async () => {
@@ -96,61 +179,46 @@ describe('frontend backend transport adapter', () => {
       layer: 'storage_app',
       type: 'server_missing'
     });
-    expect(invokeMock).not.toHaveBeenCalled();
   });
 
-  it('falls back to Tauri invoke when Electron bridge methods are absent', async () => {
-    setTauriRuntime();
-    invokeMock.mockResolvedValue(savedServer);
-
-    await expect(saveServer(serverInput)).resolves.toEqual(savedServer);
-
-    expect(invokeMock).toHaveBeenCalledWith('save_server', { input: serverInput });
-  });
-
-  it('falls back to Tauri invoke when the Electron bridge lacks the requested method', async () => {
-    window.gpuwatcher = { listOverview: vi.fn().mockResolvedValue({ ok: true, data: [overviewRow] }) };
-    setTauriRuntime();
-    invokeMock.mockResolvedValue([savedServer]);
-
-    await expect(listServers()).resolves.toEqual([savedServer]);
-
-    expect(window.gpuwatcher.listOverview).not.toHaveBeenCalled();
-    expect(invokeMock).toHaveBeenCalledWith('list_servers');
-  });
-
-  it('does not use no-runtime fallbacks for Tauri runtime failures', async () => {
-    setTauriRuntime();
-    invokeMock.mockRejectedValue(new Error('tauri backend failed'));
-
-    await expect(listOverview()).rejects.toThrow('tauri backend failed');
-  });
-
-  it('keeps no-runtime browser reads usable when Tauri invoke is unavailable', async () => {
-    invokeMock.mockRejectedValue(new Error('window.__TAURI_INTERNALS__ is undefined'));
-
+  it('uses browser read fallbacks when the Electron bridge is absent or lacks a requested read method', async () => {
     await expect(initializeApp()).resolves.toEqual([]);
+    await expect(listOverview()).resolves.toEqual([]);
+    await expect(listServers()).resolves.toEqual([]);
     await expect(getServerDetail('server-1')).resolves.toBeNull();
     await expect(listGpuHistory('server-1', null, null, '1h')).resolves.toMatchObject({
       serverId: 'server-1',
       range: '1h',
       series: []
     });
+    await expect(listProcesses()).resolves.toEqual([]);
 
-    expect(invokeMock).toHaveBeenCalledWith('initialize_app');
-    expect(invokeMock).toHaveBeenCalledWith('get_server_detail', { id: 'server-1' });
+    window.gpuwatcher = { listOverview: vi.fn().mockResolvedValue({ ok: true, data: [overviewRow] }) };
+    await expect(listServers()).resolves.toEqual([]);
+    expect(window.gpuwatcher.listOverview).not.toHaveBeenCalled();
   });
 
-  it('returns explicit no-runtime results for backend-required browser actions', async () => {
-    invokeMock.mockRejectedValue(new Error('window.__TAURI_INTERNALS__ is undefined'));
-
-    await expect(testConnection('server-1')).resolves.toEqual({
+  it('returns explicit browser failures for mutation, test, and refresh actions when Electron bridge is absent', async () => {
+    const unavailable = {
       ok: false,
       status: 'error',
       errorType: 'backend_unavailable',
-      message: 'GPUWatcher backend is unavailable. Launch the app in Electron or Tauri to use this action.'
-    });
+      message: 'GPUWatcher backend is unavailable. Launch the desktop app to use this action.'
+    };
+
+    await expect(testConnection('server-1')).resolves.toEqual(unavailable);
+    await expect(refreshServer('server-1')).resolves.toEqual(unavailable);
     await expect(seedDemoData()).rejects.toThrow('GPUWatcher backend is unavailable');
     await expect(saveServer(serverInput)).rejects.toThrow('GPUWatcher backend is unavailable');
+    await expect(deleteServer('server-1')).rejects.toThrow('GPUWatcher backend is unavailable');
+    await expect(setServerEnabled('server-1', true)).rejects.toThrow('GPUWatcher backend is unavailable');
+  });
+
+  it('rejects invalid history requests before calling the bridge', async () => {
+    const listGpuHistoryBridge = vi.fn();
+    window.gpuwatcher = { listGpuHistory: listGpuHistoryBridge };
+
+    await expect(listGpuHistory(' ', null, null, '1h')).rejects.toThrow('serverId is required to list GPU history.');
+    expect(listGpuHistoryBridge).not.toHaveBeenCalled();
   });
 });
