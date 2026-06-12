@@ -1,6 +1,6 @@
 # GPUWatcher v0.1 Demo Script
 
-1. Start the app with `npm run tauri dev`.
+1. Start the app with `npm run dev`, then run `npm run electron:dev` in a second terminal.
 2. Open Overview and click `Seed demo data`.
 3. Confirm the demo server shows GPU total, busy/free counts, average utilization, memory usage, max temperature, status, and last success time.
 4. Open Server Detail and confirm configured host, backend snapshot hostname, driver/CUDA, GPU cards, unknown metrics, and per-GPU process rows.

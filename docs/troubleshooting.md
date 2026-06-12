@@ -4,13 +4,25 @@
 
 `ssh_auth_failed` means system `ssh` couldn't authenticate in noninteractive `BatchMode`. Confirm the key path, username, and ssh-agent or passphrase setup in Terminal.
 
+For GUI launches, remember that a packaged app may not inherit the same `SSH_AUTH_SOCK` as your shell. Start the app from a Terminal that has the right agent, or make sure the key is available to the macOS agent before launching from Finder.
+
 ## Host Unreachable
 
 `ssh_unreachable` means DNS, routing, firewall, port, or host availability failed. Confirm `ssh USER@HOST` works outside the app.
 
 ## Host Key Failed
 
-`ssh_host_key_failed` follows your existing `known_hosts` policy. Resolve host-key trust in Terminal; v0.1 has no host-key management UI.
+`ssh_host_key_failed` follows your existing `known_hosts` policy. Resolve host-key trust in Terminal; v0.1 has no host-key management UI. First-use host-key prompts won't work from a noninteractive GUI refresh.
+
+## Passphrase Or Password Prompt Appears In Terminal
+
+GPUWatcher doesn't show password or key passphrase prompts. The SSH command must work with `BatchMode=yes` before the app can refresh a server.
+
+```bash
+ssh -o BatchMode=yes USER@HOST true
+```
+
+If the key has a passphrase, unlock it in `ssh-agent` before opening the app.
 
 ## NVIDIA SMI Missing
 
@@ -19,6 +31,8 @@
 ```bash
 ssh -o BatchMode=yes USER@HOST 'command -v nvidia-smi && nvidia-smi --query-gpu=index,name --format=csv,noheader,nounits'
 ```
+
+GUI launches and noninteractive SSH sessions may not load the same shell startup files as an interactive login. If needed, fix the remote account's noninteractive `PATH` or OpenSSH environment so `nvidia-smi` is visible without a prompt.
 
 The remote host doesn't need GPUWatcher, nvitop, Python, collector packages, or repository files installed.
 
@@ -40,13 +54,17 @@ GPUWatcher combines `nvidia-smi --query-compute-apps`, optional `pmon`, optional
 
 ## Malformed Remote Output
 
-`protocol_malformed_output` means the backend couldn't parse the sectioned stdout from its fixed SSH script. This is different from malformed JSON: new no-install collection doesn't expect the remote host to print a protocol JSON envelope.
+`protocol_malformed_output` means the backend couldn't parse the sectioned stdout from its fixed SSH script. This is different from malformed JSON: no-install collection doesn't expect the remote host to print a protocol JSON envelope.
 
 ## Helper Missing In Electron
 
 `missing_helper` means the Electron main process couldn't find the local Rust helper binary. In development, set `GPUWATCHER_HELPER_PATH` to a built helper or run `npm run helper:build` so the Cargo debug target exists. In a packaged app, confirm the helper was copied outside ASAR under app resources at `gpuwatcher-helper/gpuwatcher-helper`.
 
 This is a local macOS packaging or development setup issue. The remote host still doesn't need GPUWatcher, nvitop, Python, collector packages, or repository files installed.
+
+## Helper Resource Or Path Error In Packaged App
+
+If the packaged app opens but desktop actions fail before reaching the helper, confirm `npm run electron:pack` completed and the app resources include `gpuwatcher-helper/gpuwatcher-helper`. Rebuild with `npm run helper:build` and `npm run electron:pack`. Don't move the helper out of the package resources after packaging unless `GPUWATCHER_HELPER_PATH` points to the replacement binary.
 
 ## Helper Timeout In Electron
 
@@ -60,34 +78,26 @@ If the timeout happens on an SSH action, first confirm `ssh -o BatchMode=yes USE
 
 This is different from `protocol_malformed_output`, which refers to parsing fixed SSH command sections from the remote host.
 
-## Backend Unavailable In Browser Or Electron
+## Backend Unavailable In Plain Vite
 
-`backend_unavailable` means the frontend is running without a supported command backend for that action. A plain Vite browser can still show static app identity and read-only empty states, but save, delete, test connection, refresh, and seed actions need Tauri or Electron.
+`backend_unavailable` means the frontend is running without the Electron preload bridge for that action. A plain Vite browser can still show static app identity and read-only empty states, but save, delete, test connection, refresh, and seed actions need the Electron desktop runtime.
 
-For Tauri, run `npm run tauri dev`. For Electron during migration, run `npm run dev` in one terminal and `npm run electron:dev` in another.
+For the desktop app, run `npm run dev` in one terminal and `npm run electron:dev` in another. For a local packaged smoke, run `npm run electron:pack`, discover the generated app with `APP_PATH="$(find release/electron -name 'GPUWatcher.app' -type d -print -quit)"`, then open it with `open "$APP_PATH"` after confirming the variable isn't empty.
 
 ## Local Electron Package Is Unsigned
 
-`npm run electron:pack` creates a local package directory for smoke testing with macOS signing skipped. It isn't a notarized release. If macOS blocks opening the app, treat it as a local unsigned package issue rather than a remote GPU server setup issue.
+`npm run electron:pack` creates a local package directory for smoke testing with macOS signing skipped. It isn't signed, notarized, distributed as a DMG, uploaded, or release-ready. If macOS blocks opening the app, treat it as a local unsigned package or quarantine issue rather than a remote GPU server setup issue.
+
+Gatekeeper and quarantine behavior depends on how the app directory was created and moved. This project documentation doesn't cover signing, notarization, or release distribution.
 
 ## Database Path Or Data Preservation
 
-GPUWatcher keeps the canonical SQLite database at `~/Library/Application Support/GPUWatcher/gpuwatcher.sqlite3`. The Electron migration shouldn't move it to Electron `userData` or a new app-name path.
+GPUWatcher keeps the canonical SQLite database at `~/Library/Application Support/GPUWatcher/gpuwatcher.sqlite3`. Tests and smoke runs can redirect the data directory with `GPUWATCHER_TEST_DATA_DIR`, which should point at an isolated temporary directory.
 
-If saved servers or history appear missing after switching runtimes, confirm that path exists and that the app process can read it. Existing database migration backups are written beside the database before migration when needed.
+Migration backups are local SQLite copies made before destructive legacy schema changes. To restore one, fully quit GPUWatcher, move the current `gpuwatcher.sqlite3` aside, copy the chosen backup into the same directory, and name it `gpuwatcher.sqlite3`.
 
-## Latest Success Still Visible After Failure
+If the DB is corrupt, missing, or read-only, quit the app before changing files. Check directory permissions, disk availability, and whether another process owns the file. If needed, restore from a migration backup or move the DB aside so GPUWatcher can create a fresh one.
 
-This is expected v0.1 behavior. Failed polls update health and error metadata and preserve the latest successful snapshot as stale. They don't append stored GPU history samples or session live fallback samples, so charts show absent history points or time gaps instead of durable failed samples.
+## Stale Success After Failed Refresh
 
-## Missing History Points Or Gaps
-
-Stored GPU history keeps compact per-GPU samples for a fixed 24 hours in local SQLite. Samples are appended only after successful polls. If a poll fails, the app records health and error metadata, keeps the last successful snapshot, and leaves a gap for that poll time.
-
-Null or unknown metrics also create chart gaps or unknown labels. GPUWatcher doesn't fabricate zeroes for missing `nvidia-smi`, optional metric, or disappeared process data.
-
-## Live Monitor And Server Detail History
-
-Live Monitor reads stored GPU history from local SQLite for ranges within the fixed 24h retention window. Server Detail prefers stored 1h history and labels it as stored history. If stored history is still loading or empty, Server Detail falls back to current-session live samples and labels that fallback clearly.
-
-Stored history is GPU-level metric history. It isn't a long-term audit log, process timeline, process command store, Prometheus exporter, or raw snapshot archive.
+A failed poll updates health and error metadata but preserves the latest successful snapshot. Overview and detail screens may show stale GPU data with a failed health state. That is expected: GPUWatcher doesn't delete the last known good snapshot just because the newest SSH attempt failed.
