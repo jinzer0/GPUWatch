@@ -6,7 +6,8 @@ import type {
   Server,
   ServerDetailDto,
   ServerInput,
-  ServerOverviewDto
+  ServerOverviewDto,
+  SshConfigImportResult
 } from './types';
 
 type HelperErrorEnvelope = {
@@ -21,6 +22,12 @@ interface CommandMap {
   initialize_app: { args: undefined; result: ServerOverviewDto[]; electronMethod: 'initializeApp'; fallback: 'empty-array' };
   list_overview: { args: undefined; result: ServerOverviewDto[]; electronMethod: 'listOverview'; fallback: 'empty-array' };
   list_servers: { args: undefined; result: Server[]; electronMethod: 'listServers'; fallback: 'empty-array' };
+  list_ssh_config_hosts: {
+    args: undefined;
+    result: SshConfigImportResult;
+    electronMethod: 'listSshConfigHosts';
+    fallback: 'empty-ssh-import';
+  };
   save_server: { args: { input: ServerInput }; result: Server; electronMethod: 'saveServer'; fallback: 'backend-required' };
   delete_server: { args: { id: string }; result: void; electronMethod: 'deleteServer'; fallback: 'backend-required' };
   set_server_enabled: {
@@ -63,6 +70,7 @@ const commandMeta: {
   initialize_app: { electronMethod: 'initializeApp', fallback: 'empty-array' },
   list_overview: { electronMethod: 'listOverview', fallback: 'empty-array' },
   list_servers: { electronMethod: 'listServers', fallback: 'empty-array' },
+  list_ssh_config_hosts: { electronMethod: 'listSshConfigHosts', fallback: 'empty-ssh-import' },
   save_server: { electronMethod: 'saveServer', fallback: 'backend-required' },
   delete_server: { electronMethod: 'deleteServer', fallback: 'backend-required' },
   set_server_enabled: { electronMethod: 'setServerEnabled', fallback: 'backend-required' },
@@ -111,6 +119,13 @@ function unavailableConnectionResult(): ConnectionTestResultDto {
   };
 }
 
+function unavailableSshConfigImportResult(): SshConfigImportResult {
+  return {
+    candidates: [],
+    warnings: [backendUnavailableMessage]
+  };
+}
+
 function noRuntimeFallback<Name extends keyof CommandMap>(
   fallback: CommandMap[Name]['fallback'],
   args: CommandMap[Name]['args'] | undefined
@@ -129,6 +144,10 @@ function noRuntimeFallback<Name extends keyof CommandMap>(
 
   if (fallback === 'connection-unavailable') {
     return unavailableConnectionResult() as CommandMap[Name]['result'];
+  }
+
+  if (fallback === 'empty-ssh-import') {
+    return unavailableSshConfigImportResult() as CommandMap[Name]['result'];
   }
 
   throw new Error(backendUnavailableMessage);
@@ -166,6 +185,10 @@ export function listOverview(): Promise<ServerOverviewDto[]> {
 
 export function listServers(): Promise<Server[]> {
   return callCommand('list_servers');
+}
+
+export function listSshConfigHosts(): Promise<SshConfigImportResult> {
+  return callCommand('list_ssh_config_hosts');
 }
 
 export function saveServer(input: ServerInput): Promise<Server> {

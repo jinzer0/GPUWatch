@@ -1,123 +1,20 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ServerDetailScreen } from './ServerDetailScreen';
 import { getServerDetail, listGpuHistory } from '../../lib/api';
 import { getLiveGpuSampleKey } from '../../lib/liveHistory';
 import { useUiStore } from '../../lib/store';
-import type { GpuHistoryResponseDto, GpuHistorySampleDto, ServerDetailDto } from '../../lib/types';
+import type { GpuHistoryResponseDto, ServerDetailDto } from '../../lib/types';
+import { detailFixture, historyResponse, historySample, sessionSample } from '../../test-utils/detail-fixtures';
+import { makeTestQueryClient, renderWithQueryClient } from '../../test-utils/query';
 
 const apiMocks = vi.hoisted(() => ({
   getServerDetail: vi.fn(),
   listGpuHistory: vi.fn(),
   refreshServer: vi.fn()
 }));
-
-const detailFixture: ServerDetailDto = {
-  server: {
-    id: 'server-1',
-    name: 'Lab GPU',
-    host: 'gpu.example.test',
-    port: 22,
-    username: 'alice',
-    sshKeyPath: null,
-    pollingIntervalSeconds: 30,
-    enabled: true,
-    configRevision: 1,
-    createdAt: '2026-06-02T00:00:00Z',
-    updatedAt: '2026-06-02T00:00:00Z'
-  },
-  health: {
-    status: 'online',
-    lastErrorType: null,
-    lastErrorMessage: null,
-    lastPollStartedAt: null,
-    lastPollFinishedAt: null,
-    lastSuccessAt: null
-  },
-  collectorHostname: null,
-  driverVersion: null,
-  cudaVersion: null,
-  receivedAt: null,
-  warnings: ['pmon unavailable; per-process utilization unknown'],
-  gpus: [
-    {
-      index: 0,
-      uuid: 'GPU-nullable',
-      name: 'NVIDIA Test GPU',
-      pciBusId: null,
-      driverVersion: null,
-      graphicsClockMhz: null,
-      memoryClockMhz: null,
-      busy: false,
-      memoryTotalMiB: null,
-      memoryUsedMiB: null,
-      memoryFreeMiB: null,
-      gpuUtilizationPercent: null,
-      memoryUtilizationPercent: null,
-      encoderUtilizationPercent: null,
-      decoderUtilizationPercent: null,
-      jpegUtilizationPercent: null,
-      ofaUtilizationPercent: null,
-      pcieRxKibPerSec: null,
-      pcieTxKibPerSec: null,
-      pcieLinkGenCurrent: null,
-      pcieLinkWidthCurrent: null,
-      migModeCurrent: null,
-      migModePending: null,
-      migInstanceCount: null,
-      temperatureCelsius: null,
-      powerDrawWatt: null,
-      powerLimitWatt: null,
-      fanSpeedPercent: null,
-      processCount: 1,
-      processes: [
-        {
-          pid: 1234,
-          username: null,
-          command: null,
-          gpuMemoryUsedMiB: null,
-          gpuUtilizationPercent: null,
-          cpuPercent: null,
-          hostMemoryUsedMiB: null
-        }
-      ]
-    },
-    {
-      index: 1,
-      uuid: 'GPU-populated',
-      name: 'NVIDIA Clocked GPU',
-      pciBusId: '00000000:65:00.0',
-      driverVersion: '550.54.14',
-      graphicsClockMhz: 1410,
-      memoryClockMhz: 5001,
-      busy: true,
-      memoryTotalMiB: 49152,
-      memoryUsedMiB: 32768,
-      memoryFreeMiB: 16384,
-      gpuUtilizationPercent: 83.2,
-      memoryUtilizationPercent: 67.4,
-      encoderUtilizationPercent: 12.3,
-      decoderUtilizationPercent: 4.5,
-      jpegUtilizationPercent: 6.7,
-      ofaUtilizationPercent: 8.9,
-      pcieRxKibPerSec: 1536,
-      pcieTxKibPerSec: 2048,
-      pcieLinkGenCurrent: 4,
-      pcieLinkWidthCurrent: 16,
-      migModeCurrent: 'Enabled',
-      migModePending: 'Disabled',
-      migInstanceCount: 2,
-      temperatureCelsius: 71.5,
-      powerDrawWatt: 225.3,
-      powerLimitWatt: 300,
-      fanSpeedPercent: 46.2,
-      processCount: 0,
-      processes: []
-    }
-  ]
-};
 
 vi.mock('../../lib/api', () => ({
   getServerDetail: apiMocks.getServerDetail,
@@ -137,61 +34,6 @@ vi.mock('../../lib/api', () => ({
   refreshServer: apiMocks.refreshServer
 }));
 
-const makeQueryClient = () => new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-
-const historySample = (overrides: Partial<GpuHistorySampleDto> = {}): GpuHistorySampleDto => ({
-  receivedAt: '2026-06-04T00:00:00.000Z',
-  memoryTotalMiB: 49_152,
-  memoryUsedMiB: 12_288,
-  memoryFreeMiB: 36_864,
-  gpuUtilizationPercent: 30,
-  memoryUtilizationPercent: 25,
-  encoderUtilizationPercent: 5,
-  decoderUtilizationPercent: 4,
-  jpegUtilizationPercent: null,
-  ofaUtilizationPercent: null,
-  temperatureCelsius: 50,
-  powerDrawWatt: 150,
-  powerLimitWatt: 300,
-  pcieRxKibPerSec: 512,
-  pcieTxKibPerSec: 768,
-  ...overrides
-});
-
-const historyResponse = (series: GpuHistoryResponseDto['series'] = []): GpuHistoryResponseDto => ({
-  serverId: 'server-1',
-  serverName: 'Lab GPU',
-  pollingIntervalSeconds: 30,
-  range: '1h',
-  startedAt: '2026-06-04T00:00:00.000Z',
-  finishedAt: '2026-06-04T01:00:00.000Z',
-  series
-});
-
-const sessionSample = (overrides: Partial<NonNullable<ReturnType<typeof useUiStore.getState>['liveSamples'][string]>[number]> = {}) => ({
-  serverId: 'server-1',
-  gpuIndex: 1,
-  gpuUuid: 'GPU-populated',
-  receivedAt: '2026-06-04T00:00:00.000Z',
-  memoryUsedMiB: 24_576,
-  memoryFreeMiB: 24_576,
-  memoryTotalMiB: 49_152,
-  gpuUtilizationPercent: 40,
-  memoryUtilizationPercent: 50,
-  encoderUtilizationPercent: 10,
-  decoderUtilizationPercent: 3,
-  jpegUtilizationPercent: null,
-  ofaUtilizationPercent: null,
-  pcieRxKibPerSec: 1000,
-  pcieTxKibPerSec: null,
-  temperatureCelsius: null,
-  powerDrawWatt: null,
-  powerLimitWatt: null,
-  stale: false,
-  source: 'live' as const,
-  ...overrides
-});
-
 type QueryWithRefetchInterval = {
   options: {
     refetchInterval?: (query: unknown) => number | false;
@@ -201,15 +43,7 @@ type QueryWithRefetchInterval = {
 const renderDetail = (detail: ServerDetailDto = detailFixture, historyResult: GpuHistoryResponseDto | Promise<GpuHistoryResponseDto> = historyResponse()) => {
   vi.mocked(getServerDetail).mockResolvedValue(detail);
   vi.mocked(listGpuHistory).mockReturnValue(Promise.resolve(historyResult));
-  const queryClient = makeQueryClient();
-
-  const view = render(
-    <QueryClientProvider client={queryClient}>
-      <ServerDetailScreen selectedServerId={detail.server.id} />
-    </QueryClientProvider>
-  );
-
-  return { queryClient, ...view };
+  return renderWithQueryClient(<ServerDetailScreen selectedServerId={detail.server.id} />);
 };
 
 describe('ServerDetailScreen', () => {
@@ -246,6 +80,35 @@ describe('ServerDetailScreen', () => {
     expect(screen.getByText('5,001 MHz')).toBeDefined();
   });
 
+  it('summarizes enabled MIG near the GPU title and names the collected instance count', async () => {
+    renderDetail();
+
+    const gpuArticle = (await screen.findByText('NVIDIA Clocked GPU')).closest('article');
+    expect(gpuArticle).not.toBeNull();
+
+    const gpu = within(gpuArticle ?? document.body);
+    expect(gpu.getByText('MIG enabled')).toBeDefined();
+    expect(gpu.getByText('Mode current: Enabled')).toBeDefined();
+    expect(gpu.getByText('Mode pending: Disabled')).toBeDefined();
+    expect(gpu.getByText('Instance count: 2 instances')).toBeDefined();
+    expect(gpu.getByText('Instance-level MIG topology is not collected yet.')).toBeDefined();
+  });
+
+  it('renders nullable MIG fields as unknown without fabricating zero instances', async () => {
+    renderDetail();
+
+    const gpuArticle = (await screen.findByText('NVIDIA Test GPU')).closest('article');
+    expect(gpuArticle).not.toBeNull();
+
+    const gpu = within(gpuArticle ?? document.body);
+    expect(gpu.getByText('MIG unknown')).toBeDefined();
+    expect(gpu.getByText('Mode current: unknown')).toBeDefined();
+    expect(gpu.getByText('Mode pending: unknown')).toBeDefined();
+    expect(gpu.getByText('Instance count: unknown')).toBeDefined();
+    expect(gpu.getByText('MIG availability is unknown for this GPU.')).toBeDefined();
+    expect(gpu.queryByText('Instance count: 0 instances')).toBeNull();
+  });
+
   it('enables detail refetching at the selected server interval with a five second minimum', async () => {
     const { queryClient } = renderDetail({ ...detailFixture, server: { ...detailFixture.server, pollingIntervalSeconds: 2 } });
 
@@ -267,7 +130,7 @@ describe('ServerDetailScreen', () => {
     expect(await screen.findByText('Lab GPU')).toBeDefined();
 
     rerender(
-      <QueryClientProvider client={makeQueryClient()}>
+      <QueryClientProvider client={makeTestQueryClient()}>
         <ServerDetailScreen selectedServerId="server-1" />
       </QueryClientProvider>
     );

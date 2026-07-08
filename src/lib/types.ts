@@ -27,6 +27,18 @@ export interface ServerInput {
   enabled: boolean;
 }
 
+export interface SshConfigImportCandidate {
+  hostAlias: string;
+  hostname: string | null;
+  draft: ServerInput;
+  warnings: string[];
+}
+
+export interface SshConfigImportResult {
+  candidates: SshConfigImportCandidate[];
+  warnings: string[];
+}
+
 export interface ServerHealthDto {
   status: ServerStatus;
   lastErrorType: string | null;

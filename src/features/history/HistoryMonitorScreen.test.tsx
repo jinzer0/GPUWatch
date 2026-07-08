@@ -173,6 +173,18 @@ const emptyHistoryFixture: GpuHistoryResponseDto = {
   series: []
 };
 
+const makeDeferredHistory = () => {
+  let resolvePromise: ((value: GpuHistoryResponseDto) => void) | null = null;
+  const promise = new Promise<GpuHistoryResponseDto>((resolve) => {
+    resolvePromise = resolve;
+  });
+
+  return {
+    promise,
+    resolve: (value: GpuHistoryResponseDto) => resolvePromise?.(value)
+  };
+};
+
 const makeQueryClient = () => new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
 
 const renderHistoryMonitor = (props: { overview?: ServerOverviewDto[]; selectedServerId?: string | null } = {}) =>
@@ -184,7 +196,7 @@ const renderHistoryMonitor = (props: { overview?: ServerOverviewDto[]; selectedS
 
 describe('HistoryMonitorScreen', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     listGpuHistoryMock.mockResolvedValue(historyFixture);
   });
 
@@ -273,6 +285,64 @@ describe('HistoryMonitorScreen', () => {
 
     fireEvent.change(screen.getByRole('combobox', { name: 'Server' }), { target: { value: 'server-2' } });
     await waitFor(() => expect(listGpuHistoryMock).toHaveBeenCalledWith('server-2', null, null, '6h'));
+  });
+
+  it('refreshes the current history read model and preserves selected server, range, GPU, and metrics', async () => {
+    renderHistoryMonitor();
+    await screen.findByRole('img', { name: 'GPU util stored history' });
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Range' }), { target: { value: '6h' } });
+    await waitFor(() => expect(listGpuHistoryMock).toHaveBeenCalledWith('server-1', null, null, '6h'));
+    await waitFor(() => expect(screen.getByRole('option', { name: 'GPU 1 - NVIDIA Test 1' })).toBeDefined());
+    fireEvent.change(screen.getByRole('combobox', { name: 'GPU' }), { target: { value: '1::GPU-1' } });
+    await waitFor(() => expect((screen.getByRole('combobox', { name: 'GPU' }) as HTMLSelectElement).value).toBe('1::GPU-1'));
+    fireEvent.click(screen.getByRole('button', { name: 'Temperature' }));
+    fireEvent.click(screen.getByRole('button', { name: 'GPU util' }));
+
+    const deferredRefresh = makeDeferredHistory();
+    listGpuHistoryMock.mockClear();
+    listGpuHistoryMock.mockReturnValueOnce(deferredRefresh.promise);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh history' }));
+
+    expect(screen.getByRole('status', { name: 'History refresh' }).textContent).toContain('pending');
+    await waitFor(() => expect(listGpuHistoryMock).toHaveBeenCalledWith('server-1', null, null, '6h'));
+    expect(listGpuHistoryMock).toHaveBeenCalledTimes(1);
+    expect((screen.getByRole('combobox', { name: 'Server' }) as HTMLSelectElement).value).toBe('server-1');
+    expect((screen.getByRole('combobox', { name: 'Range' }) as HTMLSelectElement).value).toBe('6h');
+    expect((screen.getByRole('combobox', { name: 'GPU' }) as HTMLSelectElement).value).toBe('1::GPU-1');
+    expect(screen.getByRole('button', { name: 'Temperature' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'GPU util' }).getAttribute('aria-pressed')).toBe('false');
+
+    deferredRefresh.resolve({ ...historyFixture, range: '6h' });
+
+    expect((await screen.findByRole('status', { name: 'History refresh result' })).textContent).toContain('success');
+    expect((screen.getByRole('combobox', { name: 'Server' }) as HTMLSelectElement).value).toBe('server-1');
+    expect((screen.getByRole('combobox', { name: 'Range' }) as HTMLSelectElement).value).toBe('6h');
+    expect((screen.getByRole('combobox', { name: 'GPU' }) as HTMLSelectElement).value).toBe('1::GPU-1');
+    expect(screen.getByRole('button', { name: 'Temperature' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'GPU util' }).getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('shows sanitized failed refresh feedback while keeping history controls visible', async () => {
+    renderHistoryMonitor();
+    await screen.findByRole('img', { name: 'GPU util stored history' });
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'GPU' }), { target: { value: '1::GPU-1' } });
+    listGpuHistoryMock.mockClear();
+    listGpuHistoryMock.mockRejectedValueOnce(new Error('history failed for /Users/alice/.ssh/id_ed25519 --token secret-value'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh history' }));
+
+    const alert = await screen.findByRole('alert', { name: 'History refresh result' });
+    expect(alert.textContent).toContain('[path redacted]');
+    expect(alert.textContent).toContain('--token=[redacted]');
+    expect(alert.textContent).not.toContain('/Users/alice/.ssh/id_ed25519');
+    expect(alert.textContent).not.toContain('secret-value');
+    expect(screen.getByRole('combobox', { name: 'Server' })).toBeDefined();
+    expect(screen.getByRole('combobox', { name: 'Range' })).toBeDefined();
+    expect((screen.getByRole('combobox', { name: 'GPU' }) as HTMLSelectElement).value).toBe('1::GPU-1');
+    expect(screen.getByRole('button', { name: 'Refresh history' })).toBeDefined();
   });
 
   it('builds GPU selector values from history series and filters rendered chart series locally', async () => {

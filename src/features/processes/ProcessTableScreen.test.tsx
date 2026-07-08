@@ -1,151 +1,29 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ProcessTableScreen } from './ProcessTableScreen';
-import { listProcesses } from '../../lib/api';
-import type { ProcessRowDto } from '../../lib/types';
+import { listProcesses, refreshServer } from '../../lib/api';
+import { processTableRows as processRows } from '../../test-utils/process-fixtures';
+import { renderWithQueryClient } from '../../test-utils/query';
+import { selectOptionValue, visibleTableBodyPids, visibleTableBodyRows } from '../../test-utils/dom';
 
 vi.mock('../../lib/api', () => ({
   listProcesses: vi.fn(),
   queryKeys: {
     processes: ['processes']
-  }
+  },
+  refreshServer: vi.fn()
 }));
 
 const listProcessesMock = vi.mocked(listProcesses);
+const refreshServerMock = vi.mocked(refreshServer);
 
-const renderProcessTable = () => {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <ProcessTableScreen />
-    </QueryClientProvider>
-  );
-};
-
-const processRows: ProcessRowDto[] = [
-  {
-    serverId: 'server-low',
-    serverName: 'Low memory host',
-    stale: false,
-    gpuIndex: 1,
-    pid: 2002,
-    parentPid: null,
-    runtimeSeconds: 3723,
-    username: 'bob',
-    command: 'python worker.py',
-    gpuUuid: 'GPU-low-1',
-    processKind: 'compute',
-    gpuMemoryUsedMiB: 512,
-    gpuUtilizationPercent: 35,
-    gpuSmUtilizationPercent: 28,
-    gpuMemoryUtilizationPercent: 16,
-    gpuEncoderUtilizationPercent: 0,
-    gpuDecoderUtilizationPercent: 0,
-    cpuPercent: 8.5,
-    hostMemoryUsedMiB: 1024
-  },
-  {
-    serverId: 'server-high',
-    serverName: 'High memory host',
-    stale: true,
-    gpuIndex: 0,
-    pid: 1001,
-    parentPid: null,
-    runtimeSeconds: null,
-    username: null,
-    command: null,
-    gpuUuid: 'GPU-high-0',
-    processKind: 'unknown',
-    gpuMemoryUsedMiB: 4096,
-    gpuUtilizationPercent: null,
-    gpuSmUtilizationPercent: null,
-    gpuMemoryUtilizationPercent: null,
-    gpuEncoderUtilizationPercent: null,
-    gpuDecoderUtilizationPercent: null,
-    cpuPercent: null,
-    hostMemoryUsedMiB: null
-  },
-  {
-    serverId: 'server-render',
-    serverName: 'Render host',
-    stale: false,
-    gpuIndex: 2,
-    pid: 1500,
-    parentPid: 1499,
-    runtimeSeconds: 59,
-    username: 'ada',
-    command: 'blender --background scene.blend',
-    gpuUuid: 'GPU-render-2',
-    processKind: 'graphics',
-    gpuMemoryUsedMiB: 2048,
-    gpuUtilizationPercent: 82,
-    gpuSmUtilizationPercent: 77,
-    gpuMemoryUtilizationPercent: 63,
-    gpuEncoderUtilizationPercent: 11,
-    gpuDecoderUtilizationPercent: 12,
-    cpuPercent: 22.5,
-    hostMemoryUsedMiB: 4096
-  },
-  {
-    serverId: 'server-low',
-    serverName: 'Low memory host',
-    stale: false,
-    gpuIndex: 0,
-    pid: 3003,
-    parentPid: 2002,
-    runtimeSeconds: 3661,
-    username: 'carol',
-    command: 'python trainer.py --token=supersecret',
-    gpuUuid: 'GPU-low-0',
-    processKind: 'compute',
-    gpuMemoryUsedMiB: 1024,
-    gpuUtilizationPercent: 48,
-    gpuSmUtilizationPercent: 47,
-    gpuMemoryUtilizationPercent: 24,
-    gpuEncoderUtilizationPercent: null,
-    gpuDecoderUtilizationPercent: 2,
-    cpuPercent: 14,
-    hostMemoryUsedMiB: 2048
-  },
-  {
-    serverId: 'server-batch',
-    serverName: 'Batch host',
-    stale: true,
-    gpuIndex: 3,
-    pid: 4004,
-    parentPid: null,
-    runtimeSeconds: 0,
-    username: 'drew',
-    command: 'sleep 30',
-    gpuUuid: 'GPU-batch-3',
-    processKind: 'utility',
-    gpuMemoryUsedMiB: 256,
-    gpuUtilizationPercent: 3,
-    gpuSmUtilizationPercent: 1,
-    gpuMemoryUtilizationPercent: 2,
-    gpuEncoderUtilizationPercent: 3,
-    gpuDecoderUtilizationPercent: 4,
-    cpuPercent: 1,
-    hostMemoryUsedMiB: 512
-  }
-];
-
-const visibleBodyRows = () => screen.getAllByRole('row').slice(1).map((row) => row.textContent ?? '');
-
-const visibleBodyPids = () => screen.getAllByRole('row').slice(1).map((row) => row.getAttribute('aria-label')?.match(/PID (\d+)/)?.[1]);
-
-const selectOptionValue = (select: HTMLElement, label: string) => {
-  const option = Array.from((select as HTMLSelectElement).options).find((item) => item.textContent === label);
-  expect(option).toBeDefined();
-  return option?.value ?? '';
-};
+const renderProcessTable = () => renderWithQueryClient(<ProcessTableScreen />);
 
 describe('ProcessTableScreen', () => {
   beforeEach(() => {
     listProcessesMock.mockReset();
+    refreshServerMock.mockReset();
   });
 
   it('keeps the screen identity visible when the process API fails', async () => {
@@ -184,7 +62,7 @@ describe('ProcessTableScreen', () => {
 
     expect(screen.getByText('Process Table')).toBeDefined();
     expect(await screen.findByText('High memory host')).toBeDefined();
-    const memoryHostRows = visibleBodyRows().filter((row) => row.includes('memory host'));
+    const memoryHostRows = visibleTableBodyRows().filter((row) => row.includes('memory host'));
     expect(memoryHostRows[0]).toContain('High memory host');
     expect(memoryHostRows[1]).toContain('Low memory host');
     expect(memoryHostRows[2]).toContain('Low memory host');
@@ -193,10 +71,10 @@ describe('ProcessTableScreen', () => {
     expect(screen.getByRole('columnheader', { name: /runtime/i })).toBeDefined();
     expect(screen.getByRole('columnheader', { name: /sm util/i })).toBeDefined();
     expect(screen.getByRole('columnheader', { name: /memory util/i })).toBeDefined();
-    expect(visibleBodyRows()[1]).toContain('Parent PID 1499');
-    expect(visibleBodyRows()[1]).toContain('59s');
-    expect(visibleBodyRows()[1]).toContain('77.0%');
-    expect(visibleBodyRows()[1]).toContain('63.0%');
+    expect(visibleTableBodyRows()[1]).toContain('Parent PID 1499');
+    expect(visibleTableBodyRows()[1]).toContain('59s');
+    expect(visibleTableBodyRows()[1]).toContain('77.0%');
+    expect(visibleTableBodyRows()[1]).toContain('63.0%');
   });
 
   it('switches from flat rows to parent grouped rows without inventing non-GPU parents', async () => {
@@ -205,16 +83,62 @@ describe('ProcessTableScreen', () => {
     renderProcessTable();
 
     expect(await screen.findByText('Showing 5 of 5 processes')).toBeDefined();
-    expect(visibleBodyPids()).toEqual(['1001', '1500', '3003', '2002', '4004']);
+    expect(visibleTableBodyPids()).toEqual(['1001', '1500', '3003', '2002', '4004']);
 
     fireEvent.change(screen.getByRole('combobox', { name: 'View' }), { target: { value: 'parentGrouped' } });
 
-    const groupedRows = visibleBodyRows();
-    expect(visibleBodyPids()).toEqual(['1001', '1500', '2002', '3003', '4004']);
+    const groupedRows = visibleTableBodyRows();
+    expect(visibleTableBodyPids()).toEqual(['1001', '1500', '2002', '3003', '4004']);
     expect(groupedRows[1]).toContain('Parent PID 1499');
     expect(groupedRows[2]).not.toContain('Parent PID');
     expect(groupedRows[3]).toContain('Parent PID 2002');
     expect(screen.queryByText('PID 1499')).toBeNull();
+  });
+
+  it('switches to user grouped rows with non-clickable section headers and can return to parent grouped rows', async () => {
+    listProcessesMock.mockResolvedValue(processRows);
+
+    renderProcessTable();
+
+    expect(await screen.findByText('Showing 5 of 5 processes')).toBeDefined();
+    const viewSelect = screen.getByRole('combobox', { name: 'View' });
+    expect(selectOptionValue(viewSelect, 'User grouped')).toBe('userGrouped');
+
+    fireEvent.change(viewSelect, { target: { value: 'userGrouped' } });
+
+    expect(screen.getByText('High memory host / unknown user')).toBeDefined();
+    expect(screen.getByText('Low memory host / bob')).toBeDefined();
+    expect(screen.getByText('Low memory host / carol')).toBeDefined();
+    expect(visibleTableBodyRows()).toEqual([
+      'Batch host / drew1 process',
+      'Batch hoststale340040sdrew256 MiB3.0%1.0%2.0%1.0%512 MiBsleep 30',
+      'High memory host / unknown user1 process',
+      'High memory hoststale01001unknownunknown4,096 MiBunknownunknownunknownunknownunknownunknown',
+      'Low memory host / bob1 process',
+      'Low memory host120021h 2m 3sbob512 MiB35.0%28.0%16.0%8.5%1,024 MiBpython worker.py',
+      'Low memory host / carol1 process',
+      'Low memory host03003Parent PID 20021h 1m 1scarol1,024 MiB48.0%47.0%24.0%14.0%2,048 MiBpython trainer.py --token=[redacted]',
+      'Render host / ada1 process',
+      'Render host21500Parent PID 149959sada2,048 MiB82.0%77.0%63.0%22.5%4,096 MiBblender --background scene.blend'
+    ]);
+
+    const sectionHeader = screen.getByText('High memory host / unknown user').closest('tr');
+    expect(sectionHeader).not.toBeNull();
+    if (sectionHeader === null) {
+      throw new Error('Expected user group section header row');
+    }
+    expect(sectionHeader.getAttribute('aria-label')).toBeNull();
+    expect(sectionHeader.getAttribute('tabindex')).toBeNull();
+    fireEvent.click(sectionHeader);
+    expect(screen.queryByRole('dialog', { name: 'Process details' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('row', { name: /open process details for pid 1001/i }));
+    expect(screen.getByRole('dialog', { name: 'Process details' }).textContent).toContain('PID 1001');
+    fireEvent.click(screen.getByRole('button', { name: 'Close drawer' }));
+
+    fireEvent.change(viewSelect, { target: { value: 'parentGrouped' } });
+    expect(visibleTableBodyPids()).toEqual(['1001', '1500', '2002', '3003', '4004']);
+    expect(screen.queryByText('High memory host / unknown user')).toBeNull();
   });
 
   it('renders an inline toolbar with derived filters and reset behavior', async () => {
@@ -238,13 +162,84 @@ describe('ProcessTableScreen', () => {
     fireEvent.change(staleSelect, { target: { value: 'current' } });
 
     expect(await screen.findByText('Showing 1 of 5 processes')).toBeDefined();
-    expect(visibleBodyRows()).toHaveLength(1);
-    expect(visibleBodyRows()[0]).toContain('bob');
+    expect(visibleTableBodyRows()).toHaveLength(1);
+    expect(visibleTableBodyRows()[0]).toContain('bob');
 
     fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
 
     expect(await screen.findByText('Showing 5 of 5 processes')).toBeDefined();
-    expect(visibleBodyRows()[0]).toContain('High memory host');
+    expect(visibleTableBodyRows()[0]).toContain('High memory host');
+  });
+
+  it('refetches local read-model rows from Refresh rows while preserving filters, view, sort, and selected drawer', async () => {
+    const refreshedRows = processRows.map((row) =>
+      row.pid === 2002 ? { ...row, gpuMemoryUsedMiB: 768, command: 'python worker.py --token=next-secret' } : row
+    );
+    listProcessesMock.mockResolvedValueOnce(processRows).mockResolvedValueOnce(refreshedRows);
+
+    renderProcessTable();
+
+    expect(await screen.findByText('Showing 5 of 5 processes')).toBeDefined();
+    expect(listProcessesMock).toHaveBeenCalledTimes(1);
+
+    const serverSelect = screen.getByRole('combobox', { name: 'Server' });
+    const gpuSelect = screen.getByRole('combobox', { name: 'GPU' });
+    const kindSelect = screen.getByRole('combobox', { name: 'Kind' });
+    const staleSelect = screen.getByRole('combobox', { name: 'Freshness' });
+    const viewSelect = screen.getByRole('combobox', { name: 'View' });
+    const searchInput = screen.getByRole('textbox', { name: 'Search' });
+
+    fireEvent.change(searchInput, { target: { value: 'bob' } });
+    fireEvent.change(serverSelect, { target: { value: selectOptionValue(serverSelect, 'Low memory host (server-low)') } });
+    fireEvent.change(gpuSelect, { target: { value: selectOptionValue(gpuSelect, 'GPU 1 · GPU-low-1') } });
+    fireEvent.change(kindSelect, { target: { value: 'compute' } });
+    fireEvent.change(staleSelect, { target: { value: 'current' } });
+    fireEvent.change(viewSelect, { target: { value: 'parentGrouped' } });
+    fireEvent.click(screen.getByRole('button', { name: /sort pid not sorted/i }));
+    fireEvent.click(screen.getByRole('row', { name: /open process details for pid 2002/i }));
+
+    expect(await screen.findByText('Showing 1 of 5 processes')).toBeDefined();
+    expect(screen.getByRole('dialog', { name: 'Process details' }).textContent).toContain('512 MiB');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh rows' }));
+
+    await waitFor(() => expect(listProcessesMock).toHaveBeenCalledTimes(2));
+    expect(refreshServerMock).not.toHaveBeenCalled();
+    expect(await screen.findByText('Refresh rows loaded 5 local rows.')).toBeDefined();
+    expect(screen.getByText('Showing 1 of 5 processes')).toBeDefined();
+    expect((searchInput as HTMLInputElement).value).toBe('bob');
+    expect((serverSelect as HTMLSelectElement).value).toBe(selectOptionValue(serverSelect, 'Low memory host (server-low)'));
+    expect((gpuSelect as HTMLSelectElement).value).toBe(selectOptionValue(gpuSelect, 'GPU 1 · GPU-low-1'));
+    expect((kindSelect as HTMLSelectElement).value).toBe('compute');
+    expect((staleSelect as HTMLSelectElement).value).toBe('current');
+    expect((viewSelect as HTMLSelectElement).value).toBe('parentGrouped');
+    expect(screen.getByRole('columnheader', { name: /pid/i }).getAttribute('aria-sort')).toBe('ascending');
+    const drawer = screen.getByRole('dialog', { name: 'Process details' });
+    expect(drawer.textContent).toContain('PID 2002');
+    expect(drawer.textContent).toContain('768 MiB');
+    expect(drawer.textContent).toContain('python worker.py --token=[redacted]');
+    expect(drawer.textContent).not.toContain('next-secret');
+  });
+
+  it('shows sanitized refresh failure feedback without hiding the header or toolbar', async () => {
+    listProcessesMock
+      .mockResolvedValueOnce(processRows)
+      .mockRejectedValueOnce(new Error('SSH failed for /Users/alice/.ssh/id_ed25519 with --token secret-value'));
+
+    renderProcessTable();
+
+    expect(await screen.findByText('Showing 5 of 5 processes')).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh rows' }));
+
+    const alert = await screen.findByRole('alert', { name: 'Process row refresh' });
+    expect(alert.textContent).toContain('Refresh rows failed: SSH failed for [path redacted] with --token=[redacted]');
+    expect(alert.textContent).not.toContain('/Users/alice/.ssh/id_ed25519');
+    expect(alert.textContent).not.toContain('secret-value');
+    expect(screen.getByText('Process Table')).toBeDefined();
+    expect(screen.getByText('Process filters')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Refresh rows' })).toBeDefined();
+    expect(screen.getByText('Showing 5 of 5 processes')).toBeDefined();
   });
 
   it('shows a filtered empty state distinct from the no-processes state', async () => {
@@ -371,18 +366,18 @@ describe('ProcessTableScreen', () => {
     renderProcessTable();
 
     expect(await screen.findByText('Showing 5 of 5 processes')).toBeDefined();
-    expect(visibleBodyRows()[0]).toContain('High memory host');
+    expect(visibleTableBodyRows()[0]).toContain('High memory host');
 
     fireEvent.click(screen.getByRole('button', { name: /sort pid not sorted/i }));
     expect(screen.getByRole('columnheader', { name: /pid/i }).getAttribute('aria-sort')).toBe('ascending');
-    expect(visibleBodyRows()[0]).toContain('High memory host');
+    expect(visibleTableBodyRows()[0]).toContain('High memory host');
 
     fireEvent.click(screen.getByRole('button', { name: /sort pid ascending/i }));
     expect(screen.getByRole('columnheader', { name: /pid/i }).getAttribute('aria-sort')).toBe('descending');
-    expect(visibleBodyRows()[0]).toContain('Batch host');
+    expect(visibleTableBodyRows()[0]).toContain('Batch host');
 
     fireEvent.click(screen.getByRole('button', { name: /sort gpu memory not sorted/i }));
     expect(screen.getByRole('columnheader', { name: /gpu memory/i }).getAttribute('aria-sort')).toBe('descending');
-    expect(visibleBodyRows()[0]).toContain('High memory host');
+    expect(visibleTableBodyRows()[0]).toContain('High memory host');
   });
 });
