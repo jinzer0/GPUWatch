@@ -163,6 +163,34 @@ process.stdout.write('not json');
     }
   });
 
+  it('sanitizes helper process stderr on nonzero exit without reading stdout as data', async () => {
+    const helperPath = await createExecutableScript(`
+process.stdin.resume();
+process.stderr.write(${JSON.stringify('\u001b[31mPermission denied\u001b[0m\u0007\nWARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!\npassword hunter2\ntoken=abc123\n/Users/alice/.ssh/id_ed25519\n')});
+process.stdout.write(JSON.stringify({ ok: true, data: { misleading: true } }));
+process.exit(2);
+`);
+    const runner = createHelperRunner({ env: { [HELPER_PATH_ENV]: helperPath } });
+
+    const response = await runner.run({ action: 'health', payload: {} });
+
+    expect(response.ok).toBe(false);
+    if (!response.ok) {
+      expect(response.error.type).toBe('helper_process_failed');
+      expect(response.error.message).toContain('Permission denied');
+      expect(response.error.message).toContain('REMOTE HOST IDENTIFICATION');
+      expect(response.error.message).toContain('password=[redacted]');
+      expect(response.error.message).toContain('token=[redacted]');
+      expect(response.error.message).toContain('[path redacted]');
+      expect(response.error.message).not.toContain('hunter2');
+      expect(response.error.message).not.toContain('abc123');
+      expect(response.error.message).not.toContain('/Users/alice/.ssh/id_ed25519');
+      expect(response.error.message).not.toContain('\u001b');
+      expect(response.error.message).not.toContain('\u0007');
+      expect(response.error.message).not.toContain('misleading');
+    }
+  });
+
   it('rejects valid JSON stdout that is not a helper response envelope', async () => {
     const helperPath = await createExecutableScript(`
 process.stdin.resume();

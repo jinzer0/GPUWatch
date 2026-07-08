@@ -20,12 +20,15 @@ import type { HelperRunner } from './helperRunner.js';
 import type { ElectronScheduler } from './scheduler.js';
 import { channelForPreloadMethod, helperIpcChannels, registerIpcHandlers, validateHelperPayload } from './ipc.js';
 import { createGpuwatcherBridge } from './preload.js';
-import { ipcMain } from 'electron';
+import { contextBridge, ipcMain } from 'electron';
+
+const exposedGlobalsAtImport = vi.mocked(contextBridge.exposeInMainWorld).mock.calls.map(([name, value]) => [name, value] as const);
 
 const expectedMethods = [
   'initializeApp',
   'listOverview',
   'listServers',
+  'listSshConfigHosts',
   'saveServer',
   'deleteServer',
   'setServerEnabled',
@@ -75,8 +78,7 @@ function extractRustContractEntries(source: string) {
       electronPreloadMethod: optionalString('electron_preload_method'),
       timeoutClass: enumField('timeout_class', 'TimeoutClass'),
       dbMutation: enumField('db_mutation', 'DbMutation'),
-      pollingOverlapKey: enumField('polling_overlap_key', 'PollingOverlapKey'),
-      migrationStatus: enumField('migration_status', 'MigrationStatus')
+      pollingOverlapKey: enumField('polling_overlap_key', 'PollingOverlapKey')
     };
   });
 }
@@ -99,10 +101,28 @@ describe('Electron IPC bridge contract', () => {
     expect(Object.keys(bridge)).toEqual(expectedMethods);
     expect('invoke' in bridge).toBe(false);
     expect('runAction' in bridge).toBe(false);
+    expect('dispatch' in bridge).toBe(false);
+    expect('helperPath' in bridge).toBe(false);
     expect('pollDueServers' in bridge).toBe(false);
 
     await bridge.refreshServer({ id: 'server-1' });
     expect(invoke).toHaveBeenCalledWith('gpuwatcher:helper:refreshServer', { id: 'server-1' });
+  });
+
+  it('exposes neutral Electron metadata without migration status or deferred task labels', () => {
+    const metadataExposure = exposedGlobalsAtImport.find(([name]) => name === 'gpuWatcherElectron');
+    const metadata = metadataExposure?.[1];
+    const preloadSource = readFileSync(resolve(process.cwd(), 'electron/preload.ts'), 'utf8');
+    const runtimePreloadSource = readFileSync(resolve(process.cwd(), 'electron/preload-runtime.cts'), 'utf8');
+    const forbiddenMigrationMethod = ['migration', 'Status'].join('');
+    const forbiddenDeferredLabel = ['deferred', 'to', 'task'].join('-');
+
+    expect(metadataExposure).toBeDefined();
+    expect(metadata).toMatchObject({ isElectron: true, platform: process.platform });
+    expect(Object.keys(metadata ?? {})).toEqual(['isElectron', 'platform', 'versions']);
+    expect(forbiddenMigrationMethod in (metadata ?? {})).toBe(false);
+    expect(`${preloadSource}\n${runtimePreloadSource}`).not.toContain(forbiddenMigrationMethod);
+    expect(`${preloadSource}\n${runtimePreloadSource}`).not.toContain(forbiddenDeferredLabel);
   });
 
   it('keeps poll_due_servers main-only and out of renderer IPC/preload', () => {
@@ -136,11 +156,12 @@ describe('Electron IPC bridge contract', () => {
       .map(([name]) => name)
       .sort();
 
-    expect(helperContract).toHaveLength(14);
+    expect(helperContract).toHaveLength(15);
     expect(helperContract.map((entry) => entry.helperAction)).toEqual([
       'initialize_app',
       'list_overview',
       'list_servers',
+      'list_ssh_config_hosts',
       'save_server',
       'delete_server',
       'set_server_enabled',
@@ -161,8 +182,7 @@ describe('Electron IPC bridge contract', () => {
         electronPreloadMethod: entry.electronPreloadMethod,
         timeoutClass: entry.timeoutClass,
         dbMutation: entry.dbMutation,
-        pollingOverlapKey: entry.pollingOverlapKey,
-        migrationStatus: entry.migrationStatus
+        pollingOverlapKey: entry.pollingOverlapKey
       }))
     );
     expect(frontendExports).toEqual(
@@ -191,6 +211,15 @@ describe('Electron IPC bridge contract', () => {
         layer: 'helper_contract',
         type: 'invalid_payload',
         message: 'Payload for set_server_enabled must include a boolean enabled value.'
+      }
+    });
+
+    expect(validateHelperPayload('list_ssh_config_hosts', { path: '/tmp/config' })).toEqual({
+      ok: false,
+      error: {
+        layer: 'helper_contract',
+        type: 'invalid_payload',
+        message: 'Payload for list_ssh_config_hosts must be empty.'
       }
     });
   });

@@ -5,6 +5,7 @@ const rendererPreloadMethods = [
   'initializeApp',
   'listOverview',
   'listServers',
+  'listSshConfigHosts',
   'saveServer',
   'deleteServer',
   'setServerEnabled',
@@ -27,12 +28,7 @@ const metadataBridge = {
   versions: {
     electron: process.versions.electron,
     chrome: process.versions.chrome
-  },
-  migrationStatus: () => ({
-    ipc: 'implemented-task-7',
-    helperRunner: 'implemented-task-8',
-    scheduler: 'implemented-task-8'
-  })
+  }
 } as const;
 
 contextBridge.exposeInMainWorld('gpuwatcher', gpuwatcher);

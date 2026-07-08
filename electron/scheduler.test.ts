@@ -5,11 +5,13 @@ import type { HelperRunner } from './helperRunner.js';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((innerResolve) => {
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((innerResolve, innerReject) => {
     resolve = innerResolve;
+    reject = innerReject;
   });
 
-  return { promise, resolve };
+  return { promise, reject, resolve };
 }
 
 async function waitForCondition(assertion: () => void): Promise<void> {
@@ -222,6 +224,65 @@ describe('Electron scheduler', () => {
     await first;
   });
 
+  it('releases same-server and global slots after a helper success response', async () => {
+    let refreshCalls = 0;
+    const runner: HelperRunner = {
+      async run(request) {
+        if (request.action === 'refresh_server') {
+          refreshCalls += 1;
+        }
+        return { ok: true, data: { ok: true, status: 'online', errorType: null, message: 'snapshot stored' } };
+      }
+    };
+    const scheduler = createScheduler({ pollConcurrency: 1 });
+    scheduler.start();
+
+    await expect(scheduler.run(runner, { action: 'refresh_server', payload: { id: 'server-1' } })).resolves.toMatchObject({ ok: true });
+    await expect(scheduler.run(runner, { action: 'refresh_server', payload: { id: 'server-1' } })).resolves.toMatchObject({ ok: true });
+    await expect(scheduler.run(runner, { action: 'refresh_server', payload: { id: 'server-2' } })).resolves.toMatchObject({ ok: true });
+
+    expect(refreshCalls).toBe(3);
+  });
+
+  it('releases same-server and global slots after a helper error response', async () => {
+    let refreshCalls = 0;
+    const runner: HelperRunner = {
+      async run(request) {
+        if (request.action === 'refresh_server') {
+          refreshCalls += 1;
+        }
+        return { ok: false, error: { layer: 'helper_process', type: 'helper_failed', message: 'helper failed' } };
+      }
+    };
+    const scheduler = createScheduler({ pollConcurrency: 1 });
+    scheduler.start();
+
+    await expect(scheduler.run(runner, { action: 'refresh_server', payload: { id: 'server-1' } })).resolves.toMatchObject({ ok: false });
+    await expect(scheduler.run(runner, { action: 'refresh_server', payload: { id: 'server-1' } })).resolves.toMatchObject({ ok: false });
+    await expect(scheduler.run(runner, { action: 'refresh_server', payload: { id: 'server-2' } })).resolves.toMatchObject({ ok: false });
+
+    expect(refreshCalls).toBe(3);
+  });
+
+  it('releases same-server and global slots after a rejected helper run', async () => {
+    let first = true;
+    const runner: HelperRunner = {
+      async run() {
+        if (first) {
+          first = false;
+          throw new Error('helper runner rejected');
+        }
+        return { ok: true, data: { ok: true, status: 'online', errorType: null, message: 'snapshot stored' } };
+      }
+    };
+    const scheduler = createScheduler({ pollConcurrency: 1 });
+    scheduler.start();
+
+    await expect(scheduler.run(runner, { action: 'refresh_server', payload: { id: 'server-1' } })).rejects.toThrow('helper runner rejected');
+    await expect(scheduler.run(runner, { action: 'refresh_server', payload: { id: 'server-1' } })).resolves.toMatchObject({ ok: true });
+    await expect(scheduler.run(runner, { action: 'refresh_server', payload: { id: 'server-2' } })).resolves.toMatchObject({ ok: true });
+  });
+
   it('cancels active helper work when the scheduler stops', () => {
     let cancelled = 0;
     const runner: HelperRunner = {
@@ -238,6 +299,40 @@ describe('Electron scheduler', () => {
     scheduler.stop();
 
     expect(cancelled).toBe(1);
+  });
+
+  it('cancels active helper work once and allows the server after restart', async () => {
+    const cancelledRefresh = deferred<never>();
+    let cancelled = 0;
+    let refreshCalls = 0;
+    const runner: HelperRunner = {
+      cancelActive() {
+        cancelled += 1;
+        cancelledRefresh.reject(new Error('cancelled'));
+      },
+      async run(request) {
+        if (request.action === 'refresh_server') {
+          refreshCalls += 1;
+          if (refreshCalls === 1) {
+            return cancelledRefresh.promise;
+          }
+        }
+        return { ok: true, data: { ok: true, status: 'online', errorType: null, message: 'snapshot stored' } };
+      }
+    };
+    const scheduler = createScheduler({ pollConcurrency: 1 });
+    scheduler.start(runner);
+
+    const refresh = scheduler.run(runner, { action: 'refresh_server', payload: { id: 'server-1' } });
+    await waitForCondition(() => expect(refreshCalls).toBe(1));
+
+    scheduler.stop();
+    await expect(refresh).rejects.toThrow('cancelled');
+    scheduler.start();
+
+    await expect(scheduler.run(runner, { action: 'refresh_server', payload: { id: 'server-1' } })).resolves.toMatchObject({ ok: true });
+    expect(cancelled).toBe(1);
+    expect(refreshCalls).toBe(2);
   });
 
   it('polls only due enabled servers from Electron main and leaves poll_due_servers off the helper surface', async () => {

@@ -24,12 +24,7 @@ const metadataBridge = {
   versions: {
     electron: process.versions.electron,
     chrome: process.versions.chrome
-  },
-  migrationStatus: () => ({
-    ipc: 'implemented-task-7',
-    helperRunner: 'deferred-to-task-8',
-    scheduler: 'deferred-to-task-8'
-  })
+  }
 } as const;
 
 contextBridge.exposeInMainWorld('gpuwatcher', gpuwatcher);

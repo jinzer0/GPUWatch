@@ -1,11 +1,19 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { access } from 'node:fs/promises';
-import path from 'node:path';
 
 import { helperContract, type HelperAction, type HelperRequestEnvelope, type HelperResponseEnvelope, type TimeoutClass } from './helperContract.js';
+import { contractError } from './helperRunner/contractErrors.js';
+export {
+  HELPER_PATH_ENV,
+  PACKAGED_HELPER_SUBPATH,
+  resolveHelperPath,
+  type HelperPathResolution,
+  type HelperPathResolutionOptions
+} from './helperRunner/pathResolution.js';
+import { type HelperPathResolution, type HelperPathResolutionOptions, resolveHelperPath } from './helperRunner/pathResolution.js';
+import { sanitizeDiagnostic, validateHelperResponse } from './helperRunner/outputParsing.js';
+import { killHelperProcess } from './helperRunner/processControl.js';
 
-export const HELPER_PATH_ENV = 'GPUWATCHER_HELPER_PATH';
-export const PACKAGED_HELPER_SUBPATH = path.join('gpuwatcher-helper', helperBinaryName());
 export const HELPER_TIMEOUT_MS: Record<TimeoutClass, number> = {
   'local-10s': 10_000,
   'ssh-60s': 60_000
@@ -18,69 +26,13 @@ export interface HelperRunner {
   ): Promise<HelperResponseEnvelope<Data>>;
 }
 
-export interface HelperPathResolutionOptions {
-  cwd?: string;
-  env?: NodeJS.ProcessEnv;
-  isPackaged?: boolean;
-  resourcesPath?: string;
-}
-
-export interface HelperPathResolution {
-  helperPath: string;
-  source: 'env' | 'packaged' | 'cargo-crate-target' | 'cargo-root-target';
-  candidates: string[];
-}
-
 export interface HelperRunnerOptions extends HelperPathResolutionOptions {
   timeoutMsByClass?: Partial<Record<TimeoutClass, number>>;
-}
-
-function helperBinaryName(): string {
-  return process.platform === 'win32' ? 'gpuwatcher-helper.exe' : 'gpuwatcher-helper';
-}
-
-function absoluteFrom(base: string, candidate: string): string {
-  return path.isAbsolute(candidate) ? candidate : path.resolve(base, candidate);
-}
-
-export function resolveHelperPath(options: HelperPathResolutionOptions = {}): HelperPathResolution {
-  const cwd = options.cwd ?? process.cwd();
-  const env = options.env ?? process.env;
-  const candidates: string[] = [];
-  const envPath = env[HELPER_PATH_ENV];
-
-  if (envPath && envPath.trim().length > 0) {
-    const helperPath = absoluteFrom(cwd, envPath.trim());
-    return { helperPath, source: 'env', candidates: [helperPath] };
-  }
-
-  if (options.isPackaged) {
-    const resourcesPath = options.resourcesPath ?? process.resourcesPath;
-    const helperPath = path.join(resourcesPath, PACKAGED_HELPER_SUBPATH);
-    return { helperPath, source: 'packaged', candidates: [helperPath] };
-  }
-
-  const crateTarget = path.join(cwd, 'crates', 'gpuwatcher-helper', 'target', 'debug', helperBinaryName());
-  const rootTarget = path.join(cwd, 'target', 'debug', helperBinaryName());
-  candidates.push(crateTarget, rootTarget);
-
-  return { helperPath: crateTarget, source: 'cargo-crate-target', candidates };
 }
 
 function contractTimeoutClass(action: HelperAction): TimeoutClass {
   const entry = helperContract.find((candidate) => candidate.helperAction === action);
   return entry?.timeoutClass ?? 'local-10s';
-}
-
-function contractError(type: string, message: string): HelperResponseEnvelope<never> {
-  return {
-    ok: false,
-    error: {
-      layer: 'helper_contract',
-      type,
-      message
-    }
-  };
 }
 
 async function firstAccessiblePath(resolution: HelperPathResolution): Promise<string | null> {
@@ -94,37 +46,6 @@ async function firstAccessiblePath(resolution: HelperPathResolution): Promise<st
   }
 
   return null;
-}
-
-function validateHelperResponse(value: unknown): value is HelperResponseEnvelope {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return false;
-  }
-
-  const candidate = value as Record<string, unknown>;
-  if (candidate.ok === true) {
-    return 'data' in candidate;
-  }
-
-  if (candidate.ok === false && typeof candidate.error === 'object' && candidate.error !== null && !Array.isArray(candidate.error)) {
-    const error = candidate.error as Record<string, unknown>;
-    return typeof error.layer === 'string' && typeof error.type === 'string' && typeof error.message === 'string';
-  }
-
-  return false;
-}
-
-function killHelperProcess(child: ChildProcessWithoutNullStreams, signal: NodeJS.Signals): void {
-  if (process.platform !== 'win32' && child.pid) {
-    try {
-      process.kill(-child.pid, signal);
-      return;
-    } catch {
-      // Fall back to killing the direct child if process-group signaling is unavailable.
-    }
-  }
-
-  child.kill(signal);
 }
 
 function runProcess(
@@ -188,7 +109,8 @@ function runProcess(
       }
 
       if (code !== 0) {
-        const detail = stderr.trim() ? ` stderr: ${stderr.trim()}` : '';
+        const diagnostic = sanitizeDiagnostic(stderr);
+        const detail = diagnostic ? ` stderr: ${diagnostic}` : '';
         finish(contractError('helper_process_failed', `Helper exited with code ${code ?? 'null'} signal ${signal ?? 'null'}.${detail}`));
         return;
       }
