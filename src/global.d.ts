@@ -5,7 +5,8 @@ import type {
   Server,
   ServerDetailDto,
   ServerInput,
-  ServerOverviewDto
+  ServerOverviewDto,
+  SshConfigImportResult
 } from './lib/types';
 
 type GpuwatcherHelperResponse<Data> = { ok: true; data: Data } | { ok: false; error: GpuwatcherHelperError };
@@ -20,6 +21,7 @@ interface GpuwatcherBridge {
   initializeApp?: (payload?: object) => Promise<GpuwatcherHelperResponse<ServerOverviewDto[]>>;
   listOverview?: (payload?: object) => Promise<GpuwatcherHelperResponse<ServerOverviewDto[]>>;
   listServers?: (payload?: object) => Promise<GpuwatcherHelperResponse<Server[]>>;
+  listSshConfigHosts?: (payload?: object) => Promise<GpuwatcherHelperResponse<SshConfigImportResult>>;
   saveServer?: (payload: { input: ServerInput }) => Promise<GpuwatcherHelperResponse<Server>>;
   deleteServer?: (payload: { id: string }) => Promise<GpuwatcherHelperResponse<void>>;
   setServerEnabled?: (payload: { id: string; enabled: boolean }) => Promise<GpuwatcherHelperResponse<Server>>;
@@ -37,9 +39,19 @@ interface GpuwatcherBridge {
   helperHealth?: (payload?: object) => Promise<GpuwatcherHelperResponse<unknown>>;
 }
 
+interface GpuwatcherElectronMetadata {
+  readonly isElectron: true;
+  readonly platform: string;
+  readonly versions: {
+    readonly electron?: string;
+    readonly chrome?: string;
+  };
+}
+
 declare global {
   interface Window {
     gpuwatcher?: GpuwatcherBridge;
+    gpuWatcherElectron?: GpuwatcherElectronMetadata;
   }
 }
 
