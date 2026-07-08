@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   InlineToolbar,
   MiniLineChart,
+  ResultFeedback,
   TimeSeriesChart,
   LabeledSelect,
   LabeledTextInput,
@@ -48,6 +49,42 @@ describe('shared UI primitives', () => {
     expect(button.className).toContain('btn');
     expect(button.className).toContain('btn-secondary');
     expect(onReset).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders shared pending refresh feedback as an accessible live status', () => {
+    render(<ResultFeedback label="Overview refresh" state="pending" />);
+
+    const status = screen.getByRole('status', { name: 'Overview refresh' });
+
+    expect(status.textContent).toContain('Overview refresh');
+    expect(status.textContent).toContain('pending');
+    expect(status.querySelector('.surface')).toBeDefined();
+  });
+
+  it('renders shared success feedback with a badge and sanitized message text', () => {
+    render(<ResultFeedback message="Refresh used /Users/alice/.ssh/id_ed25519 and --token secret-value" state="success" />);
+
+    const status = screen.getByRole('status', { name: 'success result' });
+
+    expect(status.textContent).toContain('success');
+    expect(status.textContent).toContain('[path redacted]');
+    expect(status.textContent).toContain('--token=[redacted]');
+    expect(status.textContent).not.toContain('/Users/alice/.ssh/id_ed25519');
+    expect(status.textContent).not.toContain('secret-value');
+    expect(status.querySelector('.status-online')).toBeDefined();
+  });
+
+  it('renders shared error feedback as an alert with badge and sanitized message text', () => {
+    render(<ResultFeedback message="SSH failed for /Users/alice/.ssh/id_ed25519" state="error" />);
+
+    const alert = screen.getByRole('alert', { name: 'error result' });
+
+    expect(alert.textContent).toContain('error');
+    expect(alert.textContent).toContain('[path redacted]');
+    expect(alert.textContent).not.toContain('/Users/alice/.ssh/id_ed25519');
+    expect(alert.querySelector('.status-error')).toBeDefined();
+    expect(alert.className).toContain('surface');
+    expect(alert.querySelector('.surface')).toBeDefined();
   });
 
   it('exposes sortable table header state through aria-sort and button text', () => {
