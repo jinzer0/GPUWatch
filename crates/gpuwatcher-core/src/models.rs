@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+// allow: SIZE_OK - serde DTO registry; split when model ownership changes broadly.
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct Server {
@@ -27,6 +29,22 @@ pub struct ServerInput {
     pub ssh_key_path: Option<String>,
     pub polling_interval_seconds: Option<i64>,
     pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SshConfigImportCandidate {
+    pub host_alias: String,
+    pub hostname: Option<String>,
+    pub draft: ServerInput,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SshConfigImportResult {
+    pub candidates: Vec<SshConfigImportCandidate>,
+    pub warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

@@ -41,6 +41,24 @@ impl PollScheduler {
         let mut inner = self.inner.lock().expect("scheduler mutex poisoned");
         inner.active_servers.remove(server_id);
     }
+
+    pub fn guard<'a>(&'a self, server_id: &'a str) -> PollSlotGuard<'a> {
+        PollSlotGuard {
+            scheduler: self,
+            server_id,
+        }
+    }
+}
+
+pub struct PollSlotGuard<'a> {
+    scheduler: &'a PollScheduler,
+    server_id: &'a str,
+}
+
+impl Drop for PollSlotGuard<'_> {
+    fn drop(&mut self) {
+        self.scheduler.finish(self.server_id);
+    }
 }
 
 #[cfg(test)]
@@ -63,5 +81,19 @@ mod tests {
         assert!(!scheduler.try_start("server-b"));
         scheduler.finish("server-a");
         assert!(scheduler.try_start("server-b"));
+    }
+
+    #[test]
+    fn scheduler_guard_releases_server_slot_when_dropped() {
+        let scheduler = PollScheduler::new(1);
+        assert!(scheduler.try_start("server-a"));
+
+        {
+            let _guard = scheduler.guard("server-a");
+            assert!(!scheduler.try_start("server-a"));
+            assert!(!scheduler.try_start("server-b"));
+        }
+
+        assert!(scheduler.try_start("server-a"));
     }
 }

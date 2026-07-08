@@ -1,12 +1,18 @@
-use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+mod database;
 
-use chrono::Utc;
+use std::sync::{Mutex, MutexGuard};
 
 use crate::command_runner::SystemSshRunner;
 use crate::error::AppError;
-use crate::repository::{now_string, Repository};
+use crate::repository::Repository;
 use crate::scheduler::PollScheduler;
+
+pub use database::{
+    backup_database_if_destructive_migration_needed, backup_existing_database_before_migration,
+    database_path_from_data_dir, default_database_path, test_data_dir_override,
+};
+
+pub(crate) type RepositoryGuard<'a> = MutexGuard<'a, Repository>;
 
 pub struct AppState {
     pub repository: Mutex<Repository>,
@@ -28,92 +34,25 @@ impl AppState {
         Self::open_database_path(&path)
     }
 
-    pub fn open_in_data_dir(data_dir: impl AsRef<Path>) -> Result<Self, AppError> {
-        let path = database_path_from_data_dir(data_dir);
-        Self::open_database_path(&path)
+    pub(crate) fn repository(&self) -> Result<RepositoryGuard<'_>, AppError> {
+        self.repository.lock().map_err(|_| {
+            AppError::new(
+                "storage_app",
+                "repository_mutex_poisoned",
+                "repository mutex poisoned",
+            )
+        })
     }
-
-    pub fn open_database_path(path: &Path) -> Result<Self, AppError> {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(storage_io_error)?;
-        }
-        backup_database_if_destructive_migration_needed(path)?;
-        let repository = Repository::open(&path)?;
-        repository.migrate()?;
-        repository.prune_gpu_history(&now_string())?;
-        Ok(Self::new(repository))
-    }
-}
-
-pub fn default_database_path() -> Result<PathBuf, AppError> {
-    if let Some(data_dir) = test_data_dir_override() {
-        return Ok(database_path_from_data_dir(data_dir));
-    }
-
-    let base = dirs::data_dir().ok_or_else(|| {
-        AppError::new(
-            "storage_app",
-            "sqlite_error",
-            "could not resolve local data directory",
-        )
-    })?;
-    Ok(database_path_from_data_dir(base))
-}
-
-pub fn database_path_from_data_dir(data_dir: impl AsRef<Path>) -> PathBuf {
-    data_dir
-        .as_ref()
-        .join("GPUWatcher")
-        .join("gpuwatcher.sqlite3")
-}
-
-pub fn test_data_dir_override() -> Option<PathBuf> {
-    std::env::var_os("GPUWATCHER_TEST_DATA_DIR")
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-}
-
-pub fn backup_database_if_destructive_migration_needed(
-    path: &Path,
-) -> Result<Option<PathBuf>, AppError> {
-    if Repository::path_requires_legacy_collector_command_drop(path)? {
-        backup_existing_database_before_migration(path)
-    } else {
-        Ok(None)
-    }
-}
-
-pub fn backup_existing_database_before_migration(path: &Path) -> Result<Option<PathBuf>, AppError> {
-    if !path.exists() {
-        return Ok(None);
-    }
-
-    let parent = path.parent().ok_or_else(|| {
-        AppError::new(
-            "storage_app",
-            "sqlite_error",
-            format!("database path has no parent: {}", path.display()),
-        )
-    })?;
-    let file_name = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("gpuwatcher.sqlite3");
-    let timestamp = Utc::now().format("%Y%m%dT%H%M%S%.9fZ");
-    let backup_path = parent.join(format!("{file_name}.backup-{timestamp}"));
-    std::fs::copy(path, &backup_path).map_err(storage_io_error)?;
-    Ok(Some(backup_path))
-}
-
-fn storage_io_error(err: std::io::Error) -> AppError {
-    AppError::new("storage_app", "sqlite_error", err.to_string())
 }
 
 #[cfg(test)]
 mod tests {
+    use std::path::{Path, PathBuf};
+
     use super::*;
     use crate::models::{ParsedCollectorPayload, ServerInput};
     use crate::protocol::parse_collector_json;
+    use crate::repository::now_string;
     use rusqlite::Connection;
     use std::sync::Mutex;
 

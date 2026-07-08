@@ -1,289 +1,43 @@
-use std::future::Future;
-use std::pin::Pin;
+mod collector;
+mod connection;
+mod queries;
+mod results;
+mod seed;
+mod writes;
 
-use crate::command_runner::SystemSshRunner;
-use crate::error::AppError;
-use crate::models::{
-    ConnectionTestResultDto, GpuHistoryResponseDto, ParsedCollectorPayload, ProcessRowDto, Server,
-    ServerDetailDto, ServerInput, ServerOverviewDto, SuccessEnvelope,
+mod polling;
+
+pub use connection::test_connection;
+pub use polling::{poll_server_owned, refresh_server, refresh_server_inner};
+pub use queries::{
+    get_server_detail, initialize_app, list_gpu_history, list_overview, list_processes,
+    list_servers,
 };
-use crate::no_install_collector::collect_no_install_snapshot;
+pub use seed::seed_demo_data;
+pub use writes::{delete_server, save_server, set_server_enabled};
+
+#[cfg(test)]
+use crate::error::AppError;
+#[cfg(test)]
+use crate::models::{ParsedCollectorPayload, Server, ServerInput, SuccessEnvelope};
+#[cfg(test)]
 use crate::protocol::parse_collector_json;
-use crate::read_model::{build_overview, build_process_rows, build_server_detail};
-use crate::repository::now_string;
-use crate::state::AppState;
-
-type SnapshotFuture<'a> =
-    Pin<Box<dyn Future<Output = Result<(String, SuccessEnvelope), AppError>> + Send + 'a>>;
-
-trait SnapshotCollector {
-    fn collect_snapshot<'a>(
-        &'a self,
-        state: &'a AppState,
-        server: &'a Server,
-    ) -> SnapshotFuture<'a>;
-}
-
-impl SnapshotCollector for SystemSshRunner {
-    fn collect_snapshot<'a>(
-        &'a self,
-        _state: &'a AppState,
-        server: &'a Server,
-    ) -> SnapshotFuture<'a> {
-        Box::pin(collect_no_install_snapshot(self, server))
-    }
-}
-
-pub fn initialize_app(state: &AppState) -> Result<Vec<ServerOverviewDto>, AppError> {
-    list_overview(state)
-}
-
-pub fn list_servers(state: &AppState) -> Result<Vec<Server>, AppError> {
-    let repository = state.repository.lock().expect("repository mutex poisoned");
-    repository.list_servers()
-}
-
-pub fn save_server(state: &AppState, input: ServerInput) -> Result<Server, AppError> {
-    let repository = state.repository.lock().expect("repository mutex poisoned");
-    repository.save_server(input)
-}
-
-pub fn delete_server(state: &AppState, id: String) -> Result<(), AppError> {
-    let repository = state.repository.lock().expect("repository mutex poisoned");
-    repository.delete_server(&id)
-}
-
-pub fn set_server_enabled(state: &AppState, id: String, enabled: bool) -> Result<Server, AppError> {
-    let repository = state.repository.lock().expect("repository mutex poisoned");
-    repository.set_server_enabled(&id, enabled)
-}
-
-pub fn seed_demo_data(state: &AppState) -> Result<Vec<ServerOverviewDto>, AppError> {
-    let raw = include_str!("../../../fixtures/protocol/v1/success_multi_gpu.json");
-    {
-        let repository = state.repository.lock().expect("repository mutex poisoned");
-        let mut servers = repository.list_servers()?;
-        let server = if let Some(existing) = servers.pop() {
-            existing
-        } else {
-            repository.save_server(ServerInput {
-                id: None,
-                name: "Demo GPU Server".to_string(),
-                host: "demo.local".to_string(),
-                port: 22,
-                username: "demo".to_string(),
-                ssh_key_path: None,
-                polling_interval_seconds: None,
-                enabled: true,
-            })?
-        };
-        let ParsedCollectorPayload::Success(success) = parse_collector_json(raw)? else {
-            return Err(AppError::new(
-                "protocol",
-                "protocol_schema_invalid",
-                "demo fixture was not a success envelope",
-            ));
-        };
-        repository.store_success(&server.id, raw, &success, &now_string())?;
-    }
-    list_overview(state)
-}
-
-pub fn list_overview(state: &AppState) -> Result<Vec<ServerOverviewDto>, AppError> {
-    let repository = state.repository.lock().expect("repository mutex poisoned");
-    let servers = repository.list_servers()?;
-    let health = repository.all_health()?;
-    let snapshots = repository.all_latest_snapshots()?;
-    build_overview(&servers, &health, &snapshots)
-}
-
-pub fn get_server_detail(
-    state: &AppState,
-    id: String,
-) -> Result<Option<ServerDetailDto>, AppError> {
-    let repository = state.repository.lock().expect("repository mutex poisoned");
-    let Some(server) = repository.get_server(&id)? else {
-        return Ok(None);
-    };
-    let health = repository.get_health(&id)?;
-    let snapshot = repository.latest_snapshot(&id)?;
-    build_server_detail(server, health, snapshot).map(Some)
-}
-
-pub fn list_processes(state: &AppState) -> Result<Vec<ProcessRowDto>, AppError> {
-    let repository = state.repository.lock().expect("repository mutex poisoned");
-    let servers = repository.list_servers()?;
-    let health = repository.all_health()?;
-    let snapshots = repository.all_latest_snapshots()?;
-    build_process_rows(&servers, &health, &snapshots)
-}
-
-pub fn list_gpu_history(
-    state: &AppState,
-    server_id: String,
-    gpu_index: Option<i64>,
-    gpu_uuid: Option<String>,
-    range: String,
-) -> Result<GpuHistoryResponseDto, AppError> {
-    let repository = state.repository.lock().expect("repository mutex poisoned");
-    repository.list_gpu_history(&server_id, gpu_index, gpu_uuid, &range, &now_string())
-}
-
-pub async fn test_connection(
-    state: &AppState,
-    id: String,
-) -> Result<ConnectionTestResultDto, AppError> {
-    let server = {
-        let repository = state.repository.lock().expect("repository mutex poisoned");
-        repository
-            .get_server(&id)?
-            .ok_or_else(|| AppError::new("storage_app", "server_not_found", "server not found"))?
-    };
-    match state.runner.collect_snapshot(state, &server).await {
-        Ok((_raw_json, _success)) => Ok(ConnectionTestResultDto {
-            ok: true,
-            status: "online".to_string(),
-            error_type: None,
-            message: Some("no-install snapshot collection succeeded".to_string()),
-        }),
-        Err(error) => Ok(error_result(error)),
-    }
-}
-
-pub async fn refresh_server(
-    state: &AppState,
-    id: String,
-) -> Result<ConnectionTestResultDto, AppError> {
-    if !state.scheduler.try_start(&id) {
-        return Ok(ConnectionTestResultDto {
-            ok: false,
-            status: "polling".to_string(),
-            error_type: Some("poll_already_running".to_string()),
-            message: Some("poll already running for this server or global cap reached".to_string()),
-        });
-    }
-
-    let result = refresh_server_inner(state, &id).await;
-    state.scheduler.finish(&id);
-    result
-}
-
-pub async fn refresh_server_inner(
-    state: &AppState,
-    id: &str,
-) -> Result<ConnectionTestResultDto, AppError> {
-    let server = {
-        let repository = state.repository.lock().expect("repository mutex poisoned");
-        let server = repository
-            .get_server(id)?
-            .ok_or_else(|| AppError::new("storage_app", "server_not_found", "server not found"))?;
-        if !server.enabled {
-            return Ok(ConnectionTestResultDto {
-                ok: false,
-                status: "disabled".to_string(),
-                error_type: Some("server_disabled".to_string()),
-                message: Some("server is disabled".to_string()),
-            });
-        }
-        server
-    };
-
-    poll_server_owned(state, server).await
-}
-
-pub async fn poll_server_owned(
-    state: &AppState,
-    server: Server,
-) -> Result<ConnectionTestResultDto, AppError> {
-    poll_server_owned_with_collector(state, &state.runner, server).await
-}
-
-async fn poll_server_owned_with_collector<C>(
-    state: &AppState,
-    collector: &C,
-    server: Server,
-) -> Result<ConnectionTestResultDto, AppError>
-where
-    C: SnapshotCollector + ?Sized,
-{
-    let started_at = now_string();
-    let id = server.id.clone();
-    let config_revision = server.config_revision;
-
-    {
-        let repository = state.repository.lock().expect("repository mutex poisoned");
-        if !repository.poll_target_current(&id, config_revision)? {
-            return Ok(discarded_result());
-        }
-        repository.mark_poll_started(&id, &started_at)?;
-    }
-
-    match collector.collect_snapshot(state, &server).await {
-        Ok((raw_json, success)) => {
-            let finished_at = now_string();
-            let repository = state.repository.lock().expect("repository mutex poisoned");
-            if !repository.poll_target_current(&id, config_revision)? {
-                return Ok(discarded_result());
-            }
-            repository.store_success(&id, &raw_json, &success, &finished_at)?;
-            Ok(ConnectionTestResultDto {
-                ok: true,
-                status: "online".to_string(),
-                error_type: None,
-                message: Some("snapshot stored".to_string()),
-            })
-        }
-        Err(error) => store_failure_if_current(state, &id, config_revision, error),
-    }
-}
-
-fn store_failure_if_current(
-    state: &AppState,
-    id: &str,
-    config_revision: i64,
-    error: AppError,
-) -> Result<ConnectionTestResultDto, AppError> {
-    let finished_at = now_string();
-    let repository = state.repository.lock().expect("repository mutex poisoned");
-    if !repository.poll_target_current(id, config_revision)? {
-        return Ok(discarded_result());
-    }
-    repository.store_failure(id, &error, &finished_at)?;
-    Ok(error_result(error))
-}
-
-fn discarded_result() -> ConnectionTestResultDto {
-    ConnectionTestResultDto {
-        ok: false,
-        status: "stale_discarded".to_string(),
-        error_type: Some("stale_poll_discarded".to_string()),
-        message: Some("poll result was discarded because server configuration changed".to_string()),
-    }
-}
-
-fn error_result(error: AppError) -> ConnectionTestResultDto {
-    ConnectionTestResultDto {
-        ok: false,
-        status: if error.layer == "transport_ssh" {
-            "offline"
-        } else {
-            "error"
-        }
-        .to_string(),
-        error_type: Some(error.error_type),
-        message: Some(error.message),
-    }
-}
+#[cfg(test)]
+use collector::{SnapshotCollector, SnapshotFuture};
+#[cfg(test)]
+use polling::{poll_server_owned_with_collector, refresh_server_with_collector};
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::AppState;
 
     #[derive(Clone)]
     enum MockOutcome {
         Success(String, SuccessEnvelope),
         Error(AppError),
         UpdateServerBeforeSuccess(ServerInput, String, SuccessEnvelope),
+        Pending(Arc<Mutex<Option<tokio::sync::oneshot::Sender<()>>>>),
     }
 
     struct MockCollector {
@@ -308,10 +62,19 @@ mod tests {
                         repository.save_server(input.clone())?;
                         Ok((raw_json.clone(), success.clone()))
                     }
+                    MockOutcome::Pending(started) => {
+                        if let Some(sender) = started.lock().expect("started mutex poisoned").take()
+                        {
+                            let _ = sender.send(());
+                        }
+                        std::future::pending().await
+                    }
                 }
             })
         }
     }
+
+    use std::sync::{Arc, Mutex};
 
     fn test_state() -> AppState {
         AppState::new(crate::repository::Repository::in_memory().expect("repository"))
@@ -455,6 +218,18 @@ mod tests {
         poll_server_owned_with_collector(&state, &success_collector, server.clone())
             .await
             .expect("success poll");
+        {
+            let repository = state.repository.lock().expect("repository mutex poisoned");
+            repository
+                .insert_gpu_history_sample_for_test(&server.id, "2000-01-01T00:00:00Z")
+                .expect("old history sample");
+            assert_eq!(
+                repository
+                    .gpu_history_sample_count(&server.id)
+                    .expect("history count"),
+                3
+            );
+        }
 
         let failure_collector = MockCollector {
             outcome: MockOutcome::Error(AppError::new(
@@ -479,11 +254,12 @@ mod tests {
             .expect("snapshot lookup")
             .expect("snapshot preserved");
         assert_eq!(snapshot.raw_json, raw_json);
+        let timestamps = repository
+            .gpu_history_sample_timestamps(&server.id)
+            .expect("history timestamps");
         assert_eq!(
-            repository
-                .gpu_history_sample_count(&server.id)
-                .expect("history count"),
-            2
+            timestamps,
+            vec![snapshot.received_at.clone(), snapshot.received_at]
         );
         let health = repository
             .get_health(&server.id)
@@ -534,5 +310,89 @@ mod tests {
         assert_eq!(health.status, "idle");
         assert!(health.last_poll_started_at.is_some());
         assert!(health.last_poll_finished_at.is_none());
+    }
+
+    #[tokio::test]
+    async fn refresh_server_releases_in_flight_slot_after_success() {
+        let state = test_state();
+        let server = save_test_server(&state);
+        let (raw_json, success) = success_snapshot();
+        let collector = MockCollector {
+            outcome: MockOutcome::Success(raw_json, success),
+        };
+
+        let first = refresh_server_with_collector(&state, &collector, server.id.clone())
+            .await
+            .expect("first refresh");
+        let second = refresh_server_with_collector(&state, &collector, server.id.clone())
+            .await
+            .expect("second refresh");
+
+        assert!(first.ok);
+        assert!(second.ok);
+        assert_eq!(second.error_type, None);
+    }
+
+    #[tokio::test]
+    async fn refresh_server_releases_in_flight_slot_after_collector_error() {
+        let state = test_state();
+        let server = save_test_server(&state);
+        let collector = MockCollector {
+            outcome: MockOutcome::Error(AppError::new(
+                "collector",
+                "remote_gpu_query_failed",
+                "base nvidia-smi GPU query failed",
+            )),
+        };
+
+        let first = refresh_server_with_collector(&state, &collector, server.id.clone())
+            .await
+            .expect("first refresh");
+        let second = refresh_server_with_collector(&state, &collector, server.id.clone())
+            .await
+            .expect("second refresh");
+
+        assert!(!first.ok);
+        assert!(!second.ok);
+        assert_eq!(
+            second.error_type.as_deref(),
+            Some("remote_gpu_query_failed")
+        );
+    }
+
+    #[tokio::test]
+    async fn refresh_server_releases_in_flight_slot_after_active_future_is_cancelled() {
+        let state = Arc::new(test_state());
+        let server = save_test_server(&state);
+        let (started_sender, started_receiver) = tokio::sync::oneshot::channel();
+        let collector = Arc::new(MockCollector {
+            outcome: MockOutcome::Pending(Arc::new(Mutex::new(Some(started_sender)))),
+        });
+
+        let pending_refresh = {
+            let state = Arc::clone(&state);
+            let collector = Arc::clone(&collector);
+            let server_id = server.id.clone();
+            tokio::spawn(async move {
+                refresh_server_with_collector(state.as_ref(), collector.as_ref(), server_id).await
+            })
+        };
+        started_receiver.await.expect("refresh started");
+        pending_refresh.abort();
+        assert!(pending_refresh
+            .await
+            .expect_err("refresh aborted")
+            .is_cancelled());
+
+        let (raw_json, success) = success_snapshot();
+        let success_collector = MockCollector {
+            outcome: MockOutcome::Success(raw_json, success),
+        };
+        let next = refresh_server_with_collector(&state, &success_collector, server.id)
+            .await
+            .expect("refresh after cancellation");
+
+        assert!(next.ok);
+        assert_eq!(next.error_type, None);
     }
 }
