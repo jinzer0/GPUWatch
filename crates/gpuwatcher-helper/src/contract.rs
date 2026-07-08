@@ -1,12 +1,17 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+mod action_names;
+
+pub use action_names::{action_name, parse_action};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HelperAction {
     InitializeApp,
     ListOverview,
     ListServers,
+    ListSshConfigHosts,
     SaveServer,
     DeleteServer,
     SetServerEnabled,
@@ -53,14 +58,6 @@ pub enum PollingOverlapKey {
     ElectronMainScheduler,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum MigrationStatus {
-    Migrate,
-    ElectronMainOnly,
-    DocumentedHelperHealth,
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HelperRequestEnvelope {
     pub action: HelperAction,
@@ -98,7 +95,6 @@ pub struct HelperContractEntry {
     pub timeout_class: TimeoutClass,
     pub db_mutation: DbMutation,
     pub polling_overlap_key: PollingOverlapKey,
-    pub migration_status: MigrationStatus,
     pub fallback_behavior: &'static str,
     pub notes: &'static str,
 }
@@ -115,7 +111,6 @@ pub const HELPER_CONTRACT: &[HelperContractEntry] = &[
         timeout_class: TimeoutClass::Local10s,
         db_mutation: DbMutation::None,
         polling_overlap_key: PollingOverlapKey::None,
-        migration_status: MigrationStatus::Migrate,
         fallback_behavior: "Return the same overview list as list_overview.",
         notes: "Initial app load delegates directly to list_overview.",
     },
@@ -127,7 +122,6 @@ pub const HELPER_CONTRACT: &[HelperContractEntry] = &[
         timeout_class: TimeoutClass::Local10s,
         db_mutation: DbMutation::None,
         polling_overlap_key: PollingOverlapKey::None,
-        migration_status: MigrationStatus::Migrate,
         fallback_behavior: "Surface helper errors through the response envelope.",
         notes: "Reads servers, health, and latest snapshots to build overview rows.",
     },
@@ -139,9 +133,19 @@ pub const HELPER_CONTRACT: &[HelperContractEntry] = &[
         timeout_class: TimeoutClass::Local10s,
         db_mutation: DbMutation::None,
         polling_overlap_key: PollingOverlapKey::None,
-        migration_status: MigrationStatus::Migrate,
         fallback_behavior: "Return an empty array only when no servers exist.",
         notes: "SQLite read of server settings.",
+    },
+    HelperContractEntry {
+        frontend_api: Some("listSshConfigHosts"),
+        helper_action: HelperAction::ListSshConfigHosts,
+        visibility: ActionVisibility::Renderer,
+        electron_preload_method: Some("listSshConfigHosts"),
+        timeout_class: TimeoutClass::Local10s,
+        db_mutation: DbMutation::None,
+        polling_overlap_key: PollingOverlapKey::None,
+        fallback_behavior: "Read default ~/.ssh/config only; browser fallback returns no candidates plus backend-unavailable warning.",
+        notes: "Lists SSH config import candidates from the core parser without accepting renderer-provided file paths.",
     },
     HelperContractEntry {
         frontend_api: Some("saveServer"),
@@ -151,7 +155,6 @@ pub const HELPER_CONTRACT: &[HelperContractEntry] = &[
         timeout_class: TimeoutClass::Local10s,
         db_mutation: DbMutation::ServersWrite,
         polling_overlap_key: PollingOverlapKey::ServerId,
-        migration_status: MigrationStatus::Migrate,
         fallback_behavior: "Serialize DB mutation and block same-server polling while saving.",
         notes: "Creates or updates server, increments config revision on update, and ensures health.",
     },
@@ -163,7 +166,6 @@ pub const HELPER_CONTRACT: &[HelperContractEntry] = &[
         timeout_class: TimeoutClass::Local10s,
         db_mutation: DbMutation::ServersDelete,
         polling_overlap_key: PollingOverlapKey::ServerId,
-        migration_status: MigrationStatus::Migrate,
         fallback_behavior: "Serialize DB mutation and block same-server polling while deleting.",
         notes: "Deletes the server row and dependent state through the repository schema.",
     },
@@ -175,7 +177,6 @@ pub const HELPER_CONTRACT: &[HelperContractEntry] = &[
         timeout_class: TimeoutClass::Local10s,
         db_mutation: DbMutation::ServerEnabledWrite,
         polling_overlap_key: PollingOverlapKey::ServerId,
-        migration_status: MigrationStatus::Migrate,
         fallback_behavior: "Serialize DB mutation and block same-server polling while toggling.",
         notes: "Updates enabled state, config revision, and health status.",
     },
@@ -187,7 +188,6 @@ pub const HELPER_CONTRACT: &[HelperContractEntry] = &[
         timeout_class: TimeoutClass::Local10s,
         db_mutation: DbMutation::DemoSeedWrite,
         polling_overlap_key: PollingOverlapKey::ServerId,
-        migration_status: MigrationStatus::Migrate,
         fallback_behavior: "Serialize DB mutation and treat the created or reused server as overlap key.",
         notes: "Stores the bundled success fixture, then returns overview rows.",
     },
@@ -199,7 +199,6 @@ pub const HELPER_CONTRACT: &[HelperContractEntry] = &[
         timeout_class: TimeoutClass::Local10s,
         db_mutation: DbMutation::None,
         polling_overlap_key: PollingOverlapKey::None,
-        migration_status: MigrationStatus::Migrate,
         fallback_behavior: "Return null data when the server id is not found.",
         notes: "Reads server, health, and latest snapshot for detail DTO.",
     },
@@ -211,7 +210,6 @@ pub const HELPER_CONTRACT: &[HelperContractEntry] = &[
         timeout_class: TimeoutClass::Local10s,
         db_mutation: DbMutation::None,
         polling_overlap_key: PollingOverlapKey::None,
-        migration_status: MigrationStatus::Migrate,
         fallback_behavior: "Keep renderer-side blank serverId rejection and return contract errors for invalid helper payloads.",
         notes: "Reads retained GPU history for 1h, 6h, or 24h ranges.",
     },
@@ -223,7 +221,6 @@ pub const HELPER_CONTRACT: &[HelperContractEntry] = &[
         timeout_class: TimeoutClass::Local10s,
         db_mutation: DbMutation::None,
         polling_overlap_key: PollingOverlapKey::None,
-        migration_status: MigrationStatus::Migrate,
         fallback_behavior: "Return an empty array when no latest snapshots contain processes.",
         notes: "Reads servers, health, and latest snapshots for process rows.",
     },
@@ -235,7 +232,6 @@ pub const HELPER_CONTRACT: &[HelperContractEntry] = &[
         timeout_class: TimeoutClass::Ssh60s,
         db_mutation: DbMutation::None,
         polling_overlap_key: PollingOverlapKey::ServerId,
-        migration_status: MigrationStatus::Migrate,
         fallback_behavior: "Run SSH collection without storing snapshot or health changes.",
         notes: "Reports online, offline for transport_ssh, or error for other layers.",
     },
@@ -247,7 +243,6 @@ pub const HELPER_CONTRACT: &[HelperContractEntry] = &[
         timeout_class: TimeoutClass::Ssh60s,
         db_mutation: DbMutation::PollHealthStartAndResultWrite,
         polling_overlap_key: PollingOverlapKey::ServerId,
-        migration_status: MigrationStatus::Migrate,
         fallback_behavior: "Electron main rejects same-server overlap with poll_already_running and discards stale configRevision results.",
         notes: "Marks polling, runs SSH collection, and stores success snapshot/history or failure health metadata.",
     },
@@ -259,7 +254,6 @@ pub const HELPER_CONTRACT: &[HelperContractEntry] = &[
         timeout_class: TimeoutClass::Ssh60s,
         db_mutation: DbMutation::PollHealthStartAndResultWrite,
         polling_overlap_key: PollingOverlapKey::ElectronMainScheduler,
-        migration_status: MigrationStatus::ElectronMainOnly,
         fallback_behavior: "Return a structured main_scheduler_owned error if called directly; renderer bridge and IPC do not expose it.",
         notes: "Electron main performs due polling with list_servers, get_server_detail, and refresh_server without adding a renderer-callable polling method.",
     },
@@ -271,7 +265,6 @@ pub const HELPER_CONTRACT: &[HelperContractEntry] = &[
         timeout_class: TimeoutClass::Local10s,
         db_mutation: DbMutation::None,
         polling_overlap_key: PollingOverlapKey::None,
-        migration_status: MigrationStatus::DocumentedHelperHealth,
         fallback_behavior: "Optional helper smoke action only; renderer frontend API must not depend on it.",
         notes: "Documented helper-only action allowed for packaging and smoke checks.",
     },
