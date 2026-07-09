@@ -1,87 +1,68 @@
-# PROJECT KNOWLEDGE BASE
+# GPUWatcher Agent Notes
 
-**Generated:** 2026-06-02
-**Commit:** `7922e94`
-**Branch:** `main`
+## Current Shape
+- GPUWatcher is a macOS Electron desktop app for monitoring Linux NVIDIA GPU hosts over system `ssh`; Tauri has been removed from the active runtime.
+- Runtime flow: React renderer -> action-specific Electron preload/IPC -> local Rust helper CLI -> `gpuwatcher-core` -> fixed no-install SSH commands -> local SQLite read model.
+- Remote hosts need only an NVIDIA driver with `nvidia-smi`, a POSIX shell, `ps`, and key-based SSH from macOS. Do not document or add remote GPUWatcher/nvitop/Python/collector installs.
 
-## OVERVIEW
+## High-Value Paths
+- `package.json`: npm scripts and Electron Builder config; packaged output goes to `release/electron/` with `identity: null`.
+- `electron/main.ts`: BrowserWindow security settings and scheduler startup; keep `contextIsolation: true` and `nodeIntegration: false`.
+- `electron/helperContract.ts`: canonical TS action contract. `poll_due_servers` is `main-only`; renderer/preload must not expose it.
+- `electron/preload.ts` and `electron/preload-runtime.cts`: action-specific `window.gpuwatcher` bridge. No generic `invoke`, `runAction`, or helper path exposure.
+- `electron/helperRunner.ts`: helper discovery. Dev uses Cargo target or `GPUWATCHER_HELPER_PATH`; packaged app uses `process.resourcesPath/gpuwatcher-helper/gpuwatcher-helper` outside ASAR.
+- `electron/scheduler.ts`: Electron main owns polling/overlap/concurrency by calling `list_servers`, `get_server_detail`, and `refresh_server`; do not move scheduling into renderer.
+- `crates/gpuwatcher-core/`: no-install SSH collector, parsers, service logic, repository/migrations, DTO models.
+- `crates/gpuwatcher-helper/`: stdin/stdout JSON helper CLI. stdout must be exactly one helper response envelope; diagnostics belong on stderr.
+- `src/lib/api.ts`: renderer API boundary and plain-Vite fallback behavior.
+- `fixtures/`: protocol and `nvidia-smi` parser fixtures used by Rust tests.
+- `smoke/`: Electron UI smoke scripts; they use isolated temp data and CDP, not production DB.
+- `docs/plan/` and `docs/draft/`: historical records only; do not treat old runtime claims there as current setup.
 
-GPUWatcher is a macOS Electron utility for monitoring Linux NVIDIA GPU servers through system `ssh`. The current architecture is no-install remote collection: the Electron main process calls a local Rust helper CLI, the shared core crate runs fixed SSH commands, parses `nvidia-smi` and `ps` output locally, and stores the latest successful protocol v1 snapshot in SQLite.
-
-## STRUCTURE
-
-```text
-GPUWatch/
-├── electron/    # Electron main, preload bridge, IPC, helper process runner
-├── crates/      # Rust helper CLI and shared gpuwatcher-core backend logic
-├── src/         # React/TypeScript frontend: screens, API boundary, DTO types
-├── docs/        # Active user docs plus historical plan/draft records
-├── schemas/     # Protocol JSON schema artifact
-├── fixtures/    # Protocol fixtures used by Rust protocol tests
-├── smoke/       # Local smoke scripts for Electron first-run checks
-└── README.md    # Korean utility app README
-```
-
-## WHERE TO LOOK
-
-| Task | Start here | Notes |
-|---|---|---|
-| Run or build app | `package.json`, `electron/`, `crates/gpuwatcher-helper/` | Normal runtime is Electron plus local helper. |
-| Frontend routing | `src/App.tsx` | Overview, detail, process table, settings. |
-| Electron bridge API | `src/lib/api.ts`, `electron/preload.ts`, `electron/helperContract.ts` | Renderer uses action-specific `window.gpuwatcher` methods. |
-| DTO types | `src/lib/types.ts`, `crates/gpuwatcher-core/src/models.rs` | TS mirrors Rust serde camelCase DTOs. |
-| SSH collection | `crates/gpuwatcher-core/src/no_install_collector.rs` | Fixed script only; no remote package. |
-| SSH transport | `crates/gpuwatcher-core/src/command_runner.rs` | System `ssh` argv/script wrapper. |
-| Parse `nvidia-smi` | `crates/gpuwatcher-core/src/nvidia_smi.rs` | Preserve unknown values as `None`/`null`. |
-| Polling and services | `electron/scheduler.ts`, `crates/gpuwatcher-core/src/service.rs` | Electron main owns scheduling; core stores synthesized snapshots. |
-| SQLite and migrations | `crates/gpuwatcher-core/src/repository.rs` | Canonical DB plus legacy migration backup logic. |
-| Active docs | `README.md`, `docs/setup/`, `docs/protocol/`, `docs/troubleshooting.md`, `docs/smoke-checklist.md` | Do not treat historical docs as current setup. |
-
-## COMMANDS
-
+## Commands
 ```bash
-npm run dev
-npm run electron:dev
-npm run electron:pack
-npm run test
-npm run build
-npm run electron:build
-npm run helper:build
+npm run dev                         # Vite renderer at 127.0.0.1:5173
+npm run electron:dev                # builds Electron TS, then starts Electron against Vite
+npm run build                       # tsc + vite build
+npm run test -- --run               # Vitest once; add a test file path for focused runs
+npm run electron:build              # tsc -p tsconfig.electron.json, includes .cts preload runtime
+npm run helper:build                # cargo build for helper binary
+npm run electron:pack               # build + helper build + unsigned electron-builder dir package
+npm run electron:dist:unsigned      # internal/test unsigned DMG+ZIP artifacts, no publish
+npm run smoke:electron:first-run    # Electron dev-surface UI smoke; requires built helper
+node smoke/electron-packaged-app-smoke.mjs  # packaged .app smoke after electron:pack
 cargo test --manifest-path crates/gpuwatcher-core/Cargo.toml
 cargo test --manifest-path crates/gpuwatcher-helper/Cargo.toml
 GPUWATCHER_LIVE_SSH_TARGET=tml-server cargo test --manifest-path crates/gpuwatcher-core/Cargo.toml live_tml_server -- --ignored --nocapture
 ```
 
-## PROJECT CONVENTIONS
+## Verification Gotchas
+- Normal tests must not require live SSH or `tml-server`; live checks stay ignored and env-gated with the exact command above.
+- `npm run electron:pack` creates an unsigned local `.app` directory, not a signed/notarized/DMG/uploaded release. Discover the app path with `find release/electron -name GPUWatcher.app -type d` instead of hardcoding `mac` vs `mac-arm64`.
+- `npm run electron:dist:unsigned` creates internal/test unsigned DMG+ZIP artifacts only. They are not signed, notarized, uploaded, auto-updated, production release-ready, or external distribution-ready.
+- Plain Vite browser runs lack the Electron preload bridge; screens should keep static identity/read-only empty states and explicit `backend_unavailable` errors for backend actions.
+- Use `GPUWATCHER_TEST_DATA_DIR` only for tests/smoke isolation. Production data lives under the macOS data dir as `GPUWatcher/gpuwatcher.sqlite3`.
+- Rust LSP may be unavailable because `rust-analyzer` is not installed here; use `cargo fmt`, focused Cargo tests, and crate tests for Rust verification.
+- GUI-launched Electron may not inherit Terminal SSH state (`SSH_AUTH_SOCK`, first-use `known_hosts`, passphrases, remote `PATH`). Reproduce SSH failures from the same launch context.
 
-- Remote hosts need only an NVIDIA driver with `nvidia-smi`, a POSIX shell, `ps`, and key-based SSH from macOS.
-- Remote hosts do not need GPUWatcher, nvitop, Python, collector packages, or repository files installed.
+## Product Invariants
 - Backend synthesizes protocol v1 JSON locally from sectioned command output; remote stdout is not protocol JSON.
-- Store only the latest successful snapshot; failed polls update health/error metadata and preserve stale success.
-- Unknown or unavailable GPU/process metrics are `null`/`unknown`, never fabricated zeroes.
-- Optional `compute-apps`, `pmon`, `dmon`, and `ps` failures degrade to warnings if the base GPU CSV succeeds.
-- Local production data uses the macOS data dir at `GPUWatcher/gpuwatcher.sqlite3`; `GPUWATCHER_TEST_DATA_DIR` is only for isolated tests and smoke runs.
-- Migration backups are local SQLite copies made before destructive legacy schema changes; restore by closing the app and replacing the DB with the backup copy.
-- `docs/plan/` and `docs/draft/` are historical records; active instructions live in README/setup/protocol/troubleshooting/smoke docs.
-- `.sisyphus/`, `.playwright-mcp/`, `dist/`, `dist-electron/`, `release/`, `node_modules/`, and `crates/**/target/` are local artifacts, not product source.
-- Every future commit attribution must use exactly:
+- Store only the latest successful snapshot. Failed polls update health/error metadata and preserve stale success without adding history samples.
+- Unknown/unavailable GPU or process metrics stay `null`/`unknown`; never convert `N/A`, `-`, missing pmon/dmon, or disappeared PIDs to zero.
+- Optional `compute-apps`, `pmon`, `dmon`, `mig`, PCIe, and `ps` sections may degrade to warnings if the required base GPU CSV succeeds.
+- Migration backups are local SQLite copies made only before destructive legacy schema changes; restore by closing the app and replacing the DB with the backup copy.
+
+## Do Not Reintroduce
+- Tauri runtime, `@tauri-apps/*`, `src-tauri/`, Tauri docs as active setup, or `TAURI_` config.
+- `gpuwatcher --json` as a runtime path.
+- `collectorCommand` / `collector_command` in runtime API, UI, DB saved settings, or docs except legacy migration tests/negative guardrails.
+- User-configurable remote shell commands or alternate installed-collector modes.
+- Generic renderer bridge methods such as `invoke`, `runAction`, arbitrary helper action dispatch, helper path exposure, or renderer-callable `pollDueServers`.
+- Claims that unsigned local packages or internal/test DMG+ZIP artifacts are signed, notarized, uploaded, auto-updated, production release-ready, or suitable for external distribution.
+
+## Commit Convention
+- Do not commit unless explicitly requested.
+- Existing history uses English conventional commits such as `feat(electron): ...`, `refactor(core): ...`, `docs(electron): ...`.
+- Every future commit attribution must include exactly:
   `Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)`
   `Co-authored-by: Sisyphus <clio-agent@sisyphuslabs.ai>`
-
-## ANTI-PATTERNS
-
-- Do not reintroduce `gpuwatcher --json` as a runtime path.
-- Do not add `collectorCommand` / `collector_command` to runtime API, UI, DB schema, or saved settings.
-- Do not add a user-configurable remote shell command or fallback collector mode.
-- Do not document remote GPUWatcher/nvitop/Python installs as required.
-- Do not convert `N/A`, `-`, missing pmon/dmon, or disappeared PIDs to zero.
-- Do not make normal tests depend on `tml-server`; live tests must stay ignored and env-gated.
-- Do not weaken tests that protect the no-install SSH pivot.
-- Do not claim unsigned local packages are signed, notarized, DMG releases, or uploaded releases.
-
-## NOTES
-
-- Rust LSP may be unavailable in this environment because `rust-analyzer` is missing; use `cargo fmt` and `cargo test` for Rust verification.
-- Plain Vite browser runs lack the Electron preload bridge; screens must still show static identity instead of being fully obscured by backend-unavailable errors.
-- GUI-launched Electron apps can miss Terminal SSH state such as `SSH_AUTH_SOCK`, first-use `known_hosts` prompts, passphrase prompts, and shell `PATH` customizations. Reproduce SSH checks from the same launch context when possible.
-- Current branch has initial project commits; do not commit unless explicitly requested.

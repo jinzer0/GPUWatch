@@ -34,7 +34,7 @@ GPUWatcher는 여러 Linux NVIDIA GPU 서버의 최신 GPU 상태, GPU 프로세
 | 로컬 DB | SQLite 3 |
 | SSH | macOS 기본 OpenSSH 또는 호환되는 system `ssh` |
 
-아직 signed 또는 notarized release는 없습니다. 지금은 저장소를 받아 개발 모드로 실행하거나, 로컬 unsigned `.app` 디렉터리를 만들어 smoke test합니다.
+아직 signed 또는 notarized release는 없습니다. 지금은 저장소를 받아 개발 모드로 실행하거나, 로컬 unsigned `.app` 디렉터리와 내부 테스트용 unsigned DMG/ZIP artifact를 만들어 smoke test합니다.
 
 ## Quick Start
 
@@ -135,7 +135,7 @@ Rust helper binary만 빌드하려면 다음 명령을 사용합니다.
 npm run helper:build
 ```
 
-로컬 Electron package smoke용 앱 디렉터리는 다음 명령으로 만듭니다. 이 결과물은 signed 또는 notarized release가 아니라 signing을 건너뛴 로컬 unsigned package입니다.
+로컬 Electron package smoke용 앱 디렉터리는 다음 명령으로 만듭니다. 이 결과물은 signed 또는 notarized release가 아니라 signing을 건너뛴 로컬 unsigned `.app` package입니다.
 
 ```bash
 npm run electron:pack
@@ -149,7 +149,13 @@ test -n "$APP_PATH"
 open "$APP_PATH"
 ```
 
-Gatekeeper가 막거나 quarantine 경고가 보이면 로컬 unsigned app caveat로 다루세요. 이 문서는 signing, notarization, DMG, upload 절차를 다루지 않습니다.
+내부 테스트용 unsigned DMG와 ZIP artifact가 필요하면 별도 명령을 사용합니다. 이 명령은 local build만 만들며 upload, publish, auto-update 설정을 하지 않습니다.
+
+```bash
+npm run electron:dist:unsigned
+```
+
+생성된 DMG/ZIP은 signed, notarized, uploaded, auto-updated, production release-ready artifact가 아닙니다. Gatekeeper가 막거나 quarantine 경고가 보이면 unsigned test artifact caveat로 기록하세요. 외부 배포나 production release 기준으로 쓰지 마세요.
 
 프론트엔드만 브라우저에서 보고 싶다면 다음 명령을 사용할 수 있습니다. 이 경우 Electron preload bridge가 없으므로 저장, refresh 같은 backend action은 동작하지 않습니다. 정적 화면 식별과 읽기 전용 empty state 확인에만 쓰세요.
 

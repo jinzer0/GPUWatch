@@ -39,6 +39,22 @@ Expected result: Electron is the normal desktop runtime, and the plain browser f
 
 Expected result: local packaging is usable for smoke checks only. Signing and notarization are outside this scope.
 
+## Internal Unsigned DMG And ZIP Smoke
+
+1. Run `npm run electron:dist:unsigned`.
+2. Discover generated artifacts under `release/electron/` without hardcoding `mac` or `mac-arm64`.
+3. Run the unsigned distribution artifact validator when present.
+4. Confirm the current DMG and ZIP are non-empty and contain `GPUWatcher.app`.
+5. Confirm the helper is copied outside ASAR under app resources at `gpuwatcher-helper/gpuwatcher-helper`.
+6. Confirm the artifacts are unsigned internal/test outputs, not signed, notarized, uploaded, auto-updated, production release-ready, or external distribution-ready outputs.
+7. If macOS blocks opening or mounting because of Gatekeeper or quarantine, record that as an unsigned artifact caveat rather than a signing result.
+
+```bash
+node smoke/electron-unsigned-dist-artifacts.mjs
+```
+
+Expected result: internal/test DMG and ZIP artifacts are present and inspectable. They are not production releases.
+
 ## SSH And First-Run GUI Caveats
 
 Before testing a live server from the GUI, verify SSH in Terminal:
