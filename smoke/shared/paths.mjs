@@ -36,7 +36,7 @@ export function helperPathForApp(appPath) {
   return path.join(appPath, 'Contents', 'Resources', 'gpuwatcher-helper', helperBinaryName());
 }
 
-async function walk(directory) {
+export async function walk(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
   const paths = [];
   for (const entry of entries) {
@@ -51,9 +51,12 @@ async function walk(directory) {
   return paths;
 }
 
+export function releaseElectronRoot() {
+  return path.join(root, 'release', 'electron');
+}
+
 export async function discoverAppPath() {
-  const releaseRoot = path.join(root, 'release', 'electron');
-  const paths = await walk(releaseRoot);
+  const paths = await walk(releaseElectronRoot());
   const appPath = paths.find((candidate) => candidate.endsWith(`${path.sep}GPUWatcher.app`));
   if (!appPath) {
     throw new Error('Expected release/electron/**/GPUWatcher.app from npm run electron:pack, found none.');
