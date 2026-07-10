@@ -68,7 +68,7 @@ export async function buildPackagedEvidence({ taskEvidenceName, startedAt, appPa
     `Isolated HOME: ${failure.tempHomeDir}`,
     `Renderer bridge structured helperHealth error: ${JSON.stringify(failure.bridgeError)}`,
     `Visible helper error excerpt: ${failure.errorBody.split('\n').filter((line) => /helper_spawn_failed|permission denied|EACCES|failed to spawn helper|helper_contract|helper|error/i.test(line)).slice(0, 12).join(' | ')}`,
-    `App remained nonblank after helper error: ${failure.errorBody.toLowerCase().includes('gpuwatcher v0.1') && failure.errorBody.toLowerCase().includes('server registry')}`,
+    `App remained nonblank after helper error: ${failure.errorBody.toLowerCase().includes('gpuwatcher') && failure.errorBody.toLowerCase().includes('server registry')}`,
     `Navigation after helper error: ${failure.navigableBody.toLowerCase().includes('fleet snapshot') || failure.navigableBody.toLowerCase().includes('server registry')}`,
     `Helper restored executable: ${helperRestored(helperPath)}`,
     `Screenshot: ${failure.errorScreenshot}`,

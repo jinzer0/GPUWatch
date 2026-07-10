@@ -42,8 +42,8 @@ export async function runPackagedStartupScenario({ appPath, helperPath, logs, sc
   const nonRepoCwd = await createNonRepoCwd('gpuwatcher task 2 cwd parent ');
   const child = launchPackagedApp({ appPath, cwd: nonRepoCwd, dataDir: tempDataDir, port: cdpPort, extraEnv: { HOME: tempHomeDir }, logs, spawnLogged, timestamp });
   const cdp = await connectPackagedCdp(cdpPort);
-  await waitForText(cdp, 'GPUWatcher v0.1', 45000);
-  await waitForText(cdp, 'Remote GPU console');
+  await waitForText(cdp, 'GPUWatcher', 45000);
+  await waitForText(cdp, 'Fleet snapshot');
   const initialScreenshot = await screenshot(cdp, evidenceDir, 'task-2-gpuwatcher-maintainability-refactor-plan-packaged-app-initial.png', (file) => screenshots.push(file));
   const info = await getBridgeInfo(cdp);
   assertBridgeGuardrails(info, 'packaged app');

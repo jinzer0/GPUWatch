@@ -19,7 +19,7 @@ export async function runPackagedHelperErrorScenario({ appPath, helperPath, logs
   try {
     child = launchPackagedApp({ appPath, cwd: nonRepoCwd, dataDir: tempDataDir, port: cdpPort, extraEnv: { HOME: tempHomeDir }, logs, spawnLogged, timestamp });
     cdp = await connectPackagedCdp(cdpPort);
-    await waitForText(cdp, 'GPUWatcher v0.1', 45000);
+    await waitForText(cdp, 'GPUWatcher', 45000);
     await clickText(cdp, 'Settings');
     await waitForText(cdp, 'Server registry');
     const bridgeError = await bridgeHelperHealth(cdp);
