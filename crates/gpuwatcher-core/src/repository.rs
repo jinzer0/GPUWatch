@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{path::Path, time::Duration};
 
 use chrono::Utc;
 use rusqlite::Connection;
@@ -12,6 +12,8 @@ mod polling;
 mod schema;
 mod servers;
 mod snapshots;
+
+const SQLITE_BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub struct Repository {
     conn: Connection,
@@ -30,7 +32,13 @@ impl Repository {
     }
 
     fn from_connection(conn: Connection) -> Result<Self, AppError> {
-        conn.execute_batch("PRAGMA foreign_keys = ON;")?;
+        conn.busy_timeout(SQLITE_BUSY_TIMEOUT)?;
+        conn.execute_batch(
+            "
+            PRAGMA journal_mode = WAL;
+            PRAGMA foreign_keys = ON;
+            ",
+        )?;
         Ok(Self { conn })
     }
 }
