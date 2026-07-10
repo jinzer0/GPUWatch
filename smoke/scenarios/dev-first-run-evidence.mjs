@@ -16,7 +16,7 @@ export function buildDevFirstRunEvidence({ tempDataDir, tempHomeDir, dbPath, bri
     `Isolated data dir: ${tempDataDir}`,
     `Isolated HOME for SSH import fixture: ${tempHomeDir}`,
     `Canonical test DB exists: ${existsSync(dbPath)} (${dbPath})`,
-    'Static identity visible: GPUWatcher v0.1; Remote GPU console',
+    'Static identity visible: GPUWatcher; Fleet snapshot',
     `Bridge keys: ${bridgeInfo.keys.join(', ')}`,
     `Forbidden bridge keys absent: ${forbiddenBridgeKeys.join(', ')}`,
     `Electron metadata keys: ${electronMetaKeys.join(', ')}`,
@@ -35,7 +35,7 @@ export function buildDevFirstRunEvidence({ tempDataDir, tempHomeDir, dbPath, bri
     `Action: Settings -> Test SSH connection for disabled smoke server ${savedServerId} at 127.0.0.1:1`,
     `Visible error excerpt: ${errorSurface.split('\n').filter((line) => /error|ssh|connection|helper/i.test(line)).slice(0, 8).join(' | ')}`,
     'Visible error sanitized: no raw key path, token, or private-key markers',
-    `App remained nonblank: ${/GPUWatcher v0\.1|Server registry/i.test(afterErrorBody)}`,
+    `App remained nonblank: ${/GPUWatcher|Server registry/i.test(afterErrorBody)}`,
     'Navigation after error: clicked Overview and returned to Settings successfully',
     `Screenshot: ${screenshots[3]}`,
     `Isolated data dir: ${tempDataDir}`

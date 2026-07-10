@@ -64,8 +64,8 @@ async function runScenario(logs, spawnLogged) {
     pagePredicate: (page) => page.type === 'page' && page.webSocketDebuggerUrl && String(page.url).startsWith(viteUrl),
     timeoutMs: 30000
   });
-  await smokeWaitForText(cdp, 'GPUWatcher v0.1', 30000);
-  await smokeWaitForText(cdp, 'Remote GPU console');
+  await smokeWaitForText(cdp, 'GPUWatcher', 30000);
+  await smokeWaitForText(cdp, 'Fleet snapshot');
   await screenshot(cdp, evidenceDir, 'task-9-electron-first-run-initial.png', (file) => screenshots.push(file));
 
   const { bridgeInfo, electronMetaKeys } = await runBridgeGuardrails(cdp);
