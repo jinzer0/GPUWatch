@@ -142,7 +142,7 @@ export async function bridgeHelperHealth(cdp) {
 
 export async function assertNonBlank(cdp, label) {
   const text = await bodyText(cdp);
-  const hasStableSurface = /GPUWatcher v0\.1|Fleet snapshot|Server registry|Process Table|Stored GPU history/i.test(text);
+  const hasStableSurface = /GPUWatcher|Fleet snapshot|Server registry|Process Table|Stored GPU history/i.test(text);
   if (!hasStableSurface || text.trim().length === 0) {
     throw new Error(`${label} left the app blank or without shell identity.`);
   }
