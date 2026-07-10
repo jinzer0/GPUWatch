@@ -32,12 +32,12 @@ export async function runGuardedHelperAction<Action extends HelperAction, Payloa
   const serverId = entry?.pollingOverlapKey === 'server-id' && isNetworkServerAction(request.action) ? serverOverlapId(request) : null;
 
   if (serverId && state.activeServerActions.has(serverId)) {
-    return contractError('poll_already_running', 'poll already running for this server or same-server mutation is queued') as HelperResponseEnvelope<Data>;
+    return contractError('poll_already_running', 'poll already running for this server or global network cap reached') as HelperResponseEnvelope<Data>;
   }
 
   const networkAction = isNetworkServerAction(request.action);
   if (networkAction && state.activeNetworkActions >= pollConcurrency) {
-    return contractError('poll_already_running', 'poll already running for this server or same-server mutation is queued') as HelperResponseEnvelope<Data>;
+    return contractError('poll_already_running', 'poll already running for this server or global network cap reached') as HelperResponseEnvelope<Data>;
   }
 
   if (serverId) {

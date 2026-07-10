@@ -106,7 +106,7 @@ describe('Electron scheduler', () => {
     await refresh;
   });
 
-  it('allows same-server settings writes during refresh so stale poll results can be discarded by config revision', async () => {
+  it('allows same-server settings writes during refresh and relies on stale poll discard', async () => {
     const releaseRefresh = deferred<void>();
     const actions: string[] = [];
     const runner: HelperRunner = {
@@ -163,7 +163,7 @@ describe('Electron scheduler', () => {
       error: {
         layer: 'helper_contract',
         type: 'poll_already_running',
-        message: 'poll already running for this server or same-server mutation is queued'
+        message: 'poll already running for this server or global network cap reached'
       }
     });
     releaseRefresh.resolve();
@@ -217,7 +217,7 @@ describe('Electron scheduler', () => {
       error: {
         layer: 'helper_contract',
         type: 'poll_already_running',
-        message: 'poll already running for this server or same-server mutation is queued'
+        message: 'poll already running for this server or global network cap reached'
       }
     });
     release.resolve();

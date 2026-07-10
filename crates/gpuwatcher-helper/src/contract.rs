@@ -155,7 +155,7 @@ pub const HELPER_CONTRACT: &[HelperContractEntry] = &[
         timeout_class: TimeoutClass::Local10s,
         db_mutation: DbMutation::ServersWrite,
         polling_overlap_key: PollingOverlapKey::ServerId,
-        fallback_behavior: "Serialize DB mutation and block same-server polling while saving.",
+        fallback_behavior: "Serialize short DB mutations; same-server polling may continue and stale results are discarded by configRevision.",
         notes: "Creates or updates server, increments config revision on update, and ensures health.",
     },
     HelperContractEntry {
@@ -166,7 +166,7 @@ pub const HELPER_CONTRACT: &[HelperContractEntry] = &[
         timeout_class: TimeoutClass::Local10s,
         db_mutation: DbMutation::ServersDelete,
         polling_overlap_key: PollingOverlapKey::ServerId,
-        fallback_behavior: "Serialize DB mutation and block same-server polling while deleting.",
+        fallback_behavior: "Serialize short DB mutations; same-server polling may continue and stale results are discarded when the server row is removed.",
         notes: "Deletes the server row and dependent state through the repository schema.",
     },
     HelperContractEntry {
@@ -177,7 +177,7 @@ pub const HELPER_CONTRACT: &[HelperContractEntry] = &[
         timeout_class: TimeoutClass::Local10s,
         db_mutation: DbMutation::ServerEnabledWrite,
         polling_overlap_key: PollingOverlapKey::ServerId,
-        fallback_behavior: "Serialize DB mutation and block same-server polling while toggling.",
+        fallback_behavior: "Serialize short DB mutations; same-server polling may continue and stale results are discarded by configRevision.",
         notes: "Updates enabled state, config revision, and health status.",
     },
     HelperContractEntry {
@@ -243,7 +243,7 @@ pub const HELPER_CONTRACT: &[HelperContractEntry] = &[
         timeout_class: TimeoutClass::Ssh60s,
         db_mutation: DbMutation::PollHealthStartAndResultWrite,
         polling_overlap_key: PollingOverlapKey::ServerId,
-        fallback_behavior: "Electron main rejects same-server overlap with poll_already_running and discards stale configRevision results.",
+        fallback_behavior: "Electron main rejects same-server network overlap with poll_already_running and discards stale configRevision results.",
         notes: "Marks polling, runs SSH collection, and stores success snapshot/history or failure health metadata.",
     },
     HelperContractEntry {

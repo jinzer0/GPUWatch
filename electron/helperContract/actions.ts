@@ -58,7 +58,7 @@ export const helperContract = [
     dbMutation: 'servers-write',
     pollingOverlapKey: 'server-id',
     helperEnvelope: 'request:{action:string,payload:object};response:{ok:true,data}|{ok:false,error:{layer,type,message}}',
-    fallbackBehavior: 'Serialize with other DB-mutating helper calls; if the saved server is currently polling, Electron main must prevent overlap or discard stale poll results by config revision.',
+    fallbackBehavior: 'Serialize with other short DB-mutating helper calls; same-server polling may continue and stale poll results are discarded by configRevision.',
     notes: 'Creates or updates a server, increments configRevision on update, and ensures server_health status is idle or disabled.'
   },
   {
@@ -70,7 +70,7 @@ export const helperContract = [
     dbMutation: 'servers-delete',
     pollingOverlapKey: 'server-id',
     helperEnvelope: 'request:{action:string,payload:object};response:{ok:true,data}|{ok:false,error:{layer,type,message}}',
-    fallbackBehavior: 'Serialize with other DB-mutating helper calls and block same-server polling while deleting; return void data on success.',
+    fallbackBehavior: 'Serialize with other short DB-mutating helper calls; same-server polling may continue and stale poll results are discarded when the server row is removed.',
     notes: 'Deletes server row; health, latest snapshot, and history rows are removed by foreign-key cascade where applicable.'
   },
   {
@@ -82,7 +82,7 @@ export const helperContract = [
     dbMutation: 'server-enabled-write',
     pollingOverlapKey: 'server-id',
     helperEnvelope: 'request:{action:string,payload:object};response:{ok:true,data}|{ok:false,error:{layer,type,message}}',
-    fallbackBehavior: 'Serialize with other DB-mutating helper calls and block same-server polling while toggling enabled state.',
+    fallbackBehavior: 'Serialize with other short DB-mutating helper calls; same-server polling may continue and stale poll results are discarded by configRevision.',
     notes: 'Updates enabled, increments configRevision, and sets health to idle or disabled.'
   },
   {
@@ -154,7 +154,7 @@ export const helperContract = [
     dbMutation: 'poll-health-start-and-result-write',
     pollingOverlapKey: 'server-id',
     helperEnvelope: 'request:{action:string,payload:object};response:{ok:true,data}|{ok:false,error:{layer,type,message}}',
-    fallbackBehavior: 'Electron main must reject same-server overlap with poll_already_running, preserve stale success on failure, and discard results when configRevision changed.',
+    fallbackBehavior: 'Electron main rejects same-server network overlap with poll_already_running, preserves stale success on failure, and discards results when configRevision changed.',
     notes: 'Checks enabled state, marks health polling, runs no-install SSH collection, stores latest success/history or failure health metadata.'
   },
   {
