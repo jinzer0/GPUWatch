@@ -1,7 +1,7 @@
 import type { FormEvent } from 'react';
 
-import { StatusBadge } from '../../components/ui';
-import { formatUnknown, sanitizeMessage } from '../../lib/format';
+import { DiagnosticPanel, StatusBadge } from '../../components/ui';
+import { sanitizeMessage } from '../../lib/format';
 import type { ConnectionTestResultDto } from '../../lib/types';
 import type { SettingsFormState } from './settingsModel';
 import { SettingsImportPanel } from './SettingsImportPanel';
@@ -9,7 +9,21 @@ import type { useSettingsController } from './useSettingsController';
 
 type SettingsServerFormProps = Pick<
   ReturnType<typeof useSettingsController>,
-  'deleteMutation' | 'editServer' | 'importCandidate' | 'importResult' | 'saveMutation' | 'sshConfigImportMutation' | 'testMutation' | 'updateField'
+  | 'bulkImportCandidateMetadata'
+  | 'bulkImportSaveMutation'
+  | 'bulkImportSaveResult'
+  | 'deleteMutation'
+  | 'editServer'
+  | 'importCandidate'
+  | 'importResult'
+  | 'saveMutation'
+  | 'saveSelectedImportCandidates'
+  | 'selectAllImportableCandidates'
+  | 'selectedImportHostAliases'
+  | 'sshConfigImportMutation'
+  | 'testMutation'
+  | 'toggleImportCandidateSelection'
+  | 'updateField'
 > & {
   readonly connectionResult: ConnectionTestResultDto | undefined;
   readonly form: SettingsFormState;
@@ -17,6 +31,9 @@ type SettingsServerFormProps = Pick<
 };
 
 export const SettingsServerForm = ({
+  bulkImportCandidateMetadata,
+  bulkImportSaveMutation,
+  bulkImportSaveResult,
   connectionResult,
   deleteMutation,
   editServer,
@@ -24,9 +41,13 @@ export const SettingsServerForm = ({
   importCandidate,
   importResult,
   saveMutation,
+  saveSelectedImportCandidates,
+  selectAllImportableCandidates,
+  selectedImportHostAliases,
   sshConfigImportMutation,
   submitForm,
   testMutation,
+  toggleImportCandidateSelection,
   updateField
 }: SettingsServerFormProps) => (
   <form className="panel space-y-5 p-5" onSubmit={submitForm}>
@@ -41,11 +62,16 @@ export const SettingsServerForm = ({
     </div>
 
     <SettingsImportPanel
-      error={sshConfigImportMutation.error}
+      bulkImportCandidateMetadata={bulkImportCandidateMetadata}
+      bulkImportSaveMutation={bulkImportSaveMutation}
+      bulkImportSaveResult={bulkImportSaveResult}
       importCandidate={importCandidate}
       importResult={importResult}
-      isPending={sshConfigImportMutation.isPending}
-      mutate={() => sshConfigImportMutation.mutate()}
+      saveSelectedImportCandidates={saveSelectedImportCandidates}
+      selectAllImportableCandidates={selectAllImportableCandidates}
+      selectedImportHostAliases={selectedImportHostAliases}
+      sshConfigImportMutation={sshConfigImportMutation}
+      toggleImportCandidateSelection={toggleImportCandidateSelection}
     />
 
     <div className="grid grid-cols-2 gap-4">
@@ -102,8 +128,11 @@ export const SettingsServerForm = ({
     {connectionResult ? (
       <div className="surface p-4 text-sm">
         <div className="mb-2"><StatusBadge status={connectionResult.status} /></div>
-        <div>{sanitizeMessage(connectionResult.message)}</div>
-        <div className="mt-1 text-[color:var(--color-muted)]">{formatUnknown(connectionResult.errorType)}</div>
+        {connectionResult.ok ? (
+          <div>{sanitizeMessage(connectionResult.message)}</div>
+        ) : (
+          <DiagnosticPanel className="mt-3" errorType={connectionResult.errorType} message={connectionResult.message} title="Connection diagnostic" />
+        )}
       </div>
     ) : null}
   </form>

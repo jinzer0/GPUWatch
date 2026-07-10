@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import * as api from './api';
 import {
   deleteServer,
   getServerDetail,
@@ -123,6 +124,25 @@ describe('frontend backend transport adapter', () => {
     await expect(saveServer(serverInput)).rejects.toThrow('GPUWatcher backend is unavailable');
     await expect(deleteServer('server-1')).rejects.toThrow('GPUWatcher backend is unavailable');
     await expect(setServerEnabled('server-1', true)).rejects.toThrow('GPUWatcher backend is unavailable');
+  });
+
+  it('keeps SSH import pathless and bulk save orchestration on action-specific saveServer calls', async () => {
+    const listSshConfigHostsBridge = vi.fn().mockResolvedValue(okBridgeResponse(sshConfigImportResult));
+    const saveServerBridge = vi.fn().mockResolvedValue(okBridgeResponse(savedServer));
+    setGpuWatcherBridge({ listSshConfigHosts: listSshConfigHostsBridge, saveServer: saveServerBridge });
+
+    await expect(listSshConfigHosts()).resolves.toEqual(sshConfigImportResult);
+    await expect(Promise.all([saveServer(serverInput), saveServer({ ...serverInput, name: 'Second import' })])).resolves.toEqual([
+      savedServer,
+      savedServer
+    ]);
+
+    expect(listSshConfigHostsBridge).toHaveBeenCalledTimes(1);
+    expect(listSshConfigHostsBridge).toHaveBeenCalledWith({});
+    expect(saveServerBridge).toHaveBeenCalledTimes(2);
+    expect(saveServerBridge.mock.calls.map(([payload]) => Object.keys(payload).sort())).toEqual([['input'], ['input']]);
+    expect(saveServerBridge.mock.calls.map(([payload]) => payload.input)).toEqual([serverInput, { ...serverInput, name: 'Second import' }]);
+    expect('bulkSaveServers' in api).toBe(false);
   });
 
   it('rejects invalid history requests before calling the bridge', async () => {

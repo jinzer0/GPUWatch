@@ -1,6 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../../lib/api';
+import type { DiagnosticInput } from '../../lib/diagnostics';
 import type { OverviewFilters } from '../../lib/visibility';
 
 export type ActionFeedback =
@@ -9,6 +10,7 @@ export type ActionFeedback =
       readonly state: 'pending';
     }
   | {
+      readonly diagnostic?: DiagnosticInput;
       readonly label: string;
       readonly message: string;
       readonly state: 'error' | 'success';

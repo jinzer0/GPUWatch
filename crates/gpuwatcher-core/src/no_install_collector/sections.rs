@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use crate::diagnostics::sanitize_diagnostic_excerpt;
 use crate::error::AppError;
 
 const SECTION_PREFIX: &str = "__GPUWATCH_SECTION__:";
@@ -145,17 +146,96 @@ pub(super) fn first_non_empty_line(value: &str) -> Option<String> {
 }
 
 fn section_message(section: &ScriptSection, fallback: &str) -> String {
-    section
-        .body
-        .lines()
-        .map(str::trim)
-        .find(|line| !line.is_empty())
-        .unwrap_or(fallback)
-        .to_string()
+    let sanitized = sanitize_diagnostic_excerpt(&section.body);
+    if sanitized.is_empty() {
+        fallback.to_string()
+    } else {
+        sanitized
+    }
 }
 
 fn contains_command_missing(value: &str) -> bool {
     let lower = value.to_ascii_lowercase();
     lower.contains("nvidia-smi")
         && (lower.contains("not found") || lower.contains("command not found"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn section(status: i32, body: &str) -> ScriptSection {
+        ScriptSection {
+            status,
+            body: body.to_string(),
+        }
+    }
+
+    #[test]
+    fn required_gpu_csv_maps_command_not_found_to_nvidia_smi_missing() {
+        let mut sections = HashMap::new();
+        sections.insert(
+            "gpu_csv".to_string(),
+            section(127, "sh: 1: nvidia-smi: command not found"),
+        );
+
+        let err = required_gpu_csv(&sections).expect_err("missing nvidia-smi should fail");
+
+        assert_eq!(err.layer, "collector");
+        assert_eq!(err.error_type, "nvidia_smi_missing");
+        assert!(err.message.contains("nvidia-smi"));
+    }
+
+    #[test]
+    fn required_gpu_csv_maps_nonzero_base_query_to_remote_gpu_query_failed() {
+        let mut sections = HashMap::new();
+        sections.insert(
+            "gpu_csv".to_string(),
+            section(
+                9,
+                "Failed to initialize NVML: Driver/library version mismatch",
+            ),
+        );
+
+        let err = required_gpu_csv(&sections).expect_err("base GPU query should fail");
+
+        assert_eq!(err.layer, "collector");
+        assert_eq!(err.error_type, "remote_gpu_query_failed");
+        assert!(err.message.contains("Failed to initialize NVML"));
+    }
+
+    #[test]
+    fn required_gpu_csv_sanitizes_failure_message() {
+        let mut sections = HashMap::new();
+        sections.insert(
+            "gpu_csv".to_string(),
+            section(
+                127,
+                "nvidia-smi: command not found\n-----BEGIN OPENSSH PRIVATE KEY-----\nsecret\n-----END OPENSSH PRIVATE KEY-----\ntoken=abc123 password hunter2 secret: keepout /Users/alice/.ssh/id_ed25519",
+            ),
+        );
+
+        let err = required_gpu_csv(&sections).expect_err("missing nvidia-smi should fail");
+
+        assert_eq!(err.error_type, "nvidia_smi_missing");
+        assert!(err.message.contains("nvidia-smi: command not found"));
+        assert!(err.message.contains("[private key redacted]"));
+        assert!(err.message.contains("token=[redacted]"));
+        assert!(err.message.contains("password=[redacted]"));
+        assert!(err.message.contains("secret=[redacted]"));
+        assert!(err.message.contains("[path redacted]"));
+        assert!(!err.message.contains("abc123"));
+        assert!(!err.message.contains("hunter2"));
+        assert!(!err.message.contains("keepout"));
+        assert!(!err.message.contains("/Users/alice/.ssh/id_ed25519"));
+    }
+
+    #[test]
+    fn parse_sections_rejects_malformed_input() {
+        let err = parse_sections("__GPUWATCH_END__:gpu_csv")
+            .expect_err("unopened end marker should be malformed");
+
+        assert_eq!(err.layer, "collector");
+        assert_eq!(err.error_type, "remote_output_malformed");
+    }
 }

@@ -4,7 +4,11 @@ use crate::error::AppError;
 pub fn classify_ssh_failure(exit_code: Option<i32>, stderr: &str) -> AppError {
     let detail = stderr.trim();
     let lower = detail.to_ascii_lowercase();
-    if lower.contains("permission denied") || lower.contains("publickey") {
+    if lower.contains("permission denied")
+        || lower.contains("publickey")
+        || lower.contains("enter passphrase for key")
+        || lower.contains("read_passphrase")
+    {
         return AppError::new(
             "transport_ssh",
             "ssh_auth_failed",
@@ -28,6 +32,9 @@ pub fn classify_ssh_failure(exit_code: Option<i32>, stderr: &str) -> AppError {
         );
     }
     if lower.contains("could not resolve hostname")
+        || lower.contains("nodename nor servname")
+        || lower.contains("name or service not known")
+        || lower.contains("temporary failure in name resolution")
         || lower.contains("no route to host")
         || lower.contains("connection refused")
         || lower.contains("network is unreachable")
@@ -73,6 +80,52 @@ mod tests {
         let err = classify_ssh_failure(Some(255), "Permission denied (publickey).");
         assert_eq!(err.layer, "transport_ssh");
         assert_eq!(err.error_type, "ssh_auth_failed");
+    }
+
+    #[test]
+    fn maps_common_ssh_stderr_variants_to_stable_error_types() {
+        let cases = [
+            (
+                Some(255),
+                "Enter passphrase for key '/Users/alice/.ssh/id_ed25519':",
+                "ssh_auth_failed",
+            ),
+            (
+                Some(255),
+                "read_passphrase: can't open /dev/tty: Device not configured",
+                "ssh_auth_failed",
+            ),
+            (
+                Some(255),
+                "Permission denied (publickey,password).",
+                "ssh_auth_failed",
+            ),
+            (
+                Some(255),
+                "WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!",
+                "ssh_host_key_failed",
+            ),
+            (
+                Some(255),
+                "ssh: Could not resolve hostname gpu-missing: nodename nor servname provided, or not known",
+                "ssh_unreachable",
+            ),
+            (
+                Some(255),
+                "ssh: connect to host gpu.example port 22: Operation timed out",
+                "ssh_timeout",
+            ),
+            (
+                Some(255),
+                "ssh: connect to host gpu.example port 22: Connection refused",
+                "ssh_unreachable",
+            ),
+        ];
+
+        for (exit_code, stderr, expected_type) in cases {
+            let err = classify_ssh_failure(exit_code, stderr);
+            assert_eq!(err.error_type, expected_type, "stderr: {stderr}");
+        }
     }
 
     #[test]

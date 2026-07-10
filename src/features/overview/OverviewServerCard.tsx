@@ -1,4 +1,4 @@
-import { MetricCard, ResultFeedback, StatusBadge } from '../../components/ui';
+import { DiagnosticPanel, MetricCard, ResultFeedback, StatusBadge } from '../../components/ui';
 import { formatPercent, formatTemperature, formatTime, formatUnknown, sanitizeMessage } from '../../lib/format';
 import type { ServerOverviewDto } from '../../lib/types';
 import type { useOverviewController } from './useOverviewController';
@@ -11,6 +11,7 @@ export const OverviewServerCard = ({
   readonly server: ServerOverviewDto;
 }) => {
   const isRefreshingRow = controller.refreshMutation.isPending && controller.refreshMutation.variables === server.id;
+  const hasLatestDiagnostic = server.lastErrorType !== null || server.lastErrorMessage !== null;
 
   return (
     <article aria-label={`${server.name} overview`} className="panel overflow-hidden p-5" key={server.id}>
@@ -43,6 +44,8 @@ export const OverviewServerCard = ({
         <MetricCard label="Error type" value={formatUnknown(server.lastErrorType)} />
         <MetricCard label="Error message" value={sanitizeMessage(server.lastErrorMessage)} />
       </div>
+
+      {hasLatestDiagnostic ? <DiagnosticPanel className="mt-4" errorType={server.lastErrorType} message={server.lastErrorMessage} title="Latest diagnostic" /> : null}
     </article>
   );
 };

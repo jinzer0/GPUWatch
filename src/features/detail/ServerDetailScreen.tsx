@@ -1,4 +1,4 @@
-import { EmptyState, ErrorState, LoadingState, MetricCard, StatusBadge } from '../../components/ui';
+import { DiagnosticPanel, EmptyState, ErrorState, LoadingState, MetricCard, StatusBadge } from '../../components/ui';
 import { formatTime, formatUnknown, sanitizeMessage } from '../../lib/format';
 import { DetailGpuCard } from './DetailGpuCard';
 import { useServerDetailController } from './useServerDetailController';
@@ -6,6 +6,7 @@ import { useServerDetailController } from './useServerDetailController';
 export const ServerDetailScreen = ({ selectedServerId }: { readonly selectedServerId: string | null }) => {
   const controller = useServerDetailController(selectedServerId);
   const detail = controller.detail;
+  const refreshResult = controller.refreshMutation.data;
 
   if (!selectedServerId) {
     return <EmptyState title="No server selected" body="Choose a server from Overview to inspect the latest backend detail DTO." />;
@@ -23,6 +24,9 @@ export const ServerDetailScreen = ({ selectedServerId }: { readonly selectedServ
     return <EmptyState title="Server not found" body="The selected server is no longer available in backend storage." />;
   }
 
+  const hasHealthDiagnostic = detail.health.lastErrorType !== null || detail.health.lastErrorMessage !== null;
+  const hasRefreshDiagnostic = refreshResult !== undefined && !refreshResult.ok;
+
   return (
     <section className="space-y-6">
       <div className="panel p-6">
@@ -39,6 +43,7 @@ export const ServerDetailScreen = ({ selectedServerId }: { readonly selectedServ
             Refresh server
           </button>
         </div>
+        {hasRefreshDiagnostic ? <DiagnosticPanel className="mt-4" errorType={refreshResult.errorType} message={refreshResult.message} title="Refresh diagnostic" /> : null}
       </div>
 
       <div className="grid grid-cols-3 gap-3">
@@ -46,8 +51,11 @@ export const ServerDetailScreen = ({ selectedServerId }: { readonly selectedServ
         <MetricCard label="Driver / CUDA" value={`${formatUnknown(detail.driverVersion)} / ${formatUnknown(detail.cudaVersion)}`} />
         <MetricCard label="Snapshot received" value={formatTime(detail.receivedAt)} />
         <MetricCard label="Last success" value={formatTime(detail.health.lastSuccessAt)} />
+        <MetricCard label="Latest error type" value={formatUnknown(detail.health.lastErrorType)} />
         <MetricCard label="Latest error" value={sanitizeMessage(detail.health.lastErrorMessage)} />
       </div>
+
+      {hasHealthDiagnostic ? <DiagnosticPanel errorType={detail.health.lastErrorType} message={detail.health.lastErrorMessage} title="Health diagnostic" /> : null}
 
       {detail.warnings.length > 0 ? (
         <div className="surface p-4 text-sm text-[color:var(--color-stale)]">

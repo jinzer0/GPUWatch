@@ -82,7 +82,7 @@ export const sanitizeMessage = (value: string | null | undefined) => {
     .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '')
     .replace(/-----BEGIN [^-]+PRIVATE KEY-----[\s\S]*?-----END [^-]+PRIVATE KEY-----/g, '[private key redacted]')
     .replace(/(?:~|(?:\b[A-Za-z]:)?\/)(?:[^\s]+\/)*(?:\.ssh|\.gnupg)\/[^\s]+|(?:\b[A-Za-z]:)?\/?(?:[\w.-]+\/)+(?:id_[\w.-]+|[^\s]+\.(?:pem|key))\b/g, '[path redacted]')
-    .replace(/((?:--?)?(?:access-token|api-key|token|password|secret|key))(?:=|:|\s+)\S+/gi, '$1=[redacted]')
+    .replace(/((?:--?)?(?:access-token|api-key|token|password|secret|key))(?:\s*[=:]\s*|\s+)\S+/gi, '$1=[redacted]')
     .replace('[private key=[redacted]', '[private key redacted]')
     .split('\n')
     .map((line) => line.trim())
@@ -96,6 +96,6 @@ export const formatCommand = (value: string | null | undefined) => {
   if (sanitized === unknownText) {
     return sanitized;
   }
-  const redacted = sanitized.replace(/\b(token|password|secret|api[-_]?key|access[-_]?token)[=:\s]+\S+/gi, '$1=[redacted]');
+  const redacted = sanitized.replace(/\b(token|password|secret|api[-_]?key|access[-_]?token)(?:\s*[=:]\s*|\s+)\S+/gi, '$1=[redacted]');
   return redacted.length > 96 ? `${redacted.slice(0, 93)}...` : redacted;
 };

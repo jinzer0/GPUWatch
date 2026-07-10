@@ -1,5 +1,5 @@
 import { QueryClientProvider } from '@tanstack/react-query';
-import { act, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ServerDetailScreen } from './ServerDetailScreen';
@@ -327,5 +327,34 @@ describe('ServerDetailScreen', () => {
 
     expect(await screen.findAllByText(/Charts use the last successful snapshot/)).toHaveLength(2);
     expect(screen.getByText('ssh timeout')).toBeDefined();
+  });
+
+  it('renders server health and refresh diagnostics guidance in bounded detail surfaces', async () => {
+    // Given: detail health reports a missing nvidia-smi diagnostic and refresh reports a GPU query diagnostic.
+    apiMocks.refreshServer.mockResolvedValue({ ok: false, status: 'error', errorType: 'remote_gpu_query_failed', message: 'nvidia-smi failed for /Users/alice/.ssh/id_ed25519' });
+    renderDetail({
+      ...detailFixture,
+      health: {
+        ...detailFixture.health,
+        status: 'error',
+        lastErrorType: 'nvidia_smi_missing',
+        lastErrorMessage: null
+      }
+    });
+
+    // When: the user inspects health and retries refresh from the detail header.
+    expect(await screen.findByText('nvidia-smi unavailable')).toBeDefined();
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh server' }));
+
+    // Then: both diagnostics expose label, type, sanitized message, and short formatter guidance without hiding screen identity.
+    expect(screen.getByText('Type: nvidia_smi_missing')).toBeDefined();
+    expect(screen.getByText('Message: unknown')).toBeDefined();
+    expect(screen.getByText(/nvidia-smi is available on PATH/)).toBeDefined();
+    expect(await screen.findByText('Remote GPU query failed')).toBeDefined();
+    expect(screen.getByText('Type: remote_gpu_query_failed')).toBeDefined();
+    expect(screen.getByText(/nvidia-smi failed for \[path redacted\]/)).toBeDefined();
+    expect(screen.getByText(/permissions allow reading GPU device state/)).toBeDefined();
+    expect(screen.queryByText('/Users/alice/.ssh/id_ed25519')).toBeNull();
+    expect(screen.getByText('Server Detail')).toBeDefined();
   });
 });

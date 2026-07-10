@@ -22,6 +22,12 @@ export async function prepareIsolatedSshConfig(homeDir) {
     path.join(sshDir, 'config'),
     [
       'Include missing-smoke-config',
+      'Host task8-diagnostics',
+      '  HostName 127.0.0.1',
+      '  User task8-user',
+      '  Port 2208',
+      '  IdentityFile ~/.ssh/task8_id_ed25519',
+      '  ProxyCommand ssh -i ~/.ssh/task8_proxy_key --token task8-secret %h %p',
       'Host task14-import-warning',
       '  HostName 127.0.0.1',
       '  User smoke-user',

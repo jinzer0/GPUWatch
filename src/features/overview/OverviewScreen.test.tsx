@@ -102,7 +102,7 @@ describe('OverviewScreen', () => {
     expect(screen.getByText('demo.local')).toBeDefined();
     expect(screen.getAllByText('stale').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('ssh_timeout')).toBeDefined();
-    expect(screen.getByText('SSH connection timed out')).toBeDefined();
+    expect(screen.getAllByText('SSH connection timed out').length).toBeGreaterThan(0);
     expect(screen.getByText('GPU total')).toBeDefined();
     expect(screen.getByText('Busy / free')).toBeDefined();
     expect(screen.getByText('Average GPU util')).toBeDefined();
@@ -264,6 +264,34 @@ describe('OverviewScreen', () => {
 
     const refreshAlert = await screen.findByRole('alert', { name: 'Refresh Demo GPU Server' });
     expect(refreshAlert.textContent).toContain('Remote refresh failed for Demo GPU Server. SSH failed for [path redacted]');
+    expect(screen.queryByText('/Users/alice/.ssh/id_ed25519')).toBeNull();
+    expect(screen.getByText('Fleet snapshot')).toBeDefined();
+  });
+
+  it('renders bounded diagnostics guidance for overview health and typed refresh failures', async () => {
+    // Given: stale overview health plus a refresh result that carries a typed SSH diagnostic.
+    const unreachableRow: ServerOverviewDto = {
+      ...overviewRows[2],
+      lastErrorType: 'ssh_unreachable',
+      lastErrorMessage: 'Permission denied for /Users/alice/.ssh/id_ed25519'
+    };
+    apiMocks.refreshServer.mockResolvedValue({ ok: false, status: 'error', errorType: 'ssh_unreachable', message: 'Permission denied for /Users/alice/.ssh/id_ed25519' });
+    renderOverview([overviewFixture, unreachableRow]);
+
+    // When: the existing health cards render and the user refreshes the unreachable host.
+    const timeoutArticle = screen.getByRole('article', { name: /Demo GPU Server/i });
+    const unreachableArticle = screen.getByRole('article', { name: /Training Rig/i });
+    fireEvent.click(within(unreachableArticle).getByRole('button', { name: 'Refresh' }));
+    await waitFor(() => expect(apiMocks.refreshServer).toHaveBeenCalledWith('server-3'));
+
+    // Then: diagnostics stay inside each card, include type/message/guidance, and redact local SSH paths.
+    expect(within(timeoutArticle).getAllByText('SSH connection timed out').length).toBeGreaterThan(0);
+    expect(within(timeoutArticle).getByText('Type: ssh_timeout')).toBeDefined();
+    expect(within(timeoutArticle).getByText(/DNS, VPN, firewall/)).toBeDefined();
+    expect(within(unreachableArticle).getAllByText('SSH host unreachable').length).toBeGreaterThan(0);
+    expect(within(unreachableArticle).getAllByText('Type: ssh_unreachable').length).toBeGreaterThan(0);
+    expect(within(unreachableArticle).getAllByText(/Permission denied for \[path redacted\]/).length).toBeGreaterThan(0);
+    expect(within(unreachableArticle).getAllByText(/Verify DNS, routing, firewall/).length).toBeGreaterThan(0);
     expect(screen.queryByText('/Users/alice/.ssh/id_ed25519')).toBeNull();
     expect(screen.getByText('Fleet snapshot')).toBeDefined();
   });

@@ -156,3 +156,69 @@ export const settingsSshConfigImportResult: SshConfigImportResult = {
   ],
   warnings: ['Include file /Users/alice/.ssh/extra.conf was skipped with secret abc123']
 };
+
+export const selectedBulkSshConfigImportResult: SshConfigImportResult = {
+  candidates: [
+    {
+      hostAlias: 'gpu-prod-a',
+      hostname: 'resolved-a.internal.example',
+      draft: {
+        id: 'draft-a',
+        name: 'GPU Prod A',
+        host: 'gpu-prod-a',
+        port: 2202,
+        username: 'alice',
+        sshKeyPath: '~/.ssh/id_gpuwatcher',
+        pollingIntervalSeconds: 45,
+        enabled: true
+      },
+      warnings: ['Host gpu-prod-a uses unsupported ProxyJump; import ignores it']
+    },
+    {
+      hostAlias: 'gpu-prod-b',
+      hostname: 'resolved-b.internal.example',
+      draft: {
+        id: 'draft-b',
+        name: 'GPU Prod B',
+        host: 'gpu-prod-b',
+        port: 22,
+        username: 'bob',
+        sshKeyPath: null,
+        pollingIntervalSeconds: null,
+        enabled: true
+      },
+      warnings: []
+    },
+    {
+      hostAlias: 'missing-user',
+      hostname: null,
+      draft: {
+        id: null,
+        name: 'Missing User',
+        host: 'missing-user',
+        port: 22,
+        username: '',
+        sshKeyPath: null,
+        pollingIntervalSeconds: null,
+        enabled: true
+      },
+      warnings: []
+    },
+    {
+      hostAlias: 'saved-duplicate',
+      hostname: 'saved.internal.example',
+      draft: {
+        id: null,
+        name: 'Saved Duplicate',
+        host: 'saved.local',
+        port: 22,
+        username: 'alice',
+        sshKeyPath: null,
+        pollingIntervalSeconds: 30,
+        enabled: true
+      },
+      warnings: []
+    }
+  ],
+  warnings: []
+};

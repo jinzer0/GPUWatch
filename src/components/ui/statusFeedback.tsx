@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 
+import { formatDiagnostic } from '../../lib/diagnostics';
+import type { DiagnosticInput } from '../../lib/diagnostics';
 import { formatUnknown, sanitizeMessage } from '../../lib/format';
 
 const statusClasses = (status: string) => {
@@ -47,6 +49,25 @@ export const LoadingState = ({ label }: { readonly label: string }) => (
   <div className="surface p-6 text-sm text-[color:var(--color-muted)]">{label}</div>
 );
 
+type DiagnosticPanelProps = DiagnosticInput & {
+  readonly className?: string;
+  readonly title?: string;
+};
+
+export const DiagnosticPanel = ({ className = '', errorType, message, title = 'Diagnostic guidance' }: DiagnosticPanelProps) => {
+  const diagnostic = formatDiagnostic({ errorType, message });
+
+  return (
+    <div className={`surface border-[color:var(--color-error)] p-4 text-sm ${className}`.trim()}>
+      <div className="metric-label">{title}</div>
+      <div className="mt-2 font-semibold text-[color:var(--color-error)]">{diagnostic.label}</div>
+      <div className="mt-2 leading-6 text-[color:var(--color-muted)]">Type: {diagnostic.errorType}</div>
+      <div className="leading-6 text-[color:var(--color-muted)]">Message: {diagnostic.message}</div>
+      <p className="mt-3 leading-6 text-[color:var(--color-text)]">{diagnostic.guidance}</p>
+    </div>
+  );
+};
+
 type ResultFeedbackProps =
   | {
       readonly label: string;
@@ -54,6 +75,7 @@ type ResultFeedbackProps =
     }
   | {
       readonly label?: string;
+      readonly diagnostic?: DiagnosticInput;
       readonly message: string;
       readonly state: 'error' | 'success';
     };
@@ -81,7 +103,7 @@ export const ResultFeedback = (props: ResultFeedbackProps) => {
           <div className="mb-2">
             <StatusBadge status="error" />
           </div>
-          <ErrorState message={sanitizeMessage(props.message)} />
+          {props.diagnostic ? <DiagnosticPanel {...props.diagnostic} /> : <ErrorState message={sanitizeMessage(props.message)} />}
         </div>
       );
   }

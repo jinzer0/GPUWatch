@@ -48,7 +48,13 @@ export const useOverviewController = (overview: ServerOverviewDto[]) => {
     onSuccess: (result, id) => {
       const name = serverName(id);
       if (!result.ok) {
-        setRefreshFeedback({ label: `Refresh ${name}`, message: `Remote refresh failed for ${name}. ${formatUnknown(result.message)}`, serverId: id, state: 'error' });
+        setRefreshFeedback({
+          diagnostic: { errorType: result.errorType, message: result.message },
+          label: `Refresh ${name}`,
+          message: `Remote refresh failed for ${name}. ${formatUnknown(result.message)}`,
+          serverId: id,
+          state: 'error'
+        });
         return undefined;
       }
 

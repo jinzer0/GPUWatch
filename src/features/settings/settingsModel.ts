@@ -58,6 +58,74 @@ export const toServerInput = (form: SettingsFormState): ServerInput => ({
   enabled: form.enabled
 });
 
+export type BulkImportSkipReason = 'missing_username' | 'duplicate_saved_server' | 'duplicate_import_candidate';
+
+export interface BulkImportCandidateMetadata {
+  readonly candidate: SshConfigImportCandidate;
+  readonly duplicateKey: string;
+  readonly selectable: boolean;
+  readonly skipReasons: readonly BulkImportSkipReason[];
+}
+
+export interface BulkImportCandidateMetadataOptions {
+  readonly candidates: readonly SshConfigImportCandidate[];
+  readonly existingServers: readonly Server[];
+}
+
+export interface BulkImportServerInputOptions extends BulkImportCandidateMetadataOptions {
+  readonly selectedHostAliases: readonly string[];
+}
+
+export interface BulkImportServerInputSelection {
+  readonly inputs: readonly ServerInput[];
+  readonly skipped: readonly BulkImportCandidateMetadata[];
+}
+
+export const getBulkImportDuplicateKey = (input: Pick<ServerInput, 'host' | 'port' | 'username'>) => `${input.host}\u0000${input.username}\u0000${input.port}`;
+
+export const toBulkImportServerInput = (candidate: SshConfigImportCandidate): ServerInput => ({
+  ...toServerInput(formFromSshConfigCandidate(candidate)),
+  id: null,
+  enabled: false
+});
+
+export const getBulkImportCandidateMetadata = ({ candidates, existingServers }: BulkImportCandidateMetadataOptions): readonly BulkImportCandidateMetadata[] => {
+  const savedKeys = new Set(existingServers.map((server) => getBulkImportDuplicateKey(server)));
+  const importKeys = new Set<string>();
+
+  return candidates.map((candidate) => {
+    const duplicateKey = getBulkImportDuplicateKey(candidate.draft);
+    const skipReasons: BulkImportSkipReason[] = [];
+    if (candidate.draft.username.trim() === '') {
+      skipReasons.push('missing_username');
+    }
+    if (savedKeys.has(duplicateKey)) {
+      skipReasons.push('duplicate_saved_server');
+    }
+    if (importKeys.has(duplicateKey)) {
+      skipReasons.push('duplicate_import_candidate');
+    }
+    importKeys.add(duplicateKey);
+
+    return {
+      candidate,
+      duplicateKey,
+      selectable: skipReasons.length === 0,
+      skipReasons
+    };
+  });
+};
+
+export const buildBulkImportServerInputs = (options: BulkImportServerInputOptions): BulkImportServerInputSelection => {
+  const selectedAliases = new Set(options.selectedHostAliases);
+  const selected = getBulkImportCandidateMetadata(options).filter((item) => selectedAliases.has(item.candidate.hostAlias));
+
+  return {
+    inputs: selected.filter((item) => item.selectable).map((item) => toBulkImportServerInput(item.candidate)),
+    skipped: selected.filter((item) => !item.selectable)
+  };
+};
+
 const containsPrivateKeyMaterial = (value: string) => /-----BEGIN [^-]+PRIVATE KEY-----/i.test(value) || /-----END [^-]+PRIVATE KEY-----/i.test(value) || /[\r\n]/.test(value);
 
 const parseIntegerField = (value: string, label: string, min: number, max: number) => {
