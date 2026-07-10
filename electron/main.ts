@@ -7,6 +7,7 @@ import { createScheduler } from './scheduler.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const isMac = process.platform === 'darwin';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -20,12 +21,17 @@ async function createMainWindow(): Promise<void> {
     height: 860,
     minWidth: 1024,
     minHeight: 720,
+    show: false,
+    backgroundColor: '#08090a',
+    ...(isMac ? { titleBarStyle: 'hiddenInset' } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload-runtime.cjs'),
       nodeIntegration: false,
       contextIsolation: true
     }
   });
+
+  mainWindow.once('ready-to-show', () => mainWindow?.show());
 
   if (app.isPackaged) {
     await mainWindow.loadFile(path.join(app.getAppPath(), 'dist', 'index.html'));
