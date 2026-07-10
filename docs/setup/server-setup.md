@@ -1,12 +1,12 @@
 # GPUWatcher Server Setup
 
-GPUWatcher v0.1 uses no-install SSH collection. The remote host doesn't need GPUWatcher, nvitop, Python, a Python collector, or project files installed.
+GPUWatcher v0.1 uses no-install SSH collection. The remote host doesn't need GPUWatcher, nvitop, Python, a Python collector, a collector package, or project files installed.
 
-The macOS app connects with system `ssh`, runs a fixed POSIX shell script, collects `nvidia-smi` and `ps` output, and parses the result locally.
+The macOS Electron app connects with system `ssh`, runs a fixed POSIX shell script, collects `nvidia-smi` and `ps` output, and parses the result locally through the bundled Rust helper and core crate. Stored GPU history is also local to the macOS app's SQLite database, so it adds no remote service, package, exporter, or background job.
 
 ## Remote Requirements
 
-Each Linux NVIDIA GPU server needs:
+Each Linux NVIDIA GPU server needs only:
 
 - NVIDIA driver with `nvidia-smi` on `PATH`
 - POSIX shell for the SSH login user
@@ -30,6 +30,8 @@ ssh -o BatchMode=yes -p 2222 -i /path/to/key USER@HOST true
 ```
 
 Resolve host-key prompts, passphrase prompts, DNS, firewall, and account problems in Terminal first. GPUWatcher follows your existing OpenSSH configuration and `known_hosts` policy.
+
+If you launch the packaged app from Finder, it may not inherit the same `SSH_AUTH_SOCK` or shell environment as Terminal. Make sure the key is unlocked for the GUI launch context, host keys are already trusted, and remote `nvidia-smi` is available in noninteractive SSH.
 
 ## Verify Remote Commands
 
@@ -65,17 +67,23 @@ GPUWatcher supports these command output sections:
 - `pmon` from `nvidia-smi pmon` for process utilization hints
 - `ps` output for user, command, runtime, parent PID, and argument enrichment
 
-The app stores the latest successful synthesized protocol v1 snapshot locally. Remote stdout is sectioned command output, not a protocol JSON document. Failed polls update health and error metadata while preserving the latest successful snapshot as stale.
+The app stores the latest successful synthesized protocol v1 snapshot locally. It also stores compact per-GPU history rows for successful polls, with fixed 24h retention. Remote stdout is sectioned command output, not a protocol JSON document. Failed polls update health and error metadata while preserving the latest successful snapshot as stale, and they don't append history rows.
+
+## Local Data
+
+Server settings, latest successful snapshots, and 24h GPU history are stored on the macOS machine at `~/Library/Application Support/GPUWatcher/gpuwatcher.sqlite3`. Remote servers don't receive DB files or history files.
+
+Migration backups are local SQLite copies created before destructive legacy schema changes. To restore one, quit the app, move the current DB aside, copy the backup into the same directory, and name it `gpuwatcher.sqlite3`.
 
 ## Known Limitations
 
-Official `nvidia-smi` output varies across driver versions, MIG modes, PCIe reporting, and GPU families. Some fields can be `N/A`, `-`, blank, or unsupported; GPUWatcher records those as unknown or `null`, never as zero.
+Official `nvidia-smi` output varies across driver versions, MIG modes, PCIe reporting, and GPU families. Some fields can be `N/A`, `-`, blank, or unsupported; GPUWatcher records those as unknown or `null`, never as zero. Stored history keeps those null or unknown values so charts show gaps or unknown states instead of false zeroes.
 
 MIG support is basic instance counting only. It doesn't model full GI or CI topology. PCIe throughput and process utilization depend on optional `dmon_pcie` and `pmon` output, so those values can be missing even when the base GPU snapshot is healthy.
 
 Process fidelity depends on what `nvidia-smi` and `ps` report at poll time. Short-lived processes can be missed, tree grouping uses visible GPU process rows only, process names can differ from nvitop, and GPUWatcher doesn't claim an exact nvitop match.
 
-Server Detail live mini charts are local UI history. They use successful snapshots only, stay in memory for the current app session, keep at most 120 samples per server and GPU index, and clear when the app restarts. Failed polls don't append chart samples.
+Live Monitor reads the stored 24h local GPU history. Server Detail prefers stored 1h history and uses session live samples only as a fallback while stored history is loading or empty. GPUWatcher doesn't store process timelines, process command history, raw snapshot history, or long-term audit history.
 
 ## Stored Credentials
 

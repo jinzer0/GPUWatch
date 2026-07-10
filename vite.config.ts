@@ -2,6 +2,7 @@ import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+  base: './',
   plugins: [react()],
   clearScreen: false,
   server: {
@@ -9,7 +10,7 @@ export default defineConfig({
     port: 5173,
     strictPort: true
   },
-  envPrefix: ['VITE_', 'TAURI_'],
+  envPrefix: ['VITE_'],
   test: {
     environment: 'jsdom',
     globals: true,

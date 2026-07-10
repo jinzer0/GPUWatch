@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Shell } from './components/Shell';
 import { ErrorState } from './components/ui';
 import { ServerDetailScreen } from './features/detail/ServerDetailScreen';
+import { HistoryMonitorScreen } from './features/history/HistoryMonitorScreen';
 import { OverviewScreen } from './features/overview/OverviewScreen';
 import { ProcessTableScreen } from './features/processes/ProcessTableScreen';
 import { SettingsScreen } from './features/settings/SettingsScreen';
@@ -29,6 +30,8 @@ const App = () => {
     switch (activeTab) {
       case 'detail':
         return <ServerDetailScreen selectedServerId={selectedServerId} />;
+      case 'history':
+        return <HistoryMonitorScreen overview={overview ?? []} selectedServerId={selectedServerId} />;
       case 'processes':
         return <ProcessTableScreen />;
       case 'settings':

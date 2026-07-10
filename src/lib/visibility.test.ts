@@ -12,155 +12,8 @@ import {
   type OverviewSortKey,
   type ProcessTableSortKey
 } from './visibility';
-import type { GpuCardDto, ProcessRowDto, ServerOverviewDto } from './types';
-
-const gpuCardFixture: GpuCardDto = {
-  index: 0,
-  uuid: 'GPU-1111',
-  name: 'NVIDIA RTX 6000',
-  pciBusId: '0000:17:00.0',
-  driverVersion: '550.54',
-  graphicsClockMhz: 1740,
-  memoryClockMhz: 9501,
-  busy: false,
-  memoryTotalMiB: 24576,
-  memoryUsedMiB: 0,
-  memoryFreeMiB: 24576,
-  gpuUtilizationPercent: 0,
-  memoryUtilizationPercent: 0,
-  temperatureCelsius: 32,
-  powerDrawWatt: 42.5,
-  powerLimitWatt: 300,
-  fanSpeedPercent: 18,
-  processCount: 0,
-  processes: []
-};
-
-const processRows: ProcessRowDto[] = [
-  {
-    serverId: 'alpha',
-    serverName: 'Alpha Node',
-    stale: false,
-    gpuIndex: 1,
-    pid: 100,
-    username: 'alice',
-    command: 'python train.py --token=supersecret --output /Users/alice/projects/checkpoint.bin',
-    gpuUuid: 'GPU-alpha-1',
-    processKind: 'compute',
-    gpuMemoryUsedMiB: 2048,
-    gpuUtilizationPercent: 90,
-    cpuPercent: 12,
-    hostMemoryUsedMiB: 1024
-  },
-  {
-    serverId: 'alpha-clone',
-    serverName: 'Alpha Node',
-    stale: false,
-    gpuIndex: 1,
-    pid: 100,
-    username: 'alice',
-    command: 'python train.py --token=supersecret --output /Users/alice/projects/checkpoint.bin',
-    gpuUuid: 'GPU-alpha-1',
-    processKind: 'compute',
-    gpuMemoryUsedMiB: 2048,
-    gpuUtilizationPercent: 90,
-    cpuPercent: 12,
-    hostMemoryUsedMiB: 1024
-  },
-  {
-    serverId: 'beta',
-    serverName: 'Beta Node',
-    stale: true,
-    gpuIndex: 0,
-    pid: 200,
-    username: null,
-    command: `python render.py ${'x'.repeat(120)} hidden-tail-marker`,
-    gpuUuid: 'GPU-beta-0',
-    processKind: 'graphics',
-    gpuMemoryUsedMiB: 2048,
-    gpuUtilizationPercent: null,
-    cpuPercent: null,
-    hostMemoryUsedMiB: null
-  },
-  {
-    serverId: 'gamma',
-    serverName: 'Gamma Node',
-    stale: false,
-    gpuIndex: 2,
-    pid: 300,
-    username: 'carol',
-    command: null,
-    gpuUuid: 'GPU-gamma-2',
-    processKind: 'unknown',
-    gpuMemoryUsedMiB: 512,
-    gpuUtilizationPercent: 10,
-    cpuPercent: 1,
-    hostMemoryUsedMiB: 256
-  },
-  {
-    serverId: 'delta',
-    serverName: 'Delta Node',
-    stale: false,
-    gpuIndex: 3,
-    pid: 400,
-    username: 'dave',
-    command: 'python final.py',
-    gpuUuid: 'GPU-delta-3',
-    processKind: 'compute',
-    gpuMemoryUsedMiB: null,
-    gpuUtilizationPercent: 0,
-    cpuPercent: 0,
-    hostMemoryUsedMiB: 0
-  }
-];
-
-const overviewRows: ServerOverviewDto[] = [
-  {
-    id: 'alpha',
-    name: 'Alpha Node',
-    host: 'alpha.local',
-    status: 'online',
-    gpuTotal: 4,
-    busyGpuCount: 2,
-    freeGpuCount: 2,
-    averageGpuUtilizationPercent: 32.5,
-    averageMemoryUsagePercent: 44.1,
-    maxTemperatureCelsius: 68,
-    lastSuccessAt: '2026-06-01T00:00:00Z',
-    lastErrorType: null,
-    lastErrorMessage: null
-  },
-  {
-    id: 'beta',
-    name: 'Beta Node',
-    host: 'beta.local',
-    status: 'stale',
-    gpuTotal: 2,
-    busyGpuCount: 1,
-    freeGpuCount: 1,
-    averageGpuUtilizationPercent: null,
-    averageMemoryUsagePercent: null,
-    maxTemperatureCelsius: null,
-    lastSuccessAt: '2026-06-01T01:00:00Z',
-    lastErrorType: 'ssh_timeout',
-    lastErrorMessage: 'SSH connection timed out'
-  },
-  {
-    id: 'gamma',
-    name: 'Gamma Node',
-    host: 'gamma.local',
-    status: 'error',
-    gpuTotal: 1,
-    busyGpuCount: 0,
-    freeGpuCount: 1,
-    averageGpuUtilizationPercent: null,
-    averageMemoryUsagePercent: null,
-    maxTemperatureCelsius: null,
-    lastSuccessAt: null,
-    lastErrorType: 'auth_failed',
-    lastErrorMessage: 'Permission denied for /Users/alice/.ssh/id_ed25519'
-  }
-];
+import { gpuCardFixture, makeProcessRow, visibilityProcessRows as processRows } from '../test-utils/process-fixtures';
+import { overviewRows } from '../test-utils/server-fixtures';
 
 describe('visibility helpers', () => {
   it('keeps DTO additions available for visibility utilities', () => {
@@ -296,38 +149,9 @@ describe('visibility helpers', () => {
   });
 
   it('keeps process rows flat by default after existing sort order', () => {
-    const parentRows: ProcessRowDto[] = [
-      {
-        serverId: 'alpha',
-        serverName: 'Alpha Node',
-        stale: false,
-        gpuIndex: 0,
-        pid: 20,
-        username: 'alice',
-        command: 'python parent.py',
-        gpuUuid: 'GPU-alpha-0',
-        processKind: 'compute',
-        gpuMemoryUsedMiB: 10,
-        gpuUtilizationPercent: 10,
-        cpuPercent: 1,
-        hostMemoryUsedMiB: 1
-      },
-      {
-        serverId: 'alpha',
-        serverName: 'Alpha Node',
-        stale: false,
-        gpuIndex: 0,
-        pid: 30,
-        parentPid: 20,
-        username: 'alice',
-        command: 'python child.py',
-        gpuUuid: 'GPU-alpha-0',
-        processKind: 'compute',
-        gpuMemoryUsedMiB: 99,
-        gpuUtilizationPercent: 99,
-        cpuPercent: 1,
-        hostMemoryUsedMiB: 1
-      }
+    const parentRows = [
+      makeProcessRow({ pid: 20, command: 'python parent.py', gpuMemoryUsedMiB: 10, gpuUtilizationPercent: 10 }),
+      makeProcessRow({ pid: 30, parentPid: 20, command: 'python child.py', gpuMemoryUsedMiB: 99, gpuUtilizationPercent: 99 })
     ];
 
     expect(getVisibleProcessRows(parentRows, 'flat').map((item) => ({ pid: item.row.pid, depth: item.depth }))).toEqual([
@@ -337,70 +161,21 @@ describe('visibility helpers', () => {
   });
 
   it('groups visible GPU child process rows under visible GPU parents without inventing missing parents', () => {
-    const parentRows: ProcessRowDto[] = [
-      {
-        serverId: 'alpha',
-        serverName: 'Alpha Node',
-        stale: false,
-        gpuIndex: 0,
-        pid: 30,
-        parentPid: 20,
-        username: 'alice',
-        command: 'python child-high.py',
-        gpuUuid: 'GPU-alpha-0',
-        processKind: 'compute',
-        gpuMemoryUsedMiB: 99,
-        gpuUtilizationPercent: 99,
-        cpuPercent: 1,
-        hostMemoryUsedMiB: 1
-      },
-      {
+    const parentRows = [
+      makeProcessRow({ pid: 30, parentPid: 20, command: 'python child-high.py', gpuMemoryUsedMiB: 99, gpuUtilizationPercent: 99 }),
+      makeProcessRow({
         serverId: 'beta',
         serverName: 'Beta Node',
-        stale: false,
-        gpuIndex: 0,
         pid: 70,
         parentPid: 20,
         username: 'bob',
         command: 'python orphan.py',
         gpuUuid: 'GPU-beta-0',
-        processKind: 'compute',
         gpuMemoryUsedMiB: 80,
-        gpuUtilizationPercent: 80,
-        cpuPercent: 1,
-        hostMemoryUsedMiB: 1
-      },
-      {
-        serverId: 'alpha',
-        serverName: 'Alpha Node',
-        stale: false,
-        gpuIndex: 0,
-        pid: 20,
-        username: 'alice',
-        command: 'python parent.py',
-        gpuUuid: 'GPU-alpha-0',
-        processKind: 'compute',
-        gpuMemoryUsedMiB: 10,
-        gpuUtilizationPercent: 10,
-        cpuPercent: 1,
-        hostMemoryUsedMiB: 1
-      },
-      {
-        serverId: 'alpha',
-        serverName: 'Alpha Node',
-        stale: false,
-        gpuIndex: 0,
-        pid: 25,
-        parentPid: 20,
-        username: 'alice',
-        command: 'python child-low.py',
-        gpuUuid: 'GPU-alpha-0',
-        processKind: 'compute',
-        gpuMemoryUsedMiB: 5,
-        gpuUtilizationPercent: 5,
-        cpuPercent: 1,
-        hostMemoryUsedMiB: 1
-      }
+        gpuUtilizationPercent: 80
+      }),
+      makeProcessRow({ pid: 20, command: 'python parent.py', gpuMemoryUsedMiB: 10, gpuUtilizationPercent: 10 }),
+      makeProcessRow({ pid: 25, parentPid: 20, command: 'python child-low.py', gpuMemoryUsedMiB: 5, gpuUtilizationPercent: 5 })
     ];
 
     expect(getVisibleProcessRows(parentRows, 'parentGrouped').map((item) => ({ pid: item.row.pid, depth: item.depth }))).toEqual([
@@ -412,53 +187,10 @@ describe('visibility helpers', () => {
   });
 
   it('prefers same-GPU parent rows when duplicate PIDs are visible on one server', () => {
-    const duplicatePidRows: ProcessRowDto[] = [
-      {
-        serverId: 'alpha',
-        serverName: 'Alpha Node',
-        stale: false,
-        gpuIndex: 0,
-        pid: 20,
-        username: 'alice',
-        command: 'python parent-gpu0.py',
-        gpuUuid: 'GPU-alpha-0',
-        processKind: 'compute',
-        gpuMemoryUsedMiB: 10,
-        gpuUtilizationPercent: 10,
-        cpuPercent: 1,
-        hostMemoryUsedMiB: 1
-      },
-      {
-        serverId: 'alpha',
-        serverName: 'Alpha Node',
-        stale: false,
-        gpuIndex: 1,
-        pid: 20,
-        username: 'alice',
-        command: 'python parent-gpu1.py',
-        gpuUuid: 'GPU-alpha-1',
-        processKind: 'compute',
-        gpuMemoryUsedMiB: 9,
-        gpuUtilizationPercent: 9,
-        cpuPercent: 1,
-        hostMemoryUsedMiB: 1
-      },
-      {
-        serverId: 'alpha',
-        serverName: 'Alpha Node',
-        stale: false,
-        gpuIndex: 1,
-        pid: 30,
-        parentPid: 20,
-        username: 'alice',
-        command: 'python child.py',
-        gpuUuid: 'GPU-alpha-1',
-        processKind: 'compute',
-        gpuMemoryUsedMiB: 8,
-        gpuUtilizationPercent: 8,
-        cpuPercent: 1,
-        hostMemoryUsedMiB: 1
-      }
+    const duplicatePidRows = [
+      makeProcessRow({ pid: 20, command: 'python parent-gpu0.py', gpuUuid: 'GPU-alpha-0', gpuMemoryUsedMiB: 10, gpuUtilizationPercent: 10 }),
+      makeProcessRow({ gpuIndex: 1, pid: 20, command: 'python parent-gpu1.py', gpuUuid: 'GPU-alpha-1', gpuMemoryUsedMiB: 9, gpuUtilizationPercent: 9 }),
+      makeProcessRow({ gpuIndex: 1, pid: 30, parentPid: 20, command: 'python child.py', gpuUuid: 'GPU-alpha-1', gpuMemoryUsedMiB: 8, gpuUtilizationPercent: 8 })
     ];
 
     expect(getVisibleProcessRows(duplicatePidRows, 'parentGrouped').map((item) => `${item.depth}:${item.row.gpuUuid}:${item.row.pid}`)).toEqual([
@@ -468,53 +200,34 @@ describe('visibility helpers', () => {
     ]);
   });
 
+  it('groups sorted process rows by server and normalized user label while preserving row order within each user group', () => {
+    const userRows = [
+      makeProcessRow({ serverId: 'beta', serverName: 'Beta Node', pid: 30, username: '', command: 'python beta-unknown.py', gpuUuid: 'GPU-beta-0', gpuMemoryUsedMiB: 30, gpuUtilizationPercent: 30 }),
+      makeProcessRow({ pid: 50, username: 'alice', command: 'python alpha-alice-high.py', gpuMemoryUsedMiB: 50, gpuUtilizationPercent: 50 }),
+      makeProcessRow({ gpuIndex: 1, pid: 20, username: null, command: 'python alpha-unknown.py', gpuUuid: 'GPU-alpha-1', gpuMemoryUsedMiB: 20, gpuUtilizationPercent: 20 }),
+      makeProcessRow({ gpuIndex: 2, pid: 10, username: 'alice', command: 'python alpha-alice-low.py', gpuUuid: 'GPU-alpha-2', gpuMemoryUsedMiB: 10, gpuUtilizationPercent: 10 })
+    ];
+
+    expect(
+      getVisibleProcessRows(userRows, 'userGrouped').map((item) =>
+        item.kind === 'section' ? `${item.kind}:${item.label}` : `${item.kind}:${item.depth}:${item.row.serverName}:${item.row.username || 'unknown'}:${item.row.pid}`
+      )
+    ).toEqual([
+      'section:Alpha Node / alice',
+      'process:1:Alpha Node:alice:50',
+      'process:1:Alpha Node:alice:10',
+      'section:Alpha Node / unknown user',
+      'process:1:Alpha Node:unknown:20',
+      'section:Beta Node / unknown user',
+      'process:1:Beta Node:unknown:30'
+    ]);
+  });
+
   it('keeps null command rows last for command sorting in ascending order', () => {
-    const commandRows: ProcessRowDto[] = [
-      {
-        serverId: 'null-command',
-        serverName: 'Alpha Node',
-        stale: false,
-        gpuIndex: 0,
-        pid: 10,
-        username: 'alice',
-        command: null,
-        gpuUuid: 'GPU-null-command',
-        processKind: 'compute',
-        gpuMemoryUsedMiB: 1,
-        gpuUtilizationPercent: 1,
-        cpuPercent: 1,
-        hostMemoryUsedMiB: 1
-      },
-      {
-        serverId: 'zzz-command',
-        serverName: 'Alpha Node',
-        stale: false,
-        gpuIndex: 0,
-        pid: 11,
-        username: 'alice',
-        command: 'zzz --token=supersecret',
-        gpuUuid: 'GPU-zzz-command',
-        processKind: 'compute',
-        gpuMemoryUsedMiB: 1,
-        gpuUtilizationPercent: 1,
-        cpuPercent: 1,
-        hostMemoryUsedMiB: 1
-      },
-      {
-        serverId: 'aaa-command',
-        serverName: 'Alpha Node',
-        stale: false,
-        gpuIndex: 0,
-        pid: 12,
-        username: 'alice',
-        command: 'aaa --password=supersecret',
-        gpuUuid: 'GPU-aaa-command',
-        processKind: 'compute',
-        gpuMemoryUsedMiB: 1,
-        gpuUtilizationPercent: 1,
-        cpuPercent: 1,
-        hostMemoryUsedMiB: 1
-      }
+    const commandRows = [
+      makeProcessRow({ serverId: 'null-command', pid: 10, command: null, gpuUuid: 'GPU-null-command', gpuMemoryUsedMiB: 1, gpuUtilizationPercent: 1 }),
+      makeProcessRow({ serverId: 'zzz-command', pid: 11, command: 'zzz --token=supersecret', gpuUuid: 'GPU-zzz-command', gpuMemoryUsedMiB: 1, gpuUtilizationPercent: 1 }),
+      makeProcessRow({ serverId: 'aaa-command', pid: 12, command: 'aaa --password=supersecret', gpuUuid: 'GPU-aaa-command', gpuMemoryUsedMiB: 1, gpuUtilizationPercent: 1 })
     ];
 
     expect(sortProcessRows(commandRows, { key: 'command', direction: 'asc' })).toEqual([
@@ -525,52 +238,10 @@ describe('visibility helpers', () => {
   });
 
   it('keeps null command rows last for command sorting in descending order', () => {
-    const commandRows: ProcessRowDto[] = [
-      {
-        serverId: 'null-command',
-        serverName: 'Alpha Node',
-        stale: false,
-        gpuIndex: 0,
-        pid: 10,
-        username: 'alice',
-        command: null,
-        gpuUuid: 'GPU-null-command',
-        processKind: 'compute',
-        gpuMemoryUsedMiB: 1,
-        gpuUtilizationPercent: 1,
-        cpuPercent: 1,
-        hostMemoryUsedMiB: 1
-      },
-      {
-        serverId: 'zzz-command',
-        serverName: 'Alpha Node',
-        stale: false,
-        gpuIndex: 0,
-        pid: 11,
-        username: 'alice',
-        command: 'zzz --token=supersecret',
-        gpuUuid: 'GPU-zzz-command',
-        processKind: 'compute',
-        gpuMemoryUsedMiB: 1,
-        gpuUtilizationPercent: 1,
-        cpuPercent: 1,
-        hostMemoryUsedMiB: 1
-      },
-      {
-        serverId: 'aaa-command',
-        serverName: 'Alpha Node',
-        stale: false,
-        gpuIndex: 0,
-        pid: 12,
-        username: 'alice',
-        command: 'aaa --password=supersecret',
-        gpuUuid: 'GPU-aaa-command',
-        processKind: 'compute',
-        gpuMemoryUsedMiB: 1,
-        gpuUtilizationPercent: 1,
-        cpuPercent: 1,
-        hostMemoryUsedMiB: 1
-      }
+    const commandRows = [
+      makeProcessRow({ serverId: 'null-command', pid: 10, command: null, gpuUuid: 'GPU-null-command', gpuMemoryUsedMiB: 1, gpuUtilizationPercent: 1 }),
+      makeProcessRow({ serverId: 'zzz-command', pid: 11, command: 'zzz --token=supersecret', gpuUuid: 'GPU-zzz-command', gpuMemoryUsedMiB: 1, gpuUtilizationPercent: 1 }),
+      makeProcessRow({ serverId: 'aaa-command', pid: 12, command: 'aaa --password=supersecret', gpuUuid: 'GPU-aaa-command', gpuMemoryUsedMiB: 1, gpuUtilizationPercent: 1 })
     ];
 
     expect(sortProcessRows(commandRows, { key: 'command', direction: 'desc' })).toEqual([

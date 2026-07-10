@@ -8,7 +8,8 @@ import {
   formatRuntimeSeconds,
   formatTemperature,
   formatUnknown,
-  formatWatts
+  formatWatts,
+  sanitizeMessage
 } from './format';
 
 describe('format helpers', () => {
@@ -58,6 +59,30 @@ describe('format helpers', () => {
     expect(formatCommand('token: secret-token')).toBe('token=[redacted]');
     expect(formatCommand('-----BEGIN OPENSSH PRIVATE KEY-----\nsecret\n-----END OPENSSH PRIVATE KEY-----')).toBe('[private key redacted]');
     expect(formatCommand('/Users/alice/.ssh/id_ed25519')).toBe('[path redacted]');
+  });
+
+  it('sanitizes multi-line diagnostics while preserving safe context', () => {
+    const message = sanitizeMessage(
+      '\u001b[31mPermission denied\u001b[0m\u0007\nWARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!\npassword hunter2\ntoken=abc123\n/Users/alice/.ssh/id_ed25519'
+    );
+
+    expect(message).toContain('Permission denied');
+    expect(message).toContain('REMOTE HOST IDENTIFICATION');
+    expect(message).toContain('password=[redacted]');
+    expect(message).toContain('token=[redacted]');
+    expect(message).toContain('[path redacted]');
+    expect(message).not.toContain('hunter2');
+    expect(message).not.toContain('abc123');
+    expect(message).not.toContain('/Users/alice/.ssh/id_ed25519');
+    expect(message).not.toContain('\u001b');
+    expect(message).not.toContain('\u0007');
+  });
+
+  it('caps long diagnostics to a small visible length after sanitization', () => {
+    const message = sanitizeMessage(`first line\n${'x'.repeat(500)}`);
+
+    expect(message.length).toBeLessThanOrEqual(320);
+    expect(message).toContain('...');
   });
 
   it('preserves truncation while still hiding raw command tails', () => {

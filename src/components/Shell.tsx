@@ -6,6 +6,7 @@ import type { ServerOverviewDto, TabId } from '../lib/types';
 const tabs: Array<{ id: TabId; label: string }> = [
   { id: 'overview', label: 'Overview' },
   { id: 'detail', label: 'Server Detail' },
+  { id: 'history', label: 'Live Monitor' },
   { id: 'processes', label: 'Process Table' },
   { id: 'settings', label: 'Settings' }
 ];
@@ -31,7 +32,7 @@ export const Shell = ({ children, overview }: { children: ReactNode; overview: S
             Remote GPU console
           </h1>
           <p className="mt-4 text-sm leading-6 text-[color:var(--color-muted)]">
-            Live backend DTOs from trusted Tauri commands, shaped into a compact mission-control MVP.
+            Live backend DTOs from the trusted desktop helper, shaped into a compact mission-control MVP.
           </p>
 
           <div className="mt-8 grid grid-cols-2 gap-3">

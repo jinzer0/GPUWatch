@@ -1,0 +1,13 @@
+pub const PROTOCOL_VERSION: i64 = 1;
+pub const SCHEMA_VERSION: i64 = 1;
+pub const DEFAULT_POLLING_INTERVAL_SECONDS: i64 = 30;
+pub const SSH_CONNECT_TIMEOUT_SECONDS: u64 = 8;
+pub const COMMAND_TIMEOUT_SECONDS: u64 = 20;
+pub const STDOUT_CAP_BYTES: usize = 1024 * 1024;
+pub const STDERR_CAP_BYTES: usize = 64 * 1024;
+pub const SSH_DIAGNOSTIC_EXCERPT_CHARS: usize = 320;
+pub const SSH_CONFIG_IMPORT_MAX_DEPTH: usize = 4;
+pub const SSH_CONFIG_IMPORT_MAX_FILES: usize = 16;
+pub const SSH_CONFIG_IMPORT_MAX_BYTES: u64 = 256 * 1024;
+pub const GLOBAL_POLL_CONCURRENCY: usize = 4;
+pub const BUSY_MEMORY_THRESHOLD_MIB: i64 = 512;

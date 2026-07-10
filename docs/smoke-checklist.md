@@ -5,44 +5,89 @@ Run these before internal handoff.
 ## Local Verification
 
 ```bash
-cargo test --manifest-path src-tauri/Cargo.toml
+cargo test --manifest-path crates/gpuwatcher-core/Cargo.toml
+cargo test --manifest-path crates/gpuwatcher-helper/Cargo.toml
 npm run test
 npm run build
+npm run electron:build
+npm run helper:build
 ```
 
-Expected result: all commands exit 0.
+Expected result: all commands exit 0. These are non-live checks and must not depend on `tml-server`.
 
-## Documentation Checks
+## Electron Dev Smoke
 
-Confirm active docs describe no-install SSH collection and don't direct users to install or run a remote GPUWatcher collector.
+1. Run `npm run dev` and keep Vite listening at `http://127.0.0.1:5173`.
+2. In a separate terminal, run `npm run electron:dev`.
+3. Confirm the Electron window opens and desktop actions use the action-specific preload bridge.
+4. Add or inspect a server entry against an isolated smoke DB when practical by setting `GPUWATCHER_TEST_DATA_DIR` before launch.
+5. In a plain browser at `http://127.0.0.1:5173`, confirm backend-unavailable states don't cover the static app identity.
+6. Confirm Settings actions that need a backend report backend unavailable in the plain browser rather than pretending to save.
 
-Expected result: active docs have no legacy remote collector command, install instruction, or exact parity claim. They do list `gpu_extra_csv`, `mig_list`, `dmon`, `dmon_pcie`, `pmon`, `ps`, `MIG`, `PCIe`, `N/A`, `unknown`, memory-only chart history, and nvitop caveats.
+Expected result: Electron is the normal desktop runtime, and the plain browser fallback degrades clearly.
 
-## Desktop Mock Smoke
+## Unsigned Packaged App Smoke
 
-1. Run `npm run tauri dev`.
-2. Click `Seed demo data`.
-3. Confirm Overview shows GPU total, busy/free counts, utilization, memory, temperature, last success, and status.
-4. Toggle Full and Compact display mode. Confirm the layout changes for the current session and doesn't present the setting as persisted.
-5. Open Server Detail and confirm hostname, driver/CUDA, GPU cards, process list, and live mini charts for utilization or optional metrics.
-6. Confirm charts use successful snapshots only, show gaps or empty states for `unknown` values, and don't imply exact nvitop parity.
-7. Open Process Table and confirm rows sort by GPU memory descending.
-8. Use keyboard navigation on the process table or tree controls, then expand and collapse process parent grouping. Confirm grouping uses visible GPU process rows only.
-9. Open Settings and confirm add/edit/delete/enable/disable forms are visible and no collector command field appears.
+1. Run `npm run electron:pack`.
+2. Discover the generated app path with `APP_PATH="$(find release/electron -name 'GPUWatcher.app' -type d -print -quit)"`.
+3. Confirm the helper is copied outside ASAR under app resources at `gpuwatcher-helper/gpuwatcher-helper`.
+4. Confirm `test -n "$APP_PATH"` passes, then launch the app with `open "$APP_PATH"`.
+5. Confirm the first window renders the app identity and navigation.
+6. Confirm the app can locate and run the local helper, or reports a clear helper path/resource error.
+7. Confirm the packaged macOS app is a local unsigned package with signing skipped, not a signed, notarized, DMG, uploaded, or release-ready artifact.
+8. If macOS blocks launch because of Gatekeeper or quarantine, record that as an unsigned local package caveat rather than a product signing result.
 
-## Live SSH Smoke
+Expected result: local packaging is usable for smoke checks only. Signing and notarization are outside this scope.
 
-Don't install GPUWatcher, nvitop, Python, or a collector package on the remote host.
+## Internal Unsigned DMG And ZIP Smoke
 
-1. Choose a GPU host such as `tml-server`, or use a generic `USER@HOST` target with an NVIDIA driver and key-based SSH.
-2. From macOS Terminal, run `ssh -o BatchMode=yes USER@HOST true` and confirm it exits 0.
-3. Run `ssh -o BatchMode=yes USER@HOST 'nvidia-smi --query-gpu=index,name,uuid,driver_version,memory.total,memory.used,utilization.gpu,temperature.gpu,power.draw,power.limit --format=csv,noheader,nounits'`.
-4. Add the server in GPUWatcher with host, port, username, key path, polling interval, and enabled state.
-5. Run Test Connection.
-6. Run Refresh.
-7. Confirm system `ssh` runs the no-install collection script, the backend stores a synthesized protocol v1 snapshot in SQLite, and Overview/Detail/Process screens update.
-8. Confirm warnings are acceptable if optional `gpu_extra_csv`, `mig_list`, `dmon`, `dmon_pcie`, `pmon`, compute-apps, or `ps` sections are unavailable.
-9. Confirm MIG, PCIe, process utilization, and runtime values can show `unknown` or `null` without becoming zero.
-10. Temporarily break SSH connectivity and refresh again.
-11. Confirm the latest success remains visible as stale, latest error metadata is shown, and Server Detail charts don't append failed-poll samples.
-12. Restart the app and confirm live mini chart history is cleared because it is memory-only session data.
+1. Run `npm run electron:dist:unsigned`.
+2. Discover generated artifacts under `release/electron/` without hardcoding `mac` or `mac-arm64`.
+3. Run the unsigned distribution artifact validator when present.
+4. Confirm the current DMG and ZIP are non-empty and contain `GPUWatcher.app`.
+5. Confirm the helper is copied outside ASAR under app resources at `gpuwatcher-helper/gpuwatcher-helper`.
+6. Confirm the artifacts are unsigned internal/test outputs, not signed, notarized, uploaded, auto-updated, production release-ready, or external distribution-ready outputs.
+7. If macOS blocks opening or mounting because of Gatekeeper or quarantine, record that as an unsigned artifact caveat rather than a signing result.
+
+```bash
+node smoke/electron-unsigned-dist-artifacts.mjs
+```
+
+Expected result: internal/test DMG and ZIP artifacts are present and inspectable. They are not production releases.
+
+## SSH And First-Run GUI Caveats
+
+Before testing a live server from the GUI, verify SSH in Terminal:
+
+```bash
+ssh -o BatchMode=yes USER@HOST true
+```
+
+Then verify the required base GPU query:
+
+```bash
+ssh -o BatchMode=yes USER@HOST 'nvidia-smi --query-gpu=index,name,uuid,driver_version,memory.total,memory.used,utilization.gpu,temperature.gpu,power.draw,power.limit --format=csv,noheader,nounits'
+```
+
+When launching the packaged GUI, also check these macOS app launch differences:
+
+- `SSH_AUTH_SOCK` may not point to the same agent that Terminal uses.
+- First-use `known_hosts` prompts won't work in noninteractive app refreshes.
+- Passphrase prompts won't be shown by the app; unlock keys before launch.
+- Shell startup files may not set the same `PATH`, so remote `nvidia-smi` must work in noninteractive SSH.
+
+Expected result: key-based SSH and the base GPU CSV work without prompts.
+
+## Live `tml-server` Smoke
+
+Run this only when live SSH access is intended:
+
+```bash
+GPUWATCHER_LIVE_SSH_TARGET=tml-server cargo test --manifest-path crates/gpuwatcher-core/Cargo.toml live_tml_server -- --ignored --nocapture
+```
+
+Expected result: the ignored live test passes against `tml-server`, or the failure is a real live SSH/server issue. Normal tests must stay non-live.
+
+## Remote Host Rule
+
+Don't install GPUWatcher, nvitop, Python, collector packages, or repository files on the remote host. The remote requirements are only NVIDIA driver with `nvidia-smi`, a POSIX shell, `ps`, and key-based SSH from macOS.
