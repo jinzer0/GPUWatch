@@ -6,11 +6,11 @@ import { HistoryControls, HistoryMetricToggles } from './HistoryControls';
 import { useHistoryMonitorController } from './useHistoryMonitorController';
 
 const HistoryIdentityPanel = () => (
-  <div className="panel-strong p-6">
+  <header className="border-b border-[color:var(--color-line)] pb-5">
     <div className="eyebrow">Live Monitor</div>
-    <h2 className="mt-3 font-[var(--font-display)] text-4xl font-black leading-none tracking-[-0.08em]">Stored GPU history</h2>
-    <p className="mt-4 max-w-2xl text-sm leading-6 text-[color:var(--color-muted)]">Successful poll samples only; gaps mean no stored sample.</p>
-  </div>
+    <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em]">Stored GPU history</h2>
+    <p className="mt-3 max-w-2xl text-sm leading-6 text-[color:var(--color-muted)]">Successful poll samples only; gaps mean no stored sample.</p>
+  </header>
 );
 
 export const HistoryMonitorScreen = ({ overview, selectedServerId }: { readonly overview: ServerOverviewDto[]; readonly selectedServerId: string | null }) => {

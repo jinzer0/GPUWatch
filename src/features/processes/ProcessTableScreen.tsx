@@ -9,13 +9,13 @@ export const ProcessTableScreen = () => {
 
   return (
     <section className="space-y-6">
-      <div className="panel p-6">
+      <header className="border-b border-[color:var(--color-line)] pb-5">
         <div className="eyebrow">Process Table</div>
-        <h2 className="mt-2 font-[var(--font-display)] text-4xl font-black tracking-[-0.08em]">GPU memory ledger</h2>
+        <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em]">GPU memory ledger</h2>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-[color:var(--color-muted)]">
           Flattened backend process rows, default sorted by GPU memory descending with stale snapshot rows visibly marked.
         </p>
-      </div>
+      </header>
 
       {controller.isLoading ? (
         <LoadingState label="Loading process DTO rows..." />

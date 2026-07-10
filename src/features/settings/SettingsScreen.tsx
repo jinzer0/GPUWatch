@@ -9,13 +9,13 @@ export const SettingsScreen = () => {
 
   return (
     <section className="space-y-6">
-      <div className="panel p-6">
+      <header className="border-b border-[color:var(--color-line)] pb-5">
         <div className="eyebrow">Settings</div>
-        <h2 className="mt-2 font-[var(--font-display)] text-4xl font-black tracking-[-0.08em]">Server registry</h2>
+        <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em]">Server registry</h2>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-[color:var(--color-muted)]">
           Add, edit, delete, enable, disable, and test SSH-backed GPU hosts without storing private key material.
         </p>
-      </div>
+      </header>
 
       {controller.serversQuery.isLoading ? <LoadingState label="Loading configured servers..." /> : null}
       {controller.serversQuery.error ? <ErrorState message={controller.serversQuery.error.message} /> : null}
