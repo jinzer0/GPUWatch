@@ -29,12 +29,12 @@ export const ServerDetailScreen = ({ selectedServerId }: { readonly selectedServ
 
   return (
     <section className="space-y-6">
-      <div className="panel p-6">
+      <div className="border-b border-[color:var(--color-line)] pb-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="eyebrow">Server Detail</div>
             <div className="mt-2 flex items-center gap-3">
-              <h2 className="font-[var(--font-display)] text-4xl font-black tracking-[-0.08em]">{detail.server.name}</h2>
+              <h2 className="text-2xl font-semibold tracking-[-0.03em]">{detail.server.name}</h2>
               <StatusBadge status={detail.health.status} />
             </div>
             <p className="mt-3 text-sm text-[color:var(--color-muted)]">{detail.server.username}@{detail.server.host}:{detail.server.port}</p>
