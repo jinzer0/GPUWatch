@@ -88,6 +88,17 @@ const renderOverview = (overview: ServerOverviewDto[] = [overviewFixture], error
   return { queryClient, ...rendered };
 };
 
+const getFleetSummary = (container: HTMLElement) => {
+  const classScopedSummary = container.querySelector('.overview-summary');
+  if (classScopedSummary instanceof HTMLElement) {
+    return classScopedSummary;
+  }
+
+  return screen.queryByRole('region', { name: 'Fleet summary' }) ?? screen.getByRole('group', { name: 'Fleet summary' });
+};
+
+const textContentIs = (expected: string) => (_content: string, element: Element | null) => element?.textContent === expected;
+
 describe('OverviewScreen', () => {
   beforeEach(() => {
     apiMocks.refreshServer.mockReset();
@@ -101,7 +112,7 @@ describe('OverviewScreen', () => {
     expect(screen.getByText('Demo GPU Server')).toBeDefined();
     expect(screen.getByText('demo.local')).toBeDefined();
     expect(screen.getAllByText('stale').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('ssh_timeout')).toBeDefined();
+    expect(screen.getByText(textContentIs('Type: ssh_timeout'))).toBeDefined();
     expect(screen.getAllByText('SSH connection timed out').length).toBeGreaterThan(0);
     expect(screen.getByText('GPU total')).toBeDefined();
     expect(screen.getByText('Busy / free')).toBeDefined();
@@ -123,8 +134,76 @@ describe('OverviewScreen', () => {
 
     renderOverview([nullableOverview]);
 
-    expect(screen.getAllByText('unknown').length).toBeGreaterThanOrEqual(6);
+    expect(screen.getAllByText('unknown').length).toBeGreaterThanOrEqual(3);
     expect(screen.queryByText('0.0%')).toBeNull();
+  });
+
+  it('renders fleet summary labels and values from the full overview data set', () => {
+    const { container } = renderOverview(overviewRows);
+
+    const fleetSummary = within(getFleetSummary(container));
+
+    expect(fleetSummary.getByText('Servers')).toBeDefined();
+    expect(fleetSummary.getByText('Online')).toBeDefined();
+    expect(fleetSummary.getByText('Needs attention')).toBeDefined();
+    expect(fleetSummary.getByText('GPUs')).toBeDefined();
+    expect(fleetSummary.getByText('3')).toBeDefined();
+    expect(fleetSummary.getByText('1')).toBeDefined();
+    expect(fleetSummary.getByText('2')).toBeDefined();
+    expect(fleetSummary.getByText('14 total · 10 busy · 4 free')).toBeDefined();
+  });
+
+  it('summarizes ONLINE as online while excluding online-stale and counting error metadata as attention', () => {
+    const summaryRows: ServerOverviewDto[] = [
+      { ...overviewRows[0], id: 'summary-online', name: 'Upper Online', status: 'ONLINE', gpuTotal: 1, busyGpuCount: 1, freeGpuCount: 0, lastErrorType: null, lastErrorMessage: null },
+      { ...overviewRows[1], id: 'summary-stale', name: 'Stale Online', status: 'online-stale', gpuTotal: 2, busyGpuCount: 1, freeGpuCount: 1, lastErrorType: null, lastErrorMessage: null },
+      { ...overviewRows[2], id: 'summary-error', name: 'Metadata Error', status: 'offline', gpuTotal: 3, busyGpuCount: 0, freeGpuCount: 3, lastErrorType: 'ssh_timeout', lastErrorMessage: 'SSH connection timed out' }
+    ];
+    const { container } = renderOverview(summaryRows);
+
+    const fleetSummary = within(getFleetSummary(container));
+
+    expect(fleetSummary.getByText('Servers')).toBeDefined();
+    expect(fleetSummary.getByText('Online')).toBeDefined();
+    expect(fleetSummary.getByText('Needs attention')).toBeDefined();
+    expect(fleetSummary.getByText('3')).toBeDefined();
+    expect(fleetSummary.getByText('1')).toBeDefined();
+    expect(fleetSummary.getByText('2')).toBeDefined();
+    expect(fleetSummary.getByText('6 total · 2 busy · 4 free')).toBeDefined();
+  });
+
+  it('exposes compact server row metrics without treating last success as a metric cell', () => {
+    renderOverview(overviewRows);
+
+    const renderBoxArticle = within(screen.getByRole('article', { name: /Render Box overview/i }));
+
+    expect(renderBoxArticle.getByText('GPU total')).toBeDefined();
+    expect(renderBoxArticle.getByText('Busy / free')).toBeDefined();
+    expect(renderBoxArticle.getByText('Average GPU util')).toBeDefined();
+    expect(renderBoxArticle.getByText('Average memory')).toBeDefined();
+    expect(renderBoxArticle.getByText('Max temperature')).toBeDefined();
+    expect(renderBoxArticle.getByText(/Last successful poll/i)).toBeDefined();
+    expect(renderBoxArticle.queryByText('Last success')).toBeNull();
+  });
+
+  it('keeps error type and message out of normal metric labels while preserving diagnostics copy', () => {
+    renderOverview(overviewRows);
+
+    const trainingArticle = within(screen.getByRole('article', { name: /Training Rig overview/i }));
+
+    expect(trainingArticle.queryByText('Error type')).toBeNull();
+    expect(trainingArticle.queryByText('Error message')).toBeNull();
+    expect(trainingArticle.getByText('Latest diagnostic')).toBeDefined();
+    expect(trainingArticle.getByText(textContentIs('Type: unknown'))).toBeDefined();
+    expect(trainingArticle.getByText(textContentIs('Message: Permission denied for [path redacted]'))).toBeDefined();
+  });
+
+  it('does not render a latest diagnostic panel for a healthy Render Box row', () => {
+    renderOverview(overviewRows);
+
+    const renderBoxArticle = within(screen.getByRole('article', { name: /Render Box overview/i }));
+
+    expect(renderBoxArticle.queryByText('Latest diagnostic')).toBeNull();
   });
 
   it('filters visible servers by text across identity, status, error type, and sanitized error message', () => {
@@ -197,6 +276,20 @@ describe('OverviewScreen', () => {
     expect(screen.getByText('Showing 3 of 3 servers')).toBeDefined();
   });
 
+  it('exposes reset from a filtered empty state and restores all rows', () => {
+    renderOverview(overviewRows);
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search servers' }), { target: { value: 'missing server' } });
+
+    expect(screen.getByText('No servers match these filters')).toBeDefined();
+    fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
+
+    expect(screen.getByText('Demo GPU Server')).toBeDefined();
+    expect(screen.getByText('Render Box')).toBeDefined();
+    expect(screen.getByText('Training Rig')).toBeDefined();
+    expect(screen.getByText('Showing 3 of 3 servers')).toBeDefined();
+  });
+
   it('renders a filtered empty state distinct from no-data, loading, and error states', () => {
     renderOverview(overviewRows);
 
@@ -212,10 +305,32 @@ describe('OverviewScreen', () => {
     renderOverview(overviewRows);
 
     fireEvent.change(screen.getByRole('textbox', { name: 'Search servers' }), { target: { value: 'render' } });
-    fireEvent.click(screen.getByRole('button', { name: /Render Box/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Render Box/i }));
 
     expect(useUiStore.getState().selectedServerId).toBe('server-2');
     expect(useUiStore.getState().activeTab).toBe('detail');
+  });
+
+  it('keeps server identity navigation accessible by server name', () => {
+    renderOverview(overviewRows);
+
+    const renderBoxArticle = within(screen.getByRole('article', { name: /Render Box overview/i }));
+    fireEvent.click(renderBoxArticle.getByRole('button', { name: /^Render Box/i }));
+
+    expect(useUiStore.getState().selectedServerId).toBe('server-2');
+    expect(useUiStore.getState().activeTab).toBe('detail');
+  });
+
+  it('refreshes Render Box from a server-specific accessible name without changing navigation state', async () => {
+    apiMocks.refreshServer.mockResolvedValue(connectionSuccess);
+    useUiStore.setState({ activeScreen: 'overview', activeTab: 'overview', selectedServerId: 'server-1', editingServerId: null });
+    renderOverview(overviewRows);
+
+    fireEvent.click(within(screen.getByRole('article', { name: /Render Box overview/i })).getByRole('button', { name: 'Refresh Render Box' }));
+
+    await waitFor(() => expect(apiMocks.refreshServer).toHaveBeenCalledWith('server-2'));
+    expect(useUiStore.getState().selectedServerId).toBe('server-1');
+    expect(useUiStore.getState().activeTab).toBe('overview');
   });
 
   it('shows pending and success feedback for a remote refresh while preserving active filters and invalidating matching stale data', async () => {
@@ -237,7 +352,7 @@ describe('OverviewScreen', () => {
 
     fireEvent.change(screen.getByRole('textbox', { name: 'Search servers' }), { target: { value: 'render' } });
     fireEvent.change(screen.getByRole('combobox', { name: 'Status' }), { target: { value: 'online' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    fireEvent.click(within(screen.getByRole('article', { name: /Render Box overview/i })).getByRole('button', { name: 'Refresh Render Box' }));
 
     await waitFor(() => expect(apiMocks.refreshServer).toHaveBeenCalledWith('server-2'));
     expect(screen.getByRole('status', { name: 'Refresh Render Box' }).textContent).toContain('Refresh Render Box pending');
@@ -260,7 +375,7 @@ describe('OverviewScreen', () => {
     apiMocks.refreshServer.mockRejectedValue(new Error('SSH failed for /Users/alice/.ssh/id_ed25519'));
     renderOverview(overviewRows);
 
-    fireEvent.click(within(screen.getByRole('article', { name: /Demo GPU Server/i })).getByRole('button', { name: 'Refresh' }));
+    fireEvent.click(within(screen.getByRole('article', { name: /Demo GPU Server overview/i })).getByRole('button', { name: 'Refresh Demo GPU Server' }));
 
     const refreshAlert = await screen.findByRole('alert', { name: 'Refresh Demo GPU Server' });
     expect(refreshAlert.textContent).toContain('Remote refresh failed for Demo GPU Server. SSH failed for [path redacted]');
@@ -281,7 +396,7 @@ describe('OverviewScreen', () => {
     // When: the existing health cards render and the user refreshes the unreachable host.
     const timeoutArticle = screen.getByRole('article', { name: /Demo GPU Server/i });
     const unreachableArticle = screen.getByRole('article', { name: /Training Rig/i });
-    fireEvent.click(within(unreachableArticle).getByRole('button', { name: 'Refresh' }));
+    fireEvent.click(within(unreachableArticle).getByRole('button', { name: 'Refresh Training Rig' }));
     await waitFor(() => expect(apiMocks.refreshServer).toHaveBeenCalledWith('server-3'));
 
     // Then: diagnostics stay inside each card, include type/message/guidance, and redact local SSH paths.

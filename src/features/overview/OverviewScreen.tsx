@@ -1,24 +1,25 @@
 import { Button, EmptyState, ErrorState, InlineToolbar, LabeledSelect, LabeledTextInput, LoadingState, ResetButton, ResultFeedback } from '../../components/ui';
 import type { ServerOverviewDto } from '../../lib/types';
 import { OverviewServerCard } from './OverviewServerCard';
-import { parseOverviewQuickFilter } from './overviewModel';
+import { parseOverviewQuickFilter, summarizeOverviewFleet } from './overviewModel';
 import { useOverviewController } from './useOverviewController';
 
 export const OverviewScreen = ({ overview, isLoading, error }: { readonly overview: ServerOverviewDto[]; readonly isLoading: boolean; readonly error: Error | null }) => {
   const controller = useOverviewController(overview);
+  const fleetSummary = summarizeOverviewFleet(overview);
   const showNoData = !isLoading && !error && overview.length === 0;
   const showFilteredEmpty = !isLoading && !error && overview.length > 0 && controller.visibleRows.length === 0;
 
   return (
-    <section className="space-y-6">
-      <div className="border-b border-[color:var(--color-line)] pb-5">
+    <section className="overview-page space-y-6">
+      <header className="overview-header border-b border-[color:var(--color-line)] pb-5">
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="eyebrow">Overview</div>
             <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em]">Fleet snapshot</h2>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-[color:var(--color-muted)]">A terse readout of configured GPU hosts, latest successful polls, and current health metadata.</p>
           </div>
-          <Button disabled={controller.seedMutation.isPending} onClick={() => controller.seedMutation.mutate()} type="button" variant="primary">
+          <Button disabled={controller.seedMutation.isPending} onClick={() => controller.seedMutation.mutate()} type="button" variant="secondary">
             Seed demo data
           </Button>
         </div>
@@ -27,7 +28,30 @@ export const OverviewScreen = ({ overview, isLoading, error }: { readonly overvi
             <ResultFeedback {...controller.seedFeedback} />
           </div>
         ) : null}
-      </div>
+      </header>
+
+      {overview.length > 0 ? (
+        <dl aria-label="Fleet summary" className="overview-summary surface grid grid-cols-4 gap-3 p-4">
+          <div>
+            <dt className="metric-label">Servers</dt>
+            <dd className="metric-value">{fleetSummary.totalServers}</dd>
+          </div>
+          <div>
+            <dt className="metric-label">Online</dt>
+            <dd className="metric-value text-[color:var(--color-online)]">{fleetSummary.onlineServers}</dd>
+          </div>
+          <div>
+            <dt className="metric-label">Needs attention</dt>
+            <dd className="metric-value text-[color:var(--color-warning)]">{fleetSummary.attentionServers}</dd>
+          </div>
+          <div>
+            <dt className="metric-label">GPUs</dt>
+            <dd className="metric-value text-[color:var(--color-accent)]">
+              {fleetSummary.totalGpus} total · {fleetSummary.busyGpus} busy · {fleetSummary.freeGpus} free
+            </dd>
+          </div>
+        </dl>
+      ) : null}
 
       <InlineToolbar label="Overview filters" summary={`Showing ${controller.visibleRows.length} of ${overview.length} servers`}>
         <LabeledTextInput id="overview-search" label="Search servers" onChange={(event) => controller.setSearchText(event.target.value)} placeholder="Name, host, status, or error" value={controller.searchText} />
