@@ -1,4 +1,4 @@
-import { ResultFeedback } from '../../components/ui';
+import { Button, ResultFeedback } from '../../components/ui';
 import { formatUnknown, sanitizeMessage } from '../../lib/format';
 import type { BulkImportSkipReason } from './settingsModel';
 import type { useSettingsController } from './useSettingsController';
@@ -51,9 +51,9 @@ export const SettingsImportPanel = ({
             Preview OpenSSH host aliases, select valid hosts for disabled bulk creation, or use one candidate to copy it into the manual server form.
           </p>
         </div>
-        <button className="btn btn-secondary" disabled={sshConfigImportMutation.isPending} onClick={() => sshConfigImportMutation.mutate()} type="button">
+        <Button disabled={sshConfigImportMutation.isPending} onClick={() => sshConfigImportMutation.mutate()} type="button" variant="secondary">
           Import from SSH config
-        </button>
+        </Button>
       </div>
 
       {sshConfigImportMutation.isPending ? (
@@ -74,12 +74,12 @@ export const SettingsImportPanel = ({
               <div className="mt-1 text-sm font-semibold text-[color:var(--color-muted)]">{selectedValidCount} of {validCount} valid hosts selected</div>
             </div>
             <div className="flex flex-wrap gap-3">
-              <button className="btn btn-secondary" disabled={validCount === 0 || bulkImportSaveMutation.isPending} onClick={selectAllImportableCandidates} type="button">
+              <Button disabled={validCount === 0 || bulkImportSaveMutation.isPending} onClick={selectAllImportableCandidates} type="button" variant="secondary">
                 Select all valid hosts
-              </button>
-              <button className="btn btn-primary" disabled={!canSaveSelection} onClick={() => void saveSelectedImportCandidates()} type="button">
+              </Button>
+              <Button disabled={!canSaveSelection} onClick={() => void saveSelectedImportCandidates()} type="button" variant="primary">
                 Save selected hosts
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -156,9 +156,9 @@ export const SettingsImportPanel = ({
                       </dl>
                     </div>
                   </div>
-                  <button className="btn btn-primary" onClick={() => importCandidate(candidate)} type="button">
+                  <Button onClick={() => importCandidate(candidate)} type="button" variant="primary">
                     Use {candidate.hostAlias}
-                  </button>
+                  </Button>
                 </div>
                 {metadata.skipReasons.length > 0 ? (
                   <div className="mt-3 text-sm font-semibold leading-6 text-[color:var(--color-warning)]" id={reasonId}>{skipReasonText(metadata.skipReasons)}</div>
