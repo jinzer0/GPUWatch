@@ -1,6 +1,6 @@
 import type { FormEvent } from 'react';
 
-import { DiagnosticPanel, StatusBadge } from '../../components/ui';
+import { Button, DiagnosticPanel, StatusBadge } from '../../components/ui';
 import { sanitizeMessage } from '../../lib/format';
 import type { ConnectionTestResultDto } from '../../lib/types';
 import type { SettingsFormState } from './settingsModel';
@@ -56,9 +56,9 @@ export const SettingsServerForm = ({
         <div className="section-title">{form.id ? 'Edit server' : 'Add server'}</div>
         <p className="mt-1 text-sm text-[color:var(--color-muted)]">Configure key-based SSH access for a remote NVIDIA host.</p>
       </div>
-      <button className="btn btn-secondary" onClick={() => editServer(null)} type="button">
+      <Button onClick={() => editServer(null)} type="button" variant="secondary">
         New
-      </button>
+      </Button>
     </div>
 
     <SettingsImportPanel
@@ -114,15 +114,15 @@ export const SettingsServerForm = ({
     </div>
 
     <div className="flex flex-wrap gap-3">
-      <button className="btn btn-primary" disabled={saveMutation.isPending} type="submit">
+      <Button disabled={saveMutation.isPending} type="submit" variant="primary">
         Save server
-      </button>
-      <button className="btn btn-secondary" disabled={!form.id || testMutation.isPending} onClick={() => form.id && testMutation.mutate(form.id)} type="button">
+      </Button>
+      <Button disabled={!form.id || testMutation.isPending} onClick={() => form.id && testMutation.mutate(form.id)} type="button" variant="secondary">
         Test SSH connection
-      </button>
-      <button className="btn btn-secondary text-[color:var(--color-error)]" disabled={!form.id || deleteMutation.isPending} onClick={() => form.id && deleteMutation.mutate(form.id)} type="button">
+      </Button>
+      <Button className="text-[color:var(--color-error)]" disabled={!form.id || deleteMutation.isPending} onClick={() => form.id && deleteMutation.mutate(form.id)} type="button" variant="secondary">
         Delete
-      </button>
+      </Button>
     </div>
 
     {connectionResult ? (
