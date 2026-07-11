@@ -20,18 +20,28 @@ body {
 
 button,
 input,
+select,
 textarea {
   font: inherit;
 }
 
-button {
+button,
+input,
+select,
+textarea {
   transition:
-    border-color 160ms ease,
-    background-color 160ms ease,
-    color 160ms ease;
+    color var(--interaction-transition-duration) var(--interaction-transition-timing),
+    border-color var(--interaction-transition-duration) var(--interaction-transition-timing),
+    background-color var(--interaction-transition-duration) var(--interaction-transition-timing),
+    box-shadow var(--interaction-transition-duration) var(--interaction-transition-timing),
+    opacity var(--interaction-transition-duration) var(--interaction-transition-timing);
 }
 
-button:disabled {
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled,
+[aria-disabled="true"] {
   cursor: not-allowed;
-  opacity: 0.54;
+  opacity: 0.58;
 }

@@ -2,27 +2,84 @@
   color-scheme: dark;
   --font-display: "Avenir Next Condensed", "Gill Sans", "Trebuchet MS", sans-serif;
   --font-body: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
-  --color-window: #08090a;
-  --color-sidebar: #0d0f10;
-  --color-surface: rgba(21, 23, 24, 0.86);
-  --color-surface-hover: rgba(31, 34, 35, 0.92);
-  --color-surface-raised: rgba(35, 38, 39, 0.94);
-  --color-text: #f4f6f3;
-  --color-text-secondary: #b8beb6;
-  --color-text-tertiary: #7f887f;
-  --color-line: rgba(244, 246, 243, 0.12);
-  --color-line-strong: rgba(244, 246, 243, 0.22);
-  --color-brand: #d7ff64;
-  --color-brand-soft: rgba(215, 255, 100, 0.14);
-  --color-accent: #68d8ff;
-  --color-accent-soft: rgba(104, 216, 255, 0.13);
-  --color-warning: #ffba5c;
-  --color-danger: #ff6b6b;
-  --color-success: #7ee787;
+
+  --palette-carbon-950: #08090a;
+  --palette-carbon-900: #0d0f10;
+  --palette-lime-primary: #d7ff64;
+  --palette-cyan-info: #68d8ff;
+  --palette-status-success: #7ee787;
+  --palette-status-warning: #ffba5c;
+  --palette-status-danger: #ff6b6b;
+  --palette-status-disabled: #9ba3af;
+
+  --background-window: var(--palette-carbon-950);
+  --background-sidebar: var(--palette-carbon-900);
+  --background-surface: rgba(21, 23, 24, 0.86);
+  --background-surface-raised: rgba(35, 38, 39, 0.94);
+  --background-surface-hover: rgba(31, 34, 35, 0.92);
+
+  --text-primary: #f4f6f3;
+  --text-secondary: #b8beb6;
+  --text-tertiary: #7f887f;
+
+  --border-default: rgba(244, 246, 243, 0.12);
+  --border-strong: rgba(244, 246, 243, 0.22);
+
+  --brand-lime-primary: var(--palette-lime-primary);
+  --brand-lime-soft: rgba(215, 255, 100, 0.14);
+  --focus-ring-color: var(--brand-lime-primary);
+  --focus-ring-shadow: 0 0 0 3px var(--brand-lime-soft);
+
+  --info-cyan: var(--palette-cyan-info);
+  --info-cyan-soft: rgba(104, 216, 255, 0.13);
+  --chart-cyan: var(--info-cyan);
+  --chart-cyan-soft: var(--info-cyan-soft);
+
+  --status-success: var(--palette-status-success);
+  --status-warning: var(--palette-status-warning);
+  --status-danger: var(--palette-status-danger);
+  --status-disabled: var(--palette-status-disabled);
+
+  --radius-control-sm: 0.5rem;
+  --radius-card-sm: 0.75rem;
+  --radius-surface-lg: 1.4rem;
+  --radius-surface-xl: 2rem;
+
+  --density-space-1: 0.25rem;
+  --density-space-2: 0.5rem;
+  --density-space-3: 0.75rem;
+  --density-space-4: 1rem;
+  --density-space-5: 1.25rem;
+  --density-control-height: 2.25rem;
+  --density-toolbar-gap: var(--density-space-2);
+  --density-card-padding: var(--density-space-4);
+  --density-section-gap: var(--density-space-5);
+
+  --interaction-transition-duration: 160ms;
+  --interaction-transition-timing: ease;
+
+  --color-window: var(--background-window);
+  --color-sidebar: var(--background-sidebar);
+  --color-surface: var(--background-surface);
+  --color-surface-hover: var(--background-surface-hover);
+  --color-surface-raised: var(--background-surface-raised);
+  --color-text: var(--text-primary);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-line: var(--border-default);
+  --color-line-strong: var(--border-strong);
+  --color-brand: var(--brand-lime-primary);
+  --color-brand-soft: var(--brand-lime-soft);
+  --color-accent: var(--info-cyan);
+  --color-accent-soft: var(--info-cyan-soft);
+  --color-warning: var(--status-warning);
+  --color-danger: var(--status-danger);
+  --color-success: var(--status-success);
   --color-error: var(--color-danger);
   --color-online: var(--color-success);
   --color-stale: var(--color-warning);
-  --color-disabled: #9ba3af;
+  --color-disabled: var(--status-disabled);
   --color-ink: var(--color-text);
   --color-ink-muted: var(--color-text-secondary);
   --color-ink-soft: var(--color-text-tertiary);
@@ -34,15 +91,11 @@
   --color-border: var(--color-line);
   --shadow-panel: 0 24px 80px rgba(0, 0, 0, 0.34);
   --shadow-glow: 0 0 36px rgba(215, 255, 100, 0.18);
-  --radius-control: 0.5rem;
-  --radius-card: 0.75rem;
-  --radius-sm: 0.5rem;
+  --radius-control: var(--radius-control-sm);
+  --radius-card: var(--radius-card-sm);
+  --radius-sm: var(--radius-control-sm);
   --radius-md: var(--radius-card);
-  --radius-lg: 1.4rem;
-  --radius-xl: 2rem;
-  --density-space-1: 0.25rem;
-  --density-space-2: 0.5rem;
-  --density-space-3: 0.75rem;
-  --density-space-4: 1rem;
-  --density-space-5: 1.25rem;
+  --radius-lg: var(--radius-surface-lg);
+  --radius-xl: var(--radius-surface-xl);
+  --shell-control-height: var(--density-control-height);
 }
