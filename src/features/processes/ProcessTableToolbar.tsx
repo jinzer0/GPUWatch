@@ -1,4 +1,4 @@
-import { InlineToolbar, LabeledSelect, LabeledTextInput, ResetButton } from '../../components/ui';
+import { Button, InlineToolbar, LabeledSelect, LabeledTextInput, ResetButton } from '../../components/ui';
 import { ALL_PROCESS_FILTER_VALUE, parseProcessStaleFilter, parseProcessViewMode, type ProcessTableController } from './processTableModel';
 
 export const ProcessTableToolbar = ({ controller }: { readonly controller: ProcessTableController }) => (
@@ -42,8 +42,8 @@ export const ProcessTableToolbar = ({ controller }: { readonly controller: Proce
       value={controller.viewMode}
     />
     <ResetButton onClick={controller.resetFilters} />
-    <button className="btn btn-secondary" disabled={controller.refreshFeedback?.state === 'pending'} onClick={() => void controller.handleRefreshRows()} type="button">
+    <Button disabled={controller.refreshFeedback?.state === 'pending'} onClick={() => void controller.handleRefreshRows()} type="button" variant="secondary">
       Refresh rows
-    </button>
+    </Button>
   </InlineToolbar>
 );

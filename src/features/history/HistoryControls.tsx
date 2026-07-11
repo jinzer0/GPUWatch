@@ -1,4 +1,4 @@
-import { InlineToolbar, LabeledSelect, ResultFeedback } from '../../components/ui';
+import { Button, InlineToolbar, LabeledSelect, ResultFeedback } from '../../components/ui';
 import { ALL_HISTORY_GPU_VALUE, HISTORY_RANGES, historyMetricDefinitions, parseHistoryRange, rangeLabel, type HistoryMetricId } from './historyModel';
 import type { useHistoryMonitorController } from './useHistoryMonitorController';
 
@@ -32,9 +32,9 @@ export const HistoryControls = ({ controller }: { readonly controller: HistoryCo
         options={HISTORY_RANGES.map((historyRange) => ({ label: rangeLabel(historyRange), value: historyRange }))}
         value={controller.range}
       />
-      <button className="btn btn-secondary" disabled={!controller.hasConcreteServer || controller.historyQuery.isFetching || controller.refreshFeedback.state === 'pending'} onClick={() => void controller.refreshHistory()} type="button">
+      <Button disabled={!controller.hasConcreteServer || controller.historyQuery.isFetching || controller.refreshFeedback.state === 'pending'} onClick={() => void controller.refreshHistory()} type="button" variant="secondary">
         Refresh history
-      </button>
+      </Button>
     </InlineToolbar>
     {controller.refreshFeedback.state === 'pending' ? <ResultFeedback label="History refresh" state="pending" /> : null}
     {controller.refreshFeedback.state === 'success' ? <ResultFeedback label="History refresh result" message={controller.refreshFeedback.message} state="success" /> : null}
@@ -49,15 +49,16 @@ export const HistoryMetricToggles = ({ selectedMetrics, toggleMetric }: { readon
       {historyMetricDefinitions.map((metric) => {
         const isSelected = selectedMetrics.includes(metric.id);
         return (
-          <button
+          <Button
             aria-pressed={isSelected}
-            className={`btn btn-secondary ${isSelected ? 'border-[color:var(--color-brand)] bg-[var(--color-brand-soft)] text-[color:var(--color-brand)]' : ''}`.trim()}
+            className={isSelected ? 'border-[color:var(--color-brand)] bg-[var(--color-brand-soft)] text-[color:var(--color-brand)]' : undefined}
             key={metric.id}
             onClick={() => toggleMetric(metric.id)}
             type="button"
+            variant="secondary"
           >
             {metric.label}
-          </button>
+          </Button>
         );
       })}
     </div>
