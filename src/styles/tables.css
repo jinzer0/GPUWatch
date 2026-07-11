@@ -23,12 +23,6 @@
     padding-bottom: var(--density-space-2);
   }
 
-  .app-shell[data-density="compact"] .btn,
-  .app-shell[data-density="compact"] .input {
-    padding-top: var(--density-space-2);
-    padding-bottom: var(--density-space-2);
-  }
-
   .app-shell[data-density="compact"] .mini-line-chart-full {
     min-height: 3rem;
     padding: var(--density-space-1) var(--density-space-2);
@@ -36,35 +30,35 @@
 
   .status-online {
     border-color: var(--color-online);
-    background: rgba(84, 214, 168, 0.1);
+    background: color-mix(in srgb, var(--color-online) 10%, transparent);
     color: var(--color-online);
   }
 
   .status-error {
     border-color: var(--color-error);
-    background: rgba(255, 122, 104, 0.1);
+    background: color-mix(in srgb, var(--color-error) 10%, transparent);
     color: var(--color-error);
   }
 
   .status-stale {
     border-color: var(--color-stale);
-    background: rgba(245, 159, 82, 0.1);
+    background: color-mix(in srgb, var(--color-stale) 10%, transparent);
     color: var(--color-stale);
   }
 
   .status-disabled {
     border-color: var(--color-disabled);
-    background: rgba(127, 138, 153, 0.1);
+    background: color-mix(in srgb, var(--color-disabled) 10%, transparent);
     color: var(--color-disabled);
   }
 
   .status-neutral {
     border-color: var(--color-border);
-    background: rgba(255, 255, 255, 0.05);
+    background: color-mix(in srgb, var(--color-text) 5%, transparent);
     color: var(--color-muted);
   }
 
   .row-stale {
-    background: rgba(245, 159, 82, 0.09);
+    background: color-mix(in srgb, var(--color-stale) 9%, transparent);
   }
 }

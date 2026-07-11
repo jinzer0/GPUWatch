@@ -6,7 +6,7 @@
     min-width: 9rem;
     border: 1px solid var(--color-line);
     border-radius: var(--radius-sm);
-    background: linear-gradient(180deg, rgba(104, 216, 255, 0.08), rgba(8, 8, 7, 0.16));
+    background: linear-gradient(180deg, var(--color-accent-soft), color-mix(in srgb, var(--color-canvas-deep) 16%, transparent));
     color: var(--color-ink-soft);
     font-size: 0.72rem;
     font-weight: 800;
@@ -26,7 +26,7 @@
   }
 
   .mini-line-chart-empty {
-    background: rgba(8, 8, 7, 0.24);
+    background: color-mix(in srgb, var(--color-canvas-deep) 24%, transparent);
   }
 
   .mini-line-chart-svg {
@@ -39,7 +39,6 @@
     stroke-linecap: round;
     stroke-linejoin: round;
     stroke-width: 2.4;
-    filter: drop-shadow(0 0 8px rgba(104, 216, 255, 0.32));
   }
 
   .mini-line-chart-point {
@@ -96,7 +95,6 @@
     stroke-linecap: round;
     stroke-linejoin: round;
     stroke-width: 2.4;
-    filter: drop-shadow(0 0 0.65rem currentColor);
   }
 
   .time-series-chart-point {
