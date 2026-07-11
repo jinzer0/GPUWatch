@@ -1,4 +1,4 @@
-import { DiagnosticPanel, EmptyState, ErrorState, LoadingState, MetricCard, StatusBadge } from '../../components/ui';
+import { Button, DiagnosticPanel, EmptyState, ErrorState, LoadingState, MetricCard, StatusBadge } from '../../components/ui';
 import { formatTime, formatUnknown, sanitizeMessage } from '../../lib/format';
 import { DetailGpuCard } from './DetailGpuCard';
 import { useServerDetailController } from './useServerDetailController';
@@ -39,9 +39,9 @@ export const ServerDetailScreen = ({ selectedServerId }: { readonly selectedServ
             </div>
             <p className="mt-3 text-sm text-[color:var(--color-muted)]">{detail.server.username}@{detail.server.host}:{detail.server.port}</p>
           </div>
-          <button className="btn btn-primary" disabled={controller.refreshMutation.isPending} onClick={() => controller.refreshMutation.mutate(detail.server.id)} type="button">
+          <Button disabled={controller.refreshMutation.isPending} onClick={() => controller.refreshMutation.mutate(detail.server.id)} type="button" variant="primary">
             Refresh server
-          </button>
+          </Button>
         </div>
         {hasRefreshDiagnostic ? <DiagnosticPanel className="mt-4" errorType={refreshResult.errorType} message={refreshResult.message} title="Refresh diagnostic" /> : null}
       </div>
