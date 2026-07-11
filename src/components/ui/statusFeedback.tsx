@@ -42,7 +42,9 @@ export const EmptyState = ({ title, body }: { readonly title: string; readonly b
 );
 
 export const ErrorState = ({ message }: { readonly message: string }) => (
-  <div className="surface border-[color:var(--color-error)] p-4 text-sm text-[color:var(--color-error)]">{message}</div>
+  <div className="surface border-[color:var(--color-error)] p-4 text-sm text-[color:var(--color-error)]" role="alert">
+    {sanitizeMessage(message)}
+  </div>
 );
 
 export const LoadingState = ({ label }: { readonly label: string }) => (
@@ -103,7 +105,7 @@ export const ResultFeedback = (props: ResultFeedbackProps) => {
           <div className="mb-2">
             <StatusBadge status="error" />
           </div>
-          {props.diagnostic ? <DiagnosticPanel {...props.diagnostic} /> : <ErrorState message={sanitizeMessage(props.message)} />}
+          {props.diagnostic ? <DiagnosticPanel {...props.diagnostic} /> : <div className="text-[color:var(--color-error)]">{sanitizeMessage(props.message)}</div>}
         </div>
       );
   }

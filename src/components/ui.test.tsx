@@ -2,6 +2,9 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  Button,
+  DiagnosticPanel,
+  ErrorState,
   InlineToolbar,
   MiniLineChart,
   ResultFeedback,
@@ -15,6 +18,85 @@ import {
 } from './ui';
 
 describe('shared UI primitives', () => {
+  it('renders Button with native button type and accessible name from children', () => {
+    render(<Button>Refresh now</Button>);
+
+    const button = screen.getByRole('button', { name: 'Refresh now' });
+
+    expect(button.getAttribute('type')).toBe('button');
+    expect(button.className).toContain('btn');
+  });
+
+  it('renders Button variants through semantic class markers', () => {
+    const variantCases = [
+      { expectedClass: 'btn-primary', label: 'Primary action', variant: 'primary' },
+      { expectedClass: 'btn-secondary', label: 'Secondary action', variant: 'secondary' },
+      { expectedClass: 'btn-ghost', label: 'Ghost action', variant: 'ghost' },
+      { expectedClass: 'btn-danger', label: 'Danger action', variant: 'danger' }
+    ] as const;
+
+    for (const { expectedClass, label, variant } of variantCases) {
+      const { unmount } = render(<Button variant={variant}>{label}</Button>);
+      const button = screen.getByRole('button', { name: label });
+
+      expect(button.className).toContain('btn');
+      expect(button.className).toContain(expectedClass);
+
+      unmount();
+    }
+  });
+
+  it('renders Button sizes through semantic class markers', () => {
+    const sizeCases = [
+      { expectedClass: 'btn-sm', label: 'Small action', size: 'sm' },
+      { expectedClass: 'btn-md', label: 'Medium action', size: 'md' }
+    ] as const;
+
+    for (const { expectedClass, label, size } of sizeCases) {
+      const { unmount } = render(<Button size={size}>{label}</Button>);
+      const button = screen.getByRole('button', { name: label });
+
+      expect(button.className).toContain(expectedClass);
+
+      unmount();
+    }
+  });
+
+  it('keeps Button disabled actions natively non-interactive', () => {
+    const onClick = vi.fn();
+
+    render(
+      <Button disabled onClick={onClick}>
+        Delete server
+      </Button>
+    );
+
+    const button = screen.getByRole('button', { name: 'Delete server' });
+    fireEvent.click(button);
+
+    expect(button.hasAttribute('disabled')).toBe(true);
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it('extends Button className without dropping the base class', () => {
+    render(<Button className="settings-action">Save server</Button>);
+
+    const button = screen.getByRole('button', { name: 'Save server' });
+
+    expect(button.className).toContain('btn');
+    expect(button.className).toContain('settings-action');
+  });
+
+  it('keeps Button accessible name from aria-label when children are decorative', () => {
+    render(
+      <Button aria-label="Refresh selected server">
+        <span aria-hidden="true">Refresh</span>
+      </Button>
+    );
+
+    expect(screen.getByRole('button', { name: 'Refresh selected server' })).toBeDefined();
+  });
+
   it('renders inline toolbar with labeled text input and select controls', () => {
     render(
       <InlineToolbar label="Process filters" summary="Frontend-local visibility controls">
@@ -36,6 +118,68 @@ describe('shared UI primitives', () => {
     expect(screen.getByText('Frontend-local visibility controls')).toBeDefined();
     expect(screen.getByRole('textbox', { name: 'Command' })).toBeDefined();
     expect(screen.getByRole('combobox', { name: 'Status' })).toBeDefined();
+  });
+
+  it('connects form helper text to labeled controls through aria-describedby', () => {
+    render(
+      <InlineToolbar label="Process filters">
+        <LabeledTextInput helperText="Matches process command substrings" id="command-filter" label="Command" onChange={() => undefined} value="python" />
+        <LabeledSelect
+          helperText="Choose whether stale rows are visible"
+          id="stale-filter"
+          label="Stale rows"
+          onChange={() => undefined}
+          options={[
+            { label: 'All rows', value: 'all' },
+            { label: 'Current rows only', value: 'current' }
+          ]}
+          value="all"
+        />
+      </InlineToolbar>
+    );
+
+    const textInput = screen.getByRole('textbox', { name: 'Command' });
+    const select = screen.getByRole('combobox', { name: 'Stale rows' });
+
+    expect(textInput.getAttribute('aria-describedby')).toBe('command-filter-hint');
+    expect(select.getAttribute('aria-describedby')).toBe('stale-filter-hint');
+    expect(screen.getByText('Matches process command substrings')).toBeDefined();
+    expect(screen.getByText('Choose whether stale rows are visible')).toBeDefined();
+  });
+
+  it('keeps disabled form controls discoverable and non-interactive', () => {
+    const onTextChange = vi.fn();
+    const onSelectChange = vi.fn();
+
+    render(
+      <InlineToolbar label="Disabled filters">
+        <LabeledTextInput disabled helperText="Unavailable while data loads" id="disabled-command" label="Command" onChange={onTextChange} value="python" />
+        <LabeledSelect
+          disabled
+          helperText="Unavailable while data loads"
+          id="disabled-status"
+          label="Status"
+          onChange={onSelectChange}
+          options={[
+            { label: 'All statuses', value: 'all' },
+            { label: 'Stale only', value: 'stale' }
+          ]}
+          value="all"
+        />
+      </InlineToolbar>
+    );
+
+    const textInput = screen.getByRole('textbox', { name: 'Command' });
+    const select = screen.getByRole('combobox', { name: 'Status' });
+
+    fireEvent.change(textInput, { target: { value: 'node' } });
+    fireEvent.change(select, { target: { value: 'stale' } });
+
+    expect(textInput.hasAttribute('disabled')).toBe(true);
+    expect(select.hasAttribute('disabled')).toBe(true);
+    expect(screen.getAllByText('Unavailable while data loads')).toHaveLength(2);
+    expect(onTextChange).not.toHaveBeenCalled();
+    expect(onSelectChange).not.toHaveBeenCalled();
   });
 
   it('renders reset button with the shared secondary button style', () => {
@@ -61,7 +205,18 @@ describe('shared UI primitives', () => {
     expect(status.querySelector('.surface')).toBeDefined();
   });
 
-  it('renders shared success feedback with a badge and sanitized message text', () => {
+  it('renders ErrorState as an alert with sanitized message text', () => {
+    render(<ErrorState message="SSH failed for /Users/alice/.ssh/id_ed25519 with --password hunter2" />);
+
+    const alert = screen.getByRole('alert');
+
+    expect(alert.textContent).toContain('[path redacted]');
+    expect(alert.textContent).toContain('--password=[redacted]');
+    expect(alert.textContent).not.toContain('/Users/alice/.ssh/id_ed25519');
+    expect(alert.textContent).not.toContain('hunter2');
+  });
+
+  it('renders shared success feedback with a badge and sanitizeMessage redaction', () => {
     render(<ResultFeedback message="Refresh used /Users/alice/.ssh/id_ed25519 and --token secret-value" state="success" />);
 
     const status = screen.getByRole('status', { name: 'success result' });
@@ -84,7 +239,48 @@ describe('shared UI primitives', () => {
     expect(alert.textContent).not.toContain('/Users/alice/.ssh/id_ed25519');
     expect(alert.querySelector('.status-error')).toBeDefined();
     expect(alert.className).toContain('surface');
-    expect(alert.querySelector('.surface')).toBeDefined();
+    expect(alert.querySelectorAll('.surface')).toHaveLength(0);
+  });
+
+  it('renders diagnostic error feedback as an alert with formatted guidance', () => {
+    render(
+      <ResultFeedback
+        diagnostic={{ errorType: 'ssh_auth_failed', message: 'Private key failed at /Users/alice/.ssh/id_ed25519 with --token secret-value' }}
+        label="SSH test"
+        message="Fallback diagnostic"
+        state="error"
+      />
+    );
+
+    const alert = screen.getByRole('alert', { name: 'SSH test' });
+
+    expect(alert.textContent).toContain('SSH authentication failed');
+    expect(alert.textContent).toContain('Type: ssh_auth_failed');
+    expect(alert.textContent).toContain('[path redacted]');
+    expect(alert.textContent).toContain('--token=[redacted]');
+    expect(alert.textContent).not.toContain('/Users/alice/.ssh/id_ed25519');
+    expect(alert.textContent).not.toContain('secret-value');
+  });
+
+  it('preserves DiagnosticPanel formatDiagnostic formatting and redaction behavior', () => {
+    const escape = String.fromCharCode(27);
+
+    render(
+      <DiagnosticPanel
+        errorType="backend_unavailable"
+        message={`${escape}[31mHelper failed for /Users/alice/.ssh/id_ed25519 with --api-key secret-value${escape}[0m`}
+        title="Connection diagnostic"
+      />
+    );
+
+    const panelText = screen.getByText('Connection diagnostic').parentElement?.textContent ?? '';
+
+    expect(screen.getByText('Connection diagnostic')).toBeDefined();
+    expect(screen.getByText('Desktop backend unavailable')).toBeDefined();
+    expect(screen.getByText('Type: backend_unavailable')).toBeDefined();
+    expect(panelText).toContain('Message: Helper failed for [path redacted] with --api-key=[redacted]');
+    expect(panelText).not.toContain(escape);
+    expect(panelText).not.toContain('secret-value');
   });
 
   it('exposes sortable table header state through aria-sort and button text', () => {

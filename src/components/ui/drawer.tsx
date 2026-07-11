@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
 import type { ReactNode } from 'react';
 
+import { Button } from './Button';
+
 export const RightDrawer = ({
   ariaLabel,
   children,
@@ -41,9 +43,9 @@ export const RightDrawer = ({
             <div className="eyebrow">Details</div>
             <h2 className="mt-2 font-[var(--font-display)] text-3xl font-black leading-none tracking-[-0.08em]">{title}</h2>
           </div>
-          <button aria-label="Close drawer" className="btn btn-secondary" onClick={onClose} type="button">
+          <Button aria-label="Close drawer" onClick={onClose} variant="secondary">
             Close
-          </button>
+          </Button>
         </div>
         <div className="space-y-4 p-5">{children}</div>
       </aside>

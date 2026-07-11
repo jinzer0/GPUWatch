@@ -1,3 +1,4 @@
+export * from './ui/Button';
 export * from './ui/chartTypes';
 export * from './ui/drawer';
 export * from './ui/formControls';
