@@ -1,4 +1,4 @@
-import { EmptyState, ErrorState, InlineToolbar, LabeledSelect, LabeledTextInput, LoadingState, ResetButton, ResultFeedback } from '../../components/ui';
+import { Button, EmptyState, ErrorState, InlineToolbar, LabeledSelect, LabeledTextInput, LoadingState, ResetButton, ResultFeedback } from '../../components/ui';
 import type { ServerOverviewDto } from '../../lib/types';
 import { OverviewServerCard } from './OverviewServerCard';
 import { parseOverviewQuickFilter } from './overviewModel';
@@ -18,9 +18,9 @@ export const OverviewScreen = ({ overview, isLoading, error }: { readonly overvi
             <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em]">Fleet snapshot</h2>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-[color:var(--color-muted)]">A terse readout of configured GPU hosts, latest successful polls, and current health metadata.</p>
           </div>
-          <button className="btn btn-primary" disabled={controller.seedMutation.isPending} onClick={() => controller.seedMutation.mutate()} type="button">
+          <Button disabled={controller.seedMutation.isPending} onClick={() => controller.seedMutation.mutate()} type="button" variant="primary">
             Seed demo data
-          </button>
+          </Button>
         </div>
         {controller.seedFeedback ? (
           <div className="mt-4">

@@ -1,4 +1,4 @@
-import { DiagnosticPanel, MetricCard, ResultFeedback, StatusBadge } from '../../components/ui';
+import { Button, DiagnosticPanel, MetricCard, ResultFeedback, StatusBadge } from '../../components/ui';
 import { formatPercent, formatTemperature, formatTime, formatUnknown, sanitizeMessage } from '../../lib/format';
 import type { ServerOverviewDto } from '../../lib/types';
 import type { useOverviewController } from './useOverviewController';
@@ -23,9 +23,9 @@ export const OverviewServerCard = ({
           </div>
           <p className="mt-1 text-sm text-[color:var(--color-muted)]">{server.host}</p>
         </button>
-        <button className="btn btn-secondary" disabled={isRefreshingRow} onClick={() => controller.refreshMutation.mutate(server.id)} type="button">
+        <Button disabled={isRefreshingRow} onClick={() => controller.refreshMutation.mutate(server.id)} type="button" variant="secondary">
           Refresh
-        </button>
+        </Button>
       </div>
 
       {controller.refreshFeedback?.serverId === server.id ? (
