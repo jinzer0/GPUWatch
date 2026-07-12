@@ -6,7 +6,7 @@ import { HistoryControls, HistoryMetricToggles } from './HistoryControls';
 import { useHistoryMonitorController } from './useHistoryMonitorController';
 
 const HistoryIdentityPanel = () => (
-  <header className="border-b border-[color:var(--color-line)] pb-5">
+  <header className="history-monitor-identity border-b border-[color:var(--color-line)] pb-5">
     <div className="eyebrow">Live Monitor</div>
     <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em]">Stored GPU history</h2>
     <p className="mt-3 max-w-2xl text-sm leading-6 text-[color:var(--color-muted)]">Successful poll samples only; gaps mean no stored sample.</p>
@@ -18,7 +18,7 @@ export const HistoryMonitorScreen = ({ overview, selectedServerId }: { readonly 
 
   if (overview.length === 0) {
     return (
-      <section className="space-y-6">
+      <section className="history-monitor-screen space-y-6">
         <HistoryIdentityPanel />
         <EmptyState title="No servers available" body="Add or seed a server before opening stored GPU history." />
       </section>
@@ -26,7 +26,7 @@ export const HistoryMonitorScreen = ({ overview, selectedServerId }: { readonly 
   }
 
   return (
-    <section className="space-y-6">
+    <section className="history-monitor-screen space-y-6">
       <HistoryIdentityPanel />
       <HistoryControls controller={controller} />
       <HistoryMetricToggles selectedMetrics={controller.selectedMetrics} toggleMetric={controller.toggleMetric} />

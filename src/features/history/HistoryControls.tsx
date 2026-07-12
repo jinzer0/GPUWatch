@@ -5,7 +5,7 @@ import type { useHistoryMonitorController } from './useHistoryMonitorController'
 type HistoryController = ReturnType<typeof useHistoryMonitorController>;
 
 export const HistoryControls = ({ controller }: { readonly controller: HistoryController }) => (
-  <>
+  <div className="history-monitor-controls" role="group" aria-label="History monitor controls">
     <InlineToolbar
       label="History controls"
       summary={
@@ -32,14 +32,22 @@ export const HistoryControls = ({ controller }: { readonly controller: HistoryCo
         options={HISTORY_RANGES.map((historyRange) => ({ label: rangeLabel(historyRange), value: historyRange }))}
         value={controller.range}
       />
-      <Button disabled={!controller.hasConcreteServer || controller.historyQuery.isFetching || controller.refreshFeedback.state === 'pending'} onClick={() => void controller.refreshHistory()} type="button" variant="secondary">
+      <Button
+        aria-label={controller.activeServer ? `Refresh stored history for ${controller.activeServer.name}` : 'Refresh stored history'}
+        disabled={!controller.hasConcreteServer || controller.historyQuery.isFetching || controller.refreshFeedback.state === 'pending'}
+        onClick={() => void controller.refreshHistory()}
+        type="button"
+        variant="secondary"
+      >
         Refresh history
       </Button>
     </InlineToolbar>
-    {controller.refreshFeedback.state === 'pending' ? <ResultFeedback label="History refresh" state="pending" /> : null}
-    {controller.refreshFeedback.state === 'success' ? <ResultFeedback label="History refresh result" message={controller.refreshFeedback.message} state="success" /> : null}
-    {controller.refreshFeedback.state === 'error' ? <ResultFeedback label="History refresh result" message={controller.refreshFeedback.message} state="error" /> : null}
-  </>
+    <div className="history-controls-feedback mt-3">
+      {controller.refreshFeedback.state === 'pending' ? <ResultFeedback label="History refresh" state="pending" /> : null}
+      {controller.refreshFeedback.state === 'success' ? <ResultFeedback label="History refresh result" message={controller.refreshFeedback.message} state="success" /> : null}
+      {controller.refreshFeedback.state === 'error' ? <ResultFeedback label="History refresh result" message={controller.refreshFeedback.message} state="error" /> : null}
+    </div>
+  </div>
 );
 
 export const HistoryMetricToggles = ({ selectedMetrics, toggleMetric }: { readonly selectedMetrics: readonly HistoryMetricId[]; readonly toggleMetric: (metricId: HistoryMetricId) => void }) => (

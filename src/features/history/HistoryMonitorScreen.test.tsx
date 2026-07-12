@@ -1,9 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { HistoryMonitorScreen } from './HistoryMonitorScreen';
+import { DEFAULT_HISTORY_METRICS, historyMetricDefinitions, rangeLabel } from './historyModel';
 import { listGpuHistory } from '../../lib/api';
+import { formatTime } from '../../lib/format';
+import { useUiStore } from '../../lib/store';
 import type { GpuHistoryResponseDto, ServerOverviewDto } from '../../lib/types';
 
 vi.mock('../../lib/api', () => ({
@@ -20,6 +23,20 @@ vi.mock('../../lib/api', () => ({
 }));
 
 const listGpuHistoryMock = vi.mocked(listGpuHistory);
+
+const expectedMetricContracts = [
+  { id: 'gpuUtilizationPercent', label: 'GPU util' },
+  { id: 'memoryUtilizationPercent', label: 'Memory util' },
+  { id: 'memoryUsedMiB', label: 'Memory used' },
+  { id: 'temperatureCelsius', label: 'Temperature' },
+  { id: 'powerDrawWatt', label: 'Power' },
+  { id: 'encoderUtilizationPercent', label: 'Encoder' },
+  { id: 'decoderUtilizationPercent', label: 'Decoder' },
+  { id: 'pcieRxKibPerSec', label: 'PCIe RX' },
+  { id: 'pcieTxKibPerSec', label: 'PCIe TX' }
+] as const;
+
+const defaultMetricIds: readonly string[] = ['gpuUtilizationPercent', 'memoryUtilizationPercent', 'memoryUsedMiB'];
 
 const overviewRows: ServerOverviewDto[] = [
   {
@@ -194,10 +211,15 @@ const renderHistoryMonitor = (props: { overview?: ServerOverviewDto[]; selectedS
     </QueryClientProvider>
   );
 
+const getHistoryChartPanel = (metricLabel: string) => screen.getByRole('region', { name: `${metricLabel} history panel` });
+
+const queryHistoryChartPanel = (metricLabel: string) => screen.queryByRole('region', { name: `${metricLabel} history panel` });
+
 describe('HistoryMonitorScreen', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     listGpuHistoryMock.mockResolvedValue(historyFixture);
+    useUiStore.setState({ selectedServerId: null });
   });
 
   it('shows an empty state and never queries history without an overview server id', () => {
@@ -219,6 +241,32 @@ describe('HistoryMonitorScreen', () => {
     renderHistoryMonitor();
 
     expect(await screen.findByText('history unavailable')).toBeDefined();
+  });
+
+  it('keeps the Live Monitor identity and controls visible while stored history loads or errors', async () => {
+    listGpuHistoryMock.mockReturnValue(new Promise(() => undefined));
+    const loadingRender = renderHistoryMonitor();
+
+    expect(screen.getByText('Live Monitor')).toBeDefined();
+    expect(screen.getByRole('heading', { name: 'Stored GPU history' })).toBeDefined();
+    expect(screen.getByText('Successful poll samples only; gaps mean no stored sample.')).toBeDefined();
+    expect(screen.getByRole('combobox', { name: 'Server' })).toBeDefined();
+    expect(screen.getByRole('combobox', { name: 'GPU' })).toBeDefined();
+    expect(screen.getByRole('combobox', { name: 'Range' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Refresh stored history for Lab GPU' })).toBeDefined();
+    expect(screen.getByText('Loading stored GPU history...')).toBeDefined();
+    loadingRender.unmount();
+
+    listGpuHistoryMock.mockRejectedValue(new Error('history unavailable'));
+    renderHistoryMonitor();
+
+    expect(await screen.findByText('history unavailable')).toBeDefined();
+    expect(screen.getByText('Live Monitor')).toBeDefined();
+    expect(screen.getByRole('heading', { name: 'Stored GPU history' })).toBeDefined();
+    expect(screen.getByRole('combobox', { name: 'Server' })).toBeDefined();
+    expect(screen.getByRole('combobox', { name: 'GPU' })).toBeDefined();
+    expect(screen.getByRole('combobox', { name: 'Range' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Refresh stored history for Lab GPU' })).toBeDefined();
   });
 
   it('uses selected UI-store server when present, otherwise the first overview row, without blank history calls', async () => {
@@ -254,26 +302,124 @@ describe('HistoryMonitorScreen', () => {
     expect((screen.getByRole('combobox', { name: 'Server' }) as HTMLSelectElement).value).toBe('server-2');
   });
 
-  it('renders the required header, toolbar controls, default metrics, and grouped charts on success', async () => {
+  it('locks the exact history metric contracts, default selections, and grouped charts on success', async () => {
     renderHistoryMonitor();
 
+    expect(historyMetricDefinitions.map((metric) => ({ id: metric.id, label: metric.label }))).toEqual(expectedMetricContracts);
+    expect(DEFAULT_HISTORY_METRICS).toEqual(defaultMetricIds);
     expect(await screen.findByText('Successful poll samples only; gaps mean no stored sample.')).toBeDefined();
     expect(screen.getByRole('combobox', { name: 'Server' })).toBeDefined();
     expect(screen.getByRole('combobox', { name: 'GPU' })).toBeDefined();
     expect(screen.getByRole('combobox', { name: 'Range' })).toBeDefined();
-    expect(screen.getByRole('button', { name: 'GPU util' }).getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByRole('button', { name: 'Memory util' }).getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByRole('button', { name: 'Memory used' }).getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByRole('button', { name: 'Temperature' }).getAttribute('aria-pressed')).toBe('false');
-    expect(screen.getByRole('button', { name: 'Power' })).toBeDefined();
-    expect(screen.getByRole('button', { name: 'Encoder' })).toBeDefined();
-    expect(screen.getByRole('button', { name: 'Decoder' })).toBeDefined();
-    expect(screen.getByRole('button', { name: 'PCIe RX' })).toBeDefined();
-    expect(screen.getByRole('button', { name: 'PCIe TX' })).toBeDefined();
+
+    for (const metric of expectedMetricContracts) {
+      const expectedPressed = defaultMetricIds.includes(metric.id) ? 'true' : 'false';
+      expect(screen.getByRole('button', { name: metric.label }).getAttribute('aria-pressed')).toBe(expectedPressed);
+    }
+
     expect(await screen.findByRole('img', { name: 'GPU util stored history' })).toBeDefined();
     expect(screen.getByRole('img', { name: 'Memory util stored history' })).toBeDefined();
     expect(screen.getByRole('img', { name: 'Memory used stored history' })).toBeDefined();
     expect(screen.queryByRole('img', { name: 'Temperature stored history' })).toBeNull();
+  });
+
+  it('defines compact monitor controls as one labeled control group with target-specific actions', async () => {
+    useUiStore.setState({ densityMode: 'compact' });
+    renderHistoryMonitor();
+    await screen.findByRole('img', { name: 'GPU util stored history' });
+
+    const controls = screen.getByRole('group', { name: 'History monitor controls' });
+
+    expect(within(controls).getByText('Lab GPU / Last 1 hour / 2 GPU series. Null metrics and missing poll intervals render as gaps, not zeroes.')).toBeDefined();
+    expect(within(controls).getByRole('combobox', { name: 'Server' })).toBeDefined();
+    expect(within(controls).getByRole('combobox', { name: 'GPU' })).toBeDefined();
+    expect(within(controls).getByRole('combobox', { name: 'Range' })).toBeDefined();
+    expect(within(controls).getByRole('button', { name: 'Refresh stored history for Lab GPU' })).toBeDefined();
+  });
+
+  it('defines each selected metric as an accessible chart panel with title, unit, latest value, legend, and window text', async () => {
+    renderHistoryMonitor();
+    await screen.findByRole('img', { name: 'GPU util stored history' });
+
+    const gpuUtilPanel = getHistoryChartPanel('GPU util');
+    const memoryUtilPanel = getHistoryChartPanel('Memory util');
+    const memoryUsedPanel = getHistoryChartPanel('Memory used');
+    const windowText = `Window ${formatTime(historyFixture.startedAt)} to ${formatTime(historyFixture.finishedAt)}`;
+    const rangeText = `Range ${rangeLabel(historyFixture.range)}`;
+
+    expect(within(gpuUtilPanel).getByRole('heading', { name: 'GPU util' })).toBeDefined();
+    expect(gpuUtilPanel.textContent).toContain('Unit %');
+    expect(gpuUtilPanel.textContent).toContain('Latest 60.0%');
+    expect(within(gpuUtilPanel).getByRole('list', { name: 'GPU util legend' })).toBeDefined();
+    expect(gpuUtilPanel.textContent).toContain('GPU 0 - NVIDIA Test 0');
+    expect(gpuUtilPanel.textContent).toContain('GPU 1 - NVIDIA Test 1');
+    expect(gpuUtilPanel.textContent).toContain(windowText);
+    expect(gpuUtilPanel.textContent).toContain(rangeText);
+
+    expect(within(memoryUtilPanel).getByRole('heading', { name: 'Memory util' })).toBeDefined();
+    expect(memoryUtilPanel.textContent).toContain('Unit %');
+    expect(memoryUtilPanel.textContent).toContain('Latest 45.0%');
+
+    expect(within(memoryUsedPanel).getByRole('heading', { name: 'Memory used' })).toBeDefined();
+    expect(memoryUsedPanel.textContent).toContain('Unit MiB');
+    expect(memoryUsedPanel.textContent).toContain('Latest 4,096 MiB');
+  });
+
+  it('defines one metric and one unit per chart panel without mixed-unit panels', async () => {
+    renderHistoryMonitor();
+    await screen.findByRole('img', { name: 'GPU util stored history' });
+
+    const expectedPanels = [
+      { label: 'GPU util', unit: '%' },
+      { label: 'Memory util', unit: '%' },
+      { label: 'Memory used', unit: 'MiB' }
+    ] as const;
+
+    for (const expectedPanel of expectedPanels) {
+      const panel = getHistoryChartPanel(expectedPanel.label);
+
+      expect(within(panel).getAllByText(/^Unit /)).toHaveLength(1);
+      expect(panel.textContent).toContain(`Unit ${expectedPanel.unit}`);
+      expect(panel.textContent).not.toContain('Unit %, MiB');
+      expect(panel.textContent).not.toContain('Unit mixed');
+    }
+
+    expect(screen.getAllByRole('region', { name: /history panel$/i })).toHaveLength(expectedPanels.length);
+  });
+
+  it('shows the no-metrics empty state when every default metric is toggled off', async () => {
+    renderHistoryMonitor();
+    await screen.findByRole('img', { name: 'GPU util stored history' });
+
+    for (const metric of expectedMetricContracts.filter((metric) => defaultMetricIds.includes(metric.id))) {
+      fireEvent.click(screen.getByRole('button', { name: metric.label }));
+      expect(screen.getByRole('button', { name: metric.label }).getAttribute('aria-pressed')).toBe('false');
+    }
+
+    expect(screen.getByText('No metrics selected')).toBeDefined();
+    expect(screen.queryByRole('img', { name: 'GPU util stored history' })).toBeNull();
+    expect(screen.queryByRole('img', { name: 'Memory util stored history' })).toBeNull();
+    expect(screen.queryByRole('img', { name: 'Memory used stored history' })).toBeNull();
+  });
+
+  it('defines the zero-selected state and removes every selected chart panel when all metric toggles are off', async () => {
+    renderHistoryMonitor();
+    await screen.findByRole('img', { name: 'GPU util stored history' });
+
+    expect(getHistoryChartPanel('GPU util')).toBeDefined();
+    expect(getHistoryChartPanel('Memory util')).toBeDefined();
+    expect(getHistoryChartPanel('Memory used')).toBeDefined();
+
+    for (const metric of expectedMetricContracts.filter((metric) => defaultMetricIds.includes(metric.id))) {
+      fireEvent.click(screen.getByRole('button', { name: metric.label }));
+    }
+
+    expect(screen.getByText('No metrics selected')).toBeDefined();
+    expect(screen.getByText('Turn on one or more metrics to render stored GPU history charts.')).toBeDefined();
+    expect(queryHistoryChartPanel('GPU util')).toBeNull();
+    expect(queryHistoryChartPanel('Memory util')).toBeNull();
+    expect(queryHistoryChartPanel('Memory used')).toBeNull();
+    expect(screen.queryAllByRole('region', { name: /history panel$/i })).toHaveLength(0);
   });
 
   it('updates server and range query calls through toolbar interactions', async () => {
@@ -285,6 +431,31 @@ describe('HistoryMonitorScreen', () => {
 
     fireEvent.change(screen.getByRole('combobox', { name: 'Server' }), { target: { value: 'server-2' } });
     await waitFor(() => expect(listGpuHistoryMock).toHaveBeenCalledWith('server-2', null, null, '6h'));
+  });
+
+  it('resets the local GPU selector to all GPUs when the local server selection changes', async () => {
+    renderHistoryMonitor();
+    await screen.findByRole('img', { name: 'GPU util stored history' });
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'GPU' }), { target: { value: '1::GPU-1' } });
+    expect((screen.getByRole('combobox', { name: 'GPU' }) as HTMLSelectElement).value).toBe('1::GPU-1');
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Server' }), { target: { value: 'server-2' } });
+
+    expect((screen.getByRole('combobox', { name: 'GPU' }) as HTMLSelectElement).value).toBe('all');
+    await waitFor(() => expect(listGpuHistoryMock).toHaveBeenCalledWith('server-2', null, null, '1h'));
+  });
+
+  it('keeps local server selection isolated from the global selected server store', async () => {
+    useUiStore.setState({ selectedServerId: 'server-1' });
+    renderHistoryMonitor({ selectedServerId: useUiStore.getState().selectedServerId });
+    await screen.findByRole('img', { name: 'GPU util stored history' });
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Server' }), { target: { value: 'server-2' } });
+
+    expect((screen.getByRole('combobox', { name: 'Server' }) as HTMLSelectElement).value).toBe('server-2');
+    expect(useUiStore.getState().selectedServerId).toBe('server-1');
+    await waitFor(() => expect(listGpuHistoryMock).toHaveBeenCalledWith('server-2', null, null, '1h'));
   });
 
   it('refreshes the current history read model and preserves selected server, range, GPU, and metrics', async () => {
@@ -303,7 +474,7 @@ describe('HistoryMonitorScreen', () => {
     listGpuHistoryMock.mockClear();
     listGpuHistoryMock.mockReturnValueOnce(deferredRefresh.promise);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh history' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh stored history for Lab GPU' }));
 
     expect(screen.getByRole('status', { name: 'History refresh' }).textContent).toContain('pending');
     await waitFor(() => expect(listGpuHistoryMock).toHaveBeenCalledWith('server-1', null, null, '6h'));
@@ -332,7 +503,7 @@ describe('HistoryMonitorScreen', () => {
     listGpuHistoryMock.mockClear();
     listGpuHistoryMock.mockRejectedValueOnce(new Error('history failed for /Users/alice/.ssh/id_ed25519 --token secret-value'));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh history' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh stored history for Lab GPU' }));
 
     const alert = await screen.findByRole('alert', { name: 'History refresh result' });
     expect(alert.textContent).toContain('[path redacted]');
@@ -342,7 +513,7 @@ describe('HistoryMonitorScreen', () => {
     expect(screen.getByRole('combobox', { name: 'Server' })).toBeDefined();
     expect(screen.getByRole('combobox', { name: 'Range' })).toBeDefined();
     expect((screen.getByRole('combobox', { name: 'GPU' }) as HTMLSelectElement).value).toBe('1::GPU-1');
-    expect(screen.getByRole('button', { name: 'Refresh history' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Refresh stored history for Lab GPU' })).toBeDefined();
   });
 
   it('builds GPU selector values from history series and filters rendered chart series locally', async () => {
@@ -364,7 +535,7 @@ describe('HistoryMonitorScreen', () => {
     const memoryChart = await screen.findByRole('img', { name: 'Memory used stored history' });
 
     expect(memoryChart.querySelectorAll('[data-chart-gap="metric-null"]').length).toBeGreaterThan(0);
-    expect(screen.getByText('unknown')).toBeDefined();
+    expect(getHistoryChartPanel('Memory used').textContent).toContain('Latest 4,096 MiB');
     expect(screen.queryByText('0 MiB')).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Temperature' }));
