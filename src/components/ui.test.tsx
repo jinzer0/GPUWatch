@@ -16,6 +16,7 @@ import {
   SortableTableHeader,
   sortDirectionToAriaSort
 } from './ui';
+import { buildTimeSeries } from './ui/chartMath';
 
 describe('shared UI primitives', () => {
   it('renders Button with native button type and accessible name from children', () => {
@@ -372,7 +373,9 @@ describe('shared UI primitives', () => {
     expect(chart.getAttribute('class')).toContain('time-series-chart-svg');
     expect(chart.getAttribute('height')).toBe('88');
     expect(chart.closest('.time-series-chart')?.className).toContain('time-series-chart-compact');
+    expect(chart.querySelectorAll('[data-chart-point-value]')).toHaveLength(1);
     expect(chart.querySelector('[data-chart-point-value="42"]')).toBeDefined();
+    expect(chart.querySelector('[data-chart-series-id="gpu"]')).toBeNull();
   });
 
   it('renders time series empty state for empty data or all-null selected metric values', () => {
@@ -425,6 +428,77 @@ describe('shared UI primitives', () => {
     expect(chart.querySelectorAll('[data-chart-gap="metric-null"]')).toHaveLength(1);
   });
 
+  it('drops invalid timestamps before rendering time series points', () => {
+    render(
+      <TimeSeriesChart
+        ariaLabel="Invalid timestamp history"
+        range={{ min: 0, max: 100 }}
+        samples={[
+          { receivedAt: '2026-06-04T00:00:00.000Z', gpuUtilizationPercent: 10 },
+          { receivedAt: 'not-a-date', gpuUtilizationPercent: 99 },
+          { receivedAt: Number.NaN, gpuUtilizationPercent: 88 },
+          { receivedAt: '2026-06-04T00:01:00.000Z', gpuUtilizationPercent: 30 }
+        ]}
+        series={[{ id: 'gpu', label: 'GPU', metric: 'gpuUtilizationPercent' }]}
+      />
+    );
+
+    const chart = screen.getByRole('img', { name: 'Invalid timestamp history' });
+    const pointValues = Array.from(chart.querySelectorAll('[data-chart-point-value]')).map((point) => point.getAttribute('data-chart-point-value'));
+
+    expect(pointValues).toEqual(['10', '30']);
+    expect(chart.querySelector('[data-chart-point-value="99"]')).toBeNull();
+    expect(chart.querySelector('[data-chart-point-value="88"]')).toBeNull();
+  });
+
+  it('sorts time series samples by ascending timestamp before rendering points', () => {
+    render(
+      <TimeSeriesChart
+        ariaLabel="Sorted timestamp history"
+        range={{ min: 0, max: 100 }}
+        samples={[
+          { receivedAt: '2026-06-04T00:02:00.000Z', gpuUtilizationPercent: 30 },
+          { receivedAt: '2026-06-04T00:00:00.000Z', gpuUtilizationPercent: 10 },
+          { receivedAt: '2026-06-04T00:01:00.000Z', gpuUtilizationPercent: 20 }
+        ]}
+        series={[{ id: 'gpu', label: 'GPU', metric: 'gpuUtilizationPercent' }]}
+      />
+    );
+
+    const chart = screen.getByRole('img', { name: 'Sorted timestamp history' });
+    const points = Array.from(chart.querySelectorAll('[data-chart-point-value]'));
+
+    expect(points.map((point) => point.getAttribute('data-chart-point-value'))).toEqual(['10', '20', '30']);
+    expect(points.map((point) => point.getAttribute('cx'))).toEqual(['0', '280', '560']);
+  });
+
+  it('renders chart gap attributes for null and non-finite metrics with no zero points', () => {
+    render(
+      <TimeSeriesChart
+        ariaLabel="Non-finite metric gap history"
+        pollingIntervalSeconds={30}
+        range={{ min: 0, max: 100 }}
+        samples={[
+          { receivedAt: '2026-06-04T00:00:00.000Z', gpuUtilizationPercent: 10 },
+          { receivedAt: '2026-06-04T00:00:30.000Z', gpuUtilizationPercent: null },
+          { receivedAt: '2026-06-04T00:01:00.000Z', gpuUtilizationPercent: Number.NaN },
+          { receivedAt: '2026-06-04T00:01:30.000Z', gpuUtilizationPercent: Number.POSITIVE_INFINITY },
+          { receivedAt: '2026-06-04T00:02:00.000Z', gpuUtilizationPercent: Number.NEGATIVE_INFINITY },
+          { receivedAt: '2026-06-04T00:02:30.000Z', gpuUtilizationPercent: 40 }
+        ]}
+        series={[{ id: 'gpu', label: 'GPU', metric: 'gpuUtilizationPercent' }]}
+      />
+    );
+
+    const chart = screen.getByRole('img', { name: 'Non-finite metric gap history' });
+    const pointValues = Array.from(chart.querySelectorAll('[data-chart-point-value]')).map((point) => point.getAttribute('data-chart-point-value'));
+
+    expect(pointValues).toEqual(['10', '40']);
+    expect(chart.querySelectorAll('[data-chart-gap="metric-null"]')).toHaveLength(4);
+    expect(chart.querySelector('[data-chart-point-value="0"]')).toBeNull();
+    console.info('chart integrity evidence: metric-null gaps=4; point values=10,40; zero point absent for null/non-finite metric cases');
+  });
+
   it('renders multi-series time paths from metric keys and extractor functions', () => {
     render(
       <TimeSeriesChart
@@ -468,6 +542,84 @@ describe('shared UI primitives', () => {
     expect(chart.querySelectorAll('[data-chart-series-id="gpu"]')).toHaveLength(2);
     expect(chart.querySelectorAll('[data-chart-gap="time"]')).toHaveLength(1);
     expect(chart.querySelector('[data-chart-gap-seconds="270"]')).toBeDefined();
+  });
+
+  it('does not mark a time gap when elapsed seconds equal the inferred threshold', () => {
+    render(
+      <TimeSeriesChart
+        ariaLabel="Threshold equality history"
+        pollingIntervalSeconds={60}
+        range={{ min: 0, max: 100 }}
+        samples={[
+          { receivedAt: '2026-06-04T00:00:00.000Z', gpuUtilizationPercent: 10 },
+          { receivedAt: '2026-06-04T00:02:00.000Z', gpuUtilizationPercent: 20 }
+        ]}
+        series={[{ id: 'gpu', label: 'GPU', metric: 'gpuUtilizationPercent' }]}
+      />
+    );
+
+    const chart = screen.getByRole('img', { name: 'Threshold equality history' });
+    expect(chart.querySelectorAll('[data-chart-gap="time"]')).toHaveLength(0);
+    expect(chart.querySelectorAll('[data-chart-series-id="gpu"]')).toHaveLength(1);
+  });
+
+  it('marks a time gap when elapsed seconds exceed the inferred threshold', () => {
+    render(
+      <TimeSeriesChart
+        ariaLabel="Threshold exceeded history"
+        pollingIntervalSeconds={60}
+        range={{ min: 0, max: 100 }}
+        samples={[
+          { receivedAt: '2026-06-04T00:00:00.000Z', gpuUtilizationPercent: 10 },
+          { receivedAt: '2026-06-04T00:02:01.000Z', gpuUtilizationPercent: 20 }
+        ]}
+        series={[{ id: 'gpu', label: 'GPU', metric: 'gpuUtilizationPercent' }]}
+      />
+    );
+
+    const chart = screen.getByRole('img', { name: 'Threshold exceeded history' });
+    expect(chart.querySelectorAll('[data-chart-gap="time"]')).toHaveLength(1);
+    expect(chart.querySelector('[data-chart-gap-seconds="121"]')).toBeDefined();
+    expect(chart.querySelectorAll('[data-chart-series-id="gpu"]')).toHaveLength(0);
+  });
+
+  it('keeps utilization percentages pinned to a 0-100 chart range', () => {
+    const renderableSeries = buildTimeSeries({
+      height: 100,
+      range: { min: 0, max: 100 },
+      samples: [
+        { receivedAt: '2026-06-04T00:00:00.000Z', gpuUtilizationPercent: 25 },
+        { receivedAt: '2026-06-04T00:01:00.000Z', gpuUtilizationPercent: 75 }
+      ],
+      series: [{ id: 'gpu', label: 'GPU', metric: 'gpuUtilizationPercent' }],
+      width: 100
+    });
+
+    expect(renderableSeries.at(0)?.points.map((point) => point.y)).toEqual([70, 30]);
+  });
+
+  it('uses data domains for temperature and power charts instead of percentage range', () => {
+    const temperatureSeries = buildTimeSeries({
+      height: 100,
+      samples: [
+        { receivedAt: '2026-06-04T00:00:00.000Z', temperatureCelsius: 40 },
+        { receivedAt: '2026-06-04T00:01:00.000Z', temperatureCelsius: 80 }
+      ],
+      series: [{ id: 'temperature', label: 'Temperature', metric: 'temperatureCelsius' }],
+      width: 100
+    });
+    const powerSeries = buildTimeSeries({
+      height: 100,
+      samples: [
+        { receivedAt: '2026-06-04T00:00:00.000Z', powerDrawWatts: 125 },
+        { receivedAt: '2026-06-04T00:01:00.000Z', powerDrawWatts: 250 }
+      ],
+      series: [{ id: 'power', label: 'Power', metric: 'powerDrawWatts' }],
+      width: 100
+    });
+
+    expect(temperatureSeries.at(0)?.points.map((point) => point.y)).toEqual([90, 10]);
+    expect(powerSeries.at(0)?.points.map((point) => point.y)).toEqual([90, 10]);
   });
 
 });
