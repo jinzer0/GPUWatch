@@ -72,11 +72,22 @@ export const toChartSamples = (seriesList: readonly GpuHistorySeriesDto[], metri
 };
 
 export const latestMetricValue = (seriesList: readonly GpuHistorySeriesDto[], metricId: HistoryMetricId) => {
-  const latestSample = seriesList
-    .flatMap((series) => series.samples)
-    .sort((left, right) => Date.parse(right.receivedAt) - Date.parse(left.receivedAt))[0];
+  const latestTimestampMs = Math.max(...seriesList.flatMap((series) => series.samples.map((sample) => Date.parse(sample.receivedAt))).filter(Number.isFinite));
 
-  return latestSample ? readMetricValue(latestSample, metricId) : null;
+  if (!Number.isFinite(latestTimestampMs)) {
+    return null;
+  }
+
+  for (const series of Array.from(seriesList).reverse()) {
+    const sample = series.samples.find((entry) => Date.parse(entry.receivedAt) === latestTimestampMs);
+    const value = sample ? readMetricValue(sample, metricId) : null;
+
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+  }
+
+  return null;
 };
 
 export const rangeLabel = (range: GpuHistoryRange) => {

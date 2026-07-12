@@ -6,6 +6,7 @@ import {
   gpuLabel,
   historyMetricById,
   latestMetricValue,
+  rangeLabel,
   toChartSamples,
   type HistoryChartSample,
   type HistoryMetricId
@@ -37,21 +38,35 @@ export const HistoryCharts = ({
           };
         });
 
+        const latestValue = metric.formatter(latestMetricValue(visibleSeries, metric.id));
+
         return (
-          <article className="surface p-4" key={metric.id}>
-            <div className="flex items-start justify-between gap-4">
+          <article aria-label={`${metric.label} history panel`} className="history-chart-panel surface p-4" key={metric.id} role="region">
+            <div className="history-chart-panel-header flex items-start justify-between gap-4">
               <div>
-                <div className="metric-label">{metric.unit}</div>
+                <div className="history-chart-unit metric-label">Unit {metric.unit}</div>
                 <h3 className="mt-1 font-[var(--font-display)] text-2xl font-black leading-none tracking-[-0.06em]">{metric.label}</h3>
               </div>
               <div className="text-right">
-                <div className="metric-label">Latest</div>
-                <div className="font-[var(--font-display)] text-2xl font-black tracking-[-0.05em] text-[color:var(--color-accent)]">{metric.formatter(latestMetricValue(visibleSeries, metric.id))}</div>
+                <div className="history-chart-latest metric-label">Latest </div>
+                <div className="font-[var(--font-display)] text-2xl font-black tracking-[-0.05em] text-[color:var(--color-accent)]">
+                  {latestValue}
+                </div>
               </div>
             </div>
             <div className="mt-4">
               <TimeSeriesChart ariaLabel={`${metric.label} stored history`} emptyLabel={`No ${metric.label.toLowerCase()} samples`} pollingIntervalSeconds={history.pollingIntervalSeconds} range={metric.range} samples={chartSamples} series={chartSeries} />
             </div>
+            <ul aria-label={`${metric.label} legend`} className="history-chart-legend mt-3 flex flex-wrap gap-2 text-xs font-semibold" role="list">
+              {chartSeries.map((series) => (
+                <li className="history-chart-legend-item rounded-full border border-[color:var(--color-border)] bg-[var(--color-accent-soft)] px-3 py-1 text-[color:var(--color-accent)]" key={series.id}>
+                  {series.label}
+                </li>
+              ))}
+            </ul>
+            <p className="history-chart-window mt-3 text-xs leading-5 text-[color:var(--color-muted)]">
+              Window {formatTime(history.startedAt)} to {formatTime(history.finishedAt)}. Range {rangeLabel(history.range)}.
+            </p>
           </article>
         );
       })}
