@@ -1,7 +1,14 @@
-import { Button, DiagnosticPanel, EmptyState, ErrorState, LoadingState, MetricCard, StatusBadge } from '../../components/ui';
-import { formatTime, formatUnknown, sanitizeMessage } from '../../lib/format';
+import { Button, DiagnosticPanel, EmptyState, ErrorState, LoadingState, StatusBadge } from '../../components/ui';
+import { formatTime, formatUnknown } from '../../lib/format';
 import { DetailGpuCard } from './DetailGpuCard';
 import { useServerDetailController } from './useServerDetailController';
+
+const ServerHealthItem = ({ label, value }: { readonly label: string; readonly value: React.ReactNode }) => (
+  <li className="surface min-w-0 p-4">
+    <div className="metric-label">{label}</div>
+    <div className="metric-value break-words">{value}</div>
+  </li>
+);
 
 export const ServerDetailScreen = ({ selectedServerId }: { readonly selectedServerId: string | null }) => {
   const controller = useServerDetailController(selectedServerId);
@@ -28,34 +35,41 @@ export const ServerDetailScreen = ({ selectedServerId }: { readonly selectedServ
   const hasRefreshDiagnostic = refreshResult !== undefined && !refreshResult.ok;
 
   return (
-    <section className="space-y-6">
-      <div className="border-b border-[color:var(--color-line)] pb-5">
+    <section className="detail-page space-y-6">
+      <header className="detail-header border-b border-[color:var(--color-line)] pb-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="eyebrow">Server Detail</div>
+          <div className="min-w-0">
+            <div className="eyebrow">Detail</div>
             <div className="mt-2 flex items-center gap-3">
-              <h2 className="text-2xl font-semibold tracking-[-0.03em]">{detail.server.name}</h2>
+              <h2 className="break-words text-2xl font-semibold tracking-[-0.03em]">{detail.server.name}</h2>
               <StatusBadge status={detail.health.status} />
             </div>
-            <p className="mt-3 text-sm text-[color:var(--color-muted)]">{detail.server.username}@{detail.server.host}:{detail.server.port}</p>
+            <p className="mt-3 break-words text-sm text-[color:var(--color-muted)]">{detail.server.username}@{detail.server.host}:{detail.server.port}</p>
           </div>
-          <Button disabled={controller.refreshMutation.isPending} onClick={() => controller.refreshMutation.mutate(detail.server.id)} type="button" variant="primary">
-            Refresh server
+          <Button aria-label={`Refresh ${detail.server.name}`} disabled={controller.refreshMutation.isPending} onClick={() => controller.refreshMutation.mutate(detail.server.id)} type="button" variant="primary">
+            Refresh {detail.server.name}
           </Button>
         </div>
-        {hasRefreshDiagnostic ? <DiagnosticPanel className="mt-4" errorType={refreshResult.errorType} message={refreshResult.message} title="Refresh diagnostic" /> : null}
-      </div>
+        {hasRefreshDiagnostic ? (
+          <section aria-label="Refresh diagnostic" className="mt-4" role="region">
+            <DiagnosticPanel errorType={refreshResult.errorType} message={refreshResult.message} title="Refresh diagnostic" />
+          </section>
+        ) : null}
+      </header>
 
-      <div className="grid grid-cols-3 gap-3">
-        <MetricCard label="Collector hostname" value={formatUnknown(detail.collectorHostname)} />
-        <MetricCard label="Driver / CUDA" value={`${formatUnknown(detail.driverVersion)} / ${formatUnknown(detail.cudaVersion)}`} />
-        <MetricCard label="Snapshot received" value={formatTime(detail.receivedAt)} />
-        <MetricCard label="Last success" value={formatTime(detail.health.lastSuccessAt)} />
-        <MetricCard label="Latest error type" value={formatUnknown(detail.health.lastErrorType)} />
-        <MetricCard label="Latest error" value={sanitizeMessage(detail.health.lastErrorMessage)} />
-      </div>
+      <ul aria-label="Server health" className="detail-health-strip grid grid-cols-5 gap-3" role="list">
+        <ServerHealthItem label="Health" value={detail.health.status} />
+        <ServerHealthItem label="Last successful poll" value={formatTime(detail.health.lastSuccessAt)} />
+        <ServerHealthItem label="Snapshot received" value={formatTime(detail.receivedAt)} />
+        <ServerHealthItem label="Driver / CUDA" value={`${formatUnknown(detail.driverVersion)} / ${formatUnknown(detail.cudaVersion)}`} />
+        <ServerHealthItem label="Collector" value={formatUnknown(detail.collectorHostname)} />
+      </ul>
 
-      {hasHealthDiagnostic ? <DiagnosticPanel errorType={detail.health.lastErrorType} message={detail.health.lastErrorMessage} title="Health diagnostic" /> : null}
+      {hasHealthDiagnostic ? (
+        <section aria-label="Health diagnostic" role="region">
+          <DiagnosticPanel errorType={detail.health.lastErrorType} message={detail.health.lastErrorMessage} title="Health diagnostic" />
+        </section>
+      ) : null}
 
       {detail.warnings.length > 0 ? (
         <div className="surface p-4 text-sm text-[color:var(--color-stale)]">
@@ -65,11 +79,14 @@ export const ServerDetailScreen = ({ selectedServerId }: { readonly selectedServ
         </div>
       ) : null}
 
-      <div className="grid gap-4">
+      <section aria-labelledby="detail-gpus-heading" className="detail-gpus grid gap-4">
+        <h3 className="section-title" id="detail-gpus-heading">
+          GPUs
+        </h3>
         {detail.gpus.map((gpu) => (
           <DetailGpuCard detail={detail} gpu={gpu} key={gpu.uuid} liveSamples={controller.liveSamples} storedHistory={controller.storedHistory} storedHistoryReady={controller.storedHistoryReady} />
         ))}
-      </div>
+      </section>
     </section>
   );
 };

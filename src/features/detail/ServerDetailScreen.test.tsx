@@ -3,7 +3,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ServerDetailScreen } from './ServerDetailScreen';
-import { getServerDetail, listGpuHistory } from '../../lib/api';
+import { getServerDetail, listGpuHistory, refreshServer } from '../../lib/api';
 import { getLiveGpuSampleKey } from '../../lib/liveHistory';
 import { useUiStore } from '../../lib/store';
 import type { GpuHistoryResponseDto, ServerDetailDto } from '../../lib/types';
@@ -55,6 +55,179 @@ describe('ServerDetailScreen', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it('renders no-selected-server empty state without querying or fabricating detail fields', () => {
+    renderWithQueryClient(<ServerDetailScreen selectedServerId={null} />);
+
+    expect(screen.getByText('No server selected')).toBeDefined();
+    expect(screen.getByText('Choose a server from Overview to inspect the latest backend detail DTO.')).toBeDefined();
+    expect(getServerDetail).not.toHaveBeenCalled();
+    expect(listGpuHistory).not.toHaveBeenCalled();
+    expect(screen.queryByText(detailFixture.server.name)).toBeNull();
+    expect(screen.queryByText(detailFixture.server.host)).toBeNull();
+    expect(screen.queryByText(detailFixture.health.status)).toBeNull();
+  });
+
+  it('renders loading state without fabricating selected server detail fields', () => {
+    vi.mocked(getServerDetail).mockReturnValue(new Promise<ServerDetailDto>(() => undefined));
+
+    renderWithQueryClient(<ServerDetailScreen selectedServerId={detailFixture.server.id} />);
+
+    expect(screen.getByText('Loading server detail DTO...')).toBeDefined();
+    expect(listGpuHistory).not.toHaveBeenCalled();
+    expect(screen.queryByText(detailFixture.server.name)).toBeNull();
+    expect(screen.queryByText(detailFixture.server.host)).toBeNull();
+    expect(screen.queryByText(detailFixture.health.status)).toBeNull();
+  });
+
+  it('renders error state without fabricating selected server detail fields', async () => {
+    vi.mocked(getServerDetail).mockRejectedValue(new Error('backend_unavailable for /Users/alice/.ssh/id_ed25519 token=secret-token'));
+
+    renderWithQueryClient(<ServerDetailScreen selectedServerId={detailFixture.server.id} />);
+
+    expect(await screen.findByRole('alert')).toBeDefined();
+    expect(screen.getByText(/backend_unavailable for \[path redacted\] token=\[redacted\]/)).toBeDefined();
+    expect(screen.queryByText(/secret-token/)).toBeNull();
+    expect(screen.queryByText(detailFixture.server.name)).toBeNull();
+    expect(screen.queryByText(detailFixture.server.host)).toBeNull();
+    expect(screen.queryByText(detailFixture.health.status)).toBeNull();
+  });
+
+  it('names the refresh action with the selected server after detail loads', async () => {
+    renderDetail();
+
+    const refreshButton = await screen.findByRole('button', { name: /Refresh/ });
+    expect(refreshButton.textContent).toContain(detailFixture.server.name);
+  });
+
+  it('renders the Phase 4 plain Detail header and compact health strip', async () => {
+    renderDetail({
+      ...detailFixture,
+      collectorHostname: 'collector-a100-01',
+      driverVersion: '550.54.14',
+      cudaVersion: '12.4',
+      receivedAt: '2026-06-04T00:01:00.000Z',
+      health: {
+        ...detailFixture.health,
+        status: 'stale',
+        lastSuccessAt: '2026-06-04T00:00:00.000Z'
+      }
+    });
+
+    expect(await screen.findByText('Detail')).toBeDefined();
+    expect(screen.queryByText('Server Detail')).toBeNull();
+    expect(screen.getByRole('heading', { level: 2, name: detailFixture.server.name })).toBeDefined();
+    expect(screen.getByText('alice@gpu.example.test:22')).toBeDefined();
+
+    const healthStrip = screen.getByRole('list', { name: 'Server health' });
+    const health = within(healthStrip);
+    expect(health.getByText('Health')).toBeDefined();
+    expect(health.getByText('Last successful poll')).toBeDefined();
+    expect(health.getByText('Snapshot received')).toBeDefined();
+    expect(health.getByText('Driver / CUDA')).toBeDefined();
+    expect(health.getByText('Collector')).toBeDefined();
+  });
+
+  it('moves latest-error details out of metric cells while keeping bounded diagnostics and warnings visible', async () => {
+    apiMocks.refreshServer.mockResolvedValue({
+      ok: false,
+      status: 'error',
+      errorType: 'remote_gpu_query_failed',
+      message: 'nvidia-smi failed for /Users/alice/.ssh/id_ed25519 --access-token raw-refresh-token password hunter2'
+    });
+    renderDetail({
+      ...detailFixture,
+      health: {
+        ...detailFixture.health,
+        status: 'error',
+        lastErrorType: 'nvidia_smi_missing',
+        lastErrorMessage: 'ssh failed with token=raw-health-token via /Users/alice/.ssh/id_ed25519'
+      }
+    });
+
+    expect(await screen.findByText('pmon unavailable; per-process utilization unknown')).toBeDefined();
+    expect(screen.queryByText('Latest error type')).toBeNull();
+    expect(screen.queryByText('Latest error')).toBeNull();
+
+    const healthDiagnostic = screen.getByRole('region', { name: 'Health diagnostic' });
+    expect(within(healthDiagnostic).getByText('Type: nvidia_smi_missing')).toBeDefined();
+    expect(within(healthDiagnostic).getByText(/token=\[redacted\]/)).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(`Refresh ${detailFixture.server.name}`) }));
+
+    const refreshDiagnostic = await screen.findByRole('region', { name: 'Refresh diagnostic' });
+    expect(within(refreshDiagnostic).getByText('Type: remote_gpu_query_failed')).toBeDefined();
+    expect(within(refreshDiagnostic).getByText(/nvidia-smi failed for \[path redacted\]/)).toBeDefined();
+    expect(screen.queryByText('/Users/alice/.ssh/id_ed25519')).toBeNull();
+    expect(screen.queryByText(/raw-health-token|raw-refresh-token|hunter2/)).toBeNull();
+  });
+
+  it('uses a GPU panel heading hierarchy with primary metrics before secondary capabilities', async () => {
+    renderDetail();
+
+    expect(await screen.findByRole('heading', { level: 3, name: 'GPUs' })).toBeDefined();
+    expect(screen.getByRole('heading', { level: 4, name: 'GPU 1 NVIDIA Clocked GPU' })).toBeDefined();
+    const gpuName = screen.getByText('NVIDIA Clocked GPU');
+    const gpuArticle = gpuName.closest('article');
+    expect(gpuArticle).not.toBeNull();
+    const gpu = within(gpuArticle ?? document.body);
+    expect(gpu.getByRole('heading', { level: 5, name: 'Primary telemetry' })).toBeDefined();
+    expect(gpu.getByRole('heading', { level: 5, name: 'Capabilities and identity' })).toBeDefined();
+    const gpuText = gpuArticle?.textContent ?? '';
+    expect(gpuText.indexOf('Utilization')).toBeLessThan(gpuText.indexOf('Power'));
+    expect(gpuText.indexOf('Memory')).toBeLessThan(gpuText.indexOf('PCI bus id'));
+    expect(gpuText.indexOf('Temperature')).toBeLessThan(gpuText.indexOf('Mode current'));
+  });
+
+  it('states explicitly when a GPU has no active processes', async () => {
+    renderDetail();
+
+    const gpuName = await screen.findByText('NVIDIA Clocked GPU');
+    const gpuArticle = gpuName.closest('article');
+    expect(gpuArticle).not.toBeNull();
+    const gpu = within(gpuArticle ?? document.body);
+    expect(gpu.getByText('No active GPU processes for this snapshot.')).toBeDefined();
+    expect(gpu.queryByText('No GPU processes reported.')).toBeNull();
+  });
+
+  it('keeps long host, UUID, and command text rendered without converting unknown metrics to zero', async () => {
+    const longCommand = '/opt/ml/experiments/phase-4/bin/train --model llama-70b --dataset /mnt/research/extremely-long-dataset-name --notes keep-full-command-visible';
+    const longUuid = 'GPU-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee-ffffffffffff-111111111111';
+    const longHost = 'gpu-node-with-a-very-long-hostname.research-cluster.example.test';
+    renderDetail({
+      ...detailFixture,
+      server: {
+        ...detailFixture.server,
+        host: longHost
+      },
+      gpus: [
+        {
+          ...detailFixture.gpus[0],
+          uuid: longUuid,
+          processCount: 1,
+          processes: [
+            {
+              pid: 4321,
+              username: 'very-long-service-account-name',
+              command: longCommand,
+              gpuMemoryUsedMiB: null,
+              gpuUtilizationPercent: null,
+              cpuPercent: null,
+              hostMemoryUsedMiB: null
+            }
+          ]
+        }
+      ]
+    });
+
+    expect(await screen.findByText(`alice@${longHost}:22`)).toBeDefined();
+    expect(screen.getByText(longUuid)).toBeDefined();
+    expect(screen.getByText(longCommand)).toBeDefined();
+    expect(screen.getAllByText('unknown').length).toBeGreaterThanOrEqual(6);
+    expect(screen.queryByText('0 MiB')).toBeNull();
+    expect(screen.queryByText('0.0%')).toBeNull();
+    expect(screen.queryByText('0 MHz')).toBeNull();
   });
 
   it('keeps warnings visible and renders nullable metrics as unknown', async () => {
@@ -177,6 +350,22 @@ describe('ServerDetailScreen', () => {
     expect(container.querySelector('[data-chart-point-value="22"]')).toBeDefined();
     expect(container.querySelector('[data-chart-point-value="77"]')).toBeDefined();
     expect(container.querySelector('[data-chart-point-value="88"]')).toBeNull();
+  });
+
+  it('invalidates detail, history, overview, and process query keys after a fulfilled refresh mutation', async () => {
+    apiMocks.refreshServer.mockResolvedValue({ ok: true, status: 'online', errorType: null, message: 'refresh queued' });
+    const { queryClient } = renderDetail();
+    const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries');
+
+    fireEvent.click(await screen.findByRole('button', { name: new RegExp(`Refresh ${detailFixture.server.name}`) }));
+
+    await waitFor(() => expect(refreshServer).toHaveBeenCalled());
+    expect(vi.mocked(refreshServer).mock.calls[0]?.[0]).toBe(detailFixture.server.id);
+    await waitFor(() => expect(invalidateQueries).toHaveBeenCalledTimes(4));
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['server-detail', detailFixture.server.id] });
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['gpu-history', detailFixture.server.id, null, null, '1h'] });
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['overview'] });
+    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['processes'] });
   });
 
   it('uses session live fallback while stored history is still loading', async () => {
@@ -326,35 +515,45 @@ describe('ServerDetailScreen', () => {
     });
 
     expect(await screen.findAllByText(/Charts use the last successful snapshot/)).toHaveLength(2);
-    expect(screen.getByText('ssh timeout')).toBeDefined();
+    expect(screen.getByText(/ssh timeout/)).toBeDefined();
   });
 
   it('renders server health and refresh diagnostics guidance in bounded detail surfaces', async () => {
     // Given: detail health reports a missing nvidia-smi diagnostic and refresh reports a GPU query diagnostic.
-    apiMocks.refreshServer.mockResolvedValue({ ok: false, status: 'error', errorType: 'remote_gpu_query_failed', message: 'nvidia-smi failed for /Users/alice/.ssh/id_ed25519' });
+    apiMocks.refreshServer.mockResolvedValue({
+      ok: false,
+      status: 'error',
+      errorType: 'remote_gpu_query_failed',
+      message: 'nvidia-smi failed for /Users/alice/.ssh/id_ed25519 --access-token raw-refresh-token password hunter2'
+    });
     renderDetail({
       ...detailFixture,
       health: {
         ...detailFixture.health,
         status: 'error',
         lastErrorType: 'nvidia_smi_missing',
-        lastErrorMessage: null
+        lastErrorMessage: 'ssh failed with token=raw-health-token via /Users/alice/.ssh/id_ed25519'
       }
     });
 
     // When: the user inspects health and retries refresh from the detail header.
     expect(await screen.findByText('nvidia-smi unavailable')).toBeDefined();
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh server' }));
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(`Refresh ${detailFixture.server.name}`) }));
 
     // Then: both diagnostics expose label, type, sanitized message, and short formatter guidance without hiding screen identity.
-    expect(screen.getByText('Type: nvidia_smi_missing')).toBeDefined();
-    expect(screen.getByText('Message: unknown')).toBeDefined();
-    expect(screen.getByText(/nvidia-smi is available on PATH/)).toBeDefined();
     expect(await screen.findByText('Remote GPU query failed')).toBeDefined();
+    expect(screen.getByText('Type: nvidia_smi_missing')).toBeDefined();
+    expect(screen.getAllByText(/token=\[redacted\]/)).toHaveLength(2);
+    expect(screen.getByText(/nvidia-smi is available on PATH/)).toBeDefined();
+    expect(screen.getByText('Refresh diagnostic')).toBeDefined();
     expect(screen.getByText('Type: remote_gpu_query_failed')).toBeDefined();
     expect(screen.getByText(/nvidia-smi failed for \[path redacted\]/)).toBeDefined();
     expect(screen.getByText(/permissions allow reading GPU device state/)).toBeDefined();
     expect(screen.queryByText('/Users/alice/.ssh/id_ed25519')).toBeNull();
-    expect(screen.getByText('Server Detail')).toBeDefined();
+    expect(screen.queryByText(/raw-health-token/)).toBeNull();
+    expect(screen.queryByText(/raw-refresh-token/)).toBeNull();
+    expect(screen.queryByText(/hunter2/)).toBeNull();
+    expect(screen.queryByText(/^success$/i)).toBeNull();
+    expect(screen.getByText('Detail')).toBeDefined();
   });
 });
