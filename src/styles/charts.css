@@ -151,4 +151,42 @@
   .time-series-chart-series-success {
     color: var(--color-success);
   }
+
+  .detail-page .time-series-chart,
+  .history-monitor-screen .time-series-chart {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .detail-page .time-series-chart-svg,
+  .history-monitor-screen .time-series-chart-svg {
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+  }
+
+  .detail-page .time-series-chart-legend,
+  .history-monitor-screen .time-series-chart-legend {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .detail-page .time-series-chart-legend-item,
+  .history-monitor-screen .time-series-chart-legend-item {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
+  .detail-page .time-series-chart-empty,
+  .history-monitor-screen .time-series-chart-empty {
+    min-width: 0;
+    text-align: center;
+    overflow-wrap: anywhere;
+  }
+
+  .app-shell[data-density="compact"] .detail-page .time-series-chart,
+  .app-shell[data-density="compact"] .history-monitor-screen .time-series-chart {
+    gap: var(--density-space-1);
+  }
 }
