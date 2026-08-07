@@ -31,7 +31,7 @@ export const OverviewScreen = ({ overview, isLoading, error }: { readonly overvi
       </header>
 
       {overview.length > 0 ? (
-        <dl aria-label="Fleet summary" className="overview-summary surface grid grid-cols-4 gap-3 p-4">
+        <dl aria-label="Fleet summary" className="overview-summary surface grid gap-3 p-4">
           <div>
             <dt className="metric-label">Servers</dt>
             <dd className="metric-value">{fleetSummary.totalServers}</dd>
@@ -46,7 +46,7 @@ export const OverviewScreen = ({ overview, isLoading, error }: { readonly overvi
           </div>
           <div>
             <dt className="metric-label">GPUs</dt>
-            <dd className="metric-value text-[color:var(--color-accent)]">
+            <dd className="metric-value overview-summary-gpu-value text-[color:var(--color-accent)]">
               {fleetSummary.totalGpus} total · {fleetSummary.busyGpus} busy · {fleetSummary.freeGpus} free
             </dd>
           </div>
