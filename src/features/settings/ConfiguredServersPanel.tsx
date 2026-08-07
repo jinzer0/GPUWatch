@@ -1,32 +1,63 @@
-import { Button, EmptyState, StatusBadge } from '../../components/ui';
-import { formatTime } from '../../lib/format';
+import { Button, EmptyState, ErrorState, StatusBadge } from '../../components/ui';
+import { formatTime, sanitizeMessage } from '../../lib/format';
 import type { Server } from '../../lib/types';
 import type { useSettingsController } from './useSettingsController';
 
-type ConfiguredServersPanelProps = Pick<ReturnType<typeof useSettingsController>, 'editServer' | 'enabledMutation'> & {
+type ConfiguredServersPanelProps = Pick<
+  ReturnType<typeof useSettingsController>,
+  'editServer' | 'enableOperations' | 'enableServer' | 'saveTargetId' | 'selectedServerId'
+> & {
   readonly servers: readonly Server[] | undefined;
 };
 
-export const ConfiguredServersPanel = ({ editServer, enabledMutation, servers }: ConfiguredServersPanelProps) => (
-  <aside className="panel p-5">
-    <div className="section-title">Configured servers</div>
-    <div className="mt-4 space-y-3">
+export const ConfiguredServersPanel = ({ editServer, enableOperations, enableServer, saveTargetId, selectedServerId, servers }: ConfiguredServersPanelProps) => (
+  <aside aria-label="Configured servers" className="settings-registry-pane panel p-5">
+    <div className="settings-registry-pane-copy">
+      <div className="section-title">Configured servers</div>
+      <p className="mt-2 text-sm leading-6 text-[color:var(--color-muted)]">Select a saved SSH target to edit details, or pause monitoring without changing the remote host.</p>
+    </div>
+    <div className="settings-registry-list mt-4 space-y-3">
       {servers && servers.length === 0 ? <EmptyState title="No servers" body="Create a server target to begin polling GPU snapshots." /> : null}
-      {servers?.map((server) => (
-        <div className="surface p-4" key={server.id}>
-          <div className="flex items-start justify-between gap-3">
-            <button className="text-left" onClick={() => editServer(server.id)} type="button">
-              <div className="font-semibold">{server.name}</div>
-              <div className="text-sm text-[color:var(--color-muted)]">{server.username}@{server.host}:{server.port}</div>
+      {servers?.map((server) => {
+        const enableOperation = enableOperations[server.id];
+        const isSelected = selectedServerId === server.id;
+        const toggleLabel = server.enabled ? 'Disable monitoring' : 'Enable monitoring';
+
+        return <article aria-label={`${server.name} registry row`} className={`settings-registry-row surface surface-interactive p-4 ${isSelected ? 'border-[color:var(--color-brand)] shadow-[var(--shadow-glow)]' : ''}`.trim()} key={server.id}>
+          <div className="settings-registry-row-main flex items-start gap-3">
+            <button
+              aria-current={isSelected ? 'true' : undefined}
+              aria-label={`Select ${server.name}`}
+              className="settings-registry-row-select grid min-w-0 flex-1 gap-3 rounded-[var(--radius-control)] border border-transparent bg-transparent p-0 text-left text-[color:var(--color-text)]"
+              onClick={() => editServer(server.id)}
+              type="button"
+            >
+              <span className="flex flex-wrap items-start justify-between gap-3">
+                <span className="settings-registry-row-identity min-w-0">
+                  <span className="settings-registry-row-name block break-words font-[var(--font-display)] text-2xl font-bold tracking-[-0.06em]">{server.name}</span>
+                  <span className="settings-registry-row-host mt-1 block break-words text-sm text-[color:var(--color-muted)]">{server.username}@{server.host}:{server.port}</span>
+                </span>
+                <StatusBadge status={server.enabled ? 'enabled' : 'disabled'} />
+              </span>
+              <span className="settings-registry-row-meta grid gap-2 text-xs text-[color:var(--color-muted)]">
+                <span>Updated {formatTime(server.updatedAt)}</span>
+                {isSelected ? <span className="metric-label text-[color:var(--color-brand)]">Selected server</span> : null}
+              </span>
             </button>
-            <StatusBadge status={server.enabled ? 'enabled' : 'disabled'} />
+            <Button
+              aria-label={`${toggleLabel} for ${server.name}`}
+              disabled={enableOperation?.isPending || saveTargetId === server.id}
+              onClick={() => enableServer({ id: server.id, enabled: !server.enabled })}
+              type="button"
+              className="settings-registry-row-action"
+              variant="secondary"
+            >
+              {toggleLabel}
+            </Button>
           </div>
-          <div className="mt-3 text-xs text-[color:var(--color-muted)]">Updated {formatTime(server.updatedAt)}</div>
-          <Button className="mt-3 w-full" disabled={enabledMutation.isPending} onClick={() => enabledMutation.mutate({ id: server.id, enabled: !server.enabled })} type="button" variant="secondary">
-            {server.enabled ? 'Disable' : 'Enable'}
-          </Button>
-        </div>
-      ))}
+          {enableOperation?.error ? <div className="settings-registry-row-feedback mt-3"><ErrorState message={sanitizeMessage(enableOperation.error.message)} /></div> : null}
+        </article>
+      })}
     </div>
   </aside>
 );
