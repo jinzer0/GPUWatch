@@ -47,9 +47,22 @@ export const ErrorState = ({ message }: { readonly message: string }) => (
   </div>
 );
 
-export const LoadingState = ({ label }: { readonly label: string }) => (
-  <div className="surface p-6 text-sm text-[color:var(--color-muted)]">{label}</div>
-);
+type LoadingStateProps = {
+  readonly label: string;
+  readonly liveRegion?: boolean;
+};
+
+export const LoadingState = ({ label, liveRegion = true }: LoadingStateProps) => {
+  if (liveRegion) {
+    return (
+      <div aria-live="polite" className="surface p-6 text-sm text-[color:var(--color-muted)]" role="status">
+        {label}
+      </div>
+    );
+  }
+
+  return <div className="surface p-6 text-sm text-[color:var(--color-muted)]">{label}</div>;
+};
 
 type DiagnosticPanelProps = DiagnosticInput & {
   readonly className?: string;
@@ -87,7 +100,7 @@ export const ResultFeedback = (props: ResultFeedbackProps) => {
     case 'pending':
       return (
         <div aria-label={props.label} aria-live="polite" role="status">
-          <LoadingState label={`${props.label} pending`} />
+          <LoadingState label={`${props.label} pending`} liveRegion={false} />
         </div>
       );
     case 'success':
