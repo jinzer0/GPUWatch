@@ -14,6 +14,24 @@ export interface SettingsFormState {
   readonly enabled: boolean;
 }
 
+export type SettingsFormField = Exclude<keyof SettingsFormState, 'id'>;
+export type SettingsValidationField = Extract<SettingsFormField, 'name' | 'host' | 'port' | 'username' | 'sshKeyPath' | 'pollingIntervalSeconds'>;
+export type SettingsFieldErrors = { readonly [Field in SettingsValidationField]?: string };
+type MutableSettingsFieldErrors = { -readonly [Field in SettingsValidationField]?: string };
+
+export type SettingsValidationResult = {
+  readonly isValid: boolean;
+  readonly fieldErrors: SettingsFieldErrors;
+};
+
+export type SshImportCandidateDomIdKind = 'reason' | 'warnings';
+
+export type ServerRegistrySummary = {
+  readonly total: number;
+  readonly enabled: number;
+  readonly disabled: number;
+};
+
 export const emptySettingsForm: SettingsFormState = {
   id: null,
   name: '',
@@ -25,14 +43,18 @@ export const emptySettingsForm: SettingsFormState = {
   enabled: true
 };
 
-export const formFromServer = (server: Server): SettingsFormState => ({
+type ServerFormSource = Omit<Server, 'pollingIntervalSeconds'> & {
+  readonly pollingIntervalSeconds: number | null;
+};
+
+export const formFromServer = (server: ServerFormSource): SettingsFormState => ({
   id: server.id,
   name: server.name,
   host: server.host,
   port: String(server.port),
   username: server.username,
   sshKeyPath: server.sshKeyPath ?? '',
-  pollingIntervalSeconds: String(server.pollingIntervalSeconds),
+  pollingIntervalSeconds: server.pollingIntervalSeconds === null ? '' : String(server.pollingIntervalSeconds),
   enabled: server.enabled
 });
 
@@ -57,6 +79,27 @@ export const toServerInput = (form: SettingsFormState): ServerInput => ({
   pollingIntervalSeconds: form.pollingIntervalSeconds.trim() === '' ? null : Number(form.pollingIntervalSeconds),
   enabled: form.enabled
 });
+
+export const buildServerRegistrySummary = (servers: readonly Server[]): ServerRegistrySummary => {
+  const enabled = servers.filter((server) => server.enabled).length;
+  return {
+    total: servers.length,
+    enabled,
+    disabled: servers.length - enabled
+  };
+};
+
+export const getSettingsFieldHelperId = (field: SettingsFormField): string => `settings-${field}-helper`;
+
+export const getSettingsFieldErrorId = (field: SettingsFormField): string => `settings-${field}-error`;
+
+export const getSshImportCandidateDomId = (hostAlias: string, kind: SshImportCandidateDomIdKind): string => {
+  const encodedAlias = hostAlias
+    .split('')
+    .map((character) => character.charCodeAt(0).toString(16))
+    .join('-');
+  return `ssh-import-${encodedAlias || 'empty'}-${kind}`;
+};
 
 export type BulkImportSkipReason = 'missing_username' | 'duplicate_saved_server' | 'duplicate_import_candidate';
 
@@ -126,9 +169,9 @@ export const buildBulkImportServerInputs = (options: BulkImportServerInputOption
   };
 };
 
-const containsPrivateKeyMaterial = (value: string) => /-----BEGIN [^-]+PRIVATE KEY-----/i.test(value) || /-----END [^-]+PRIVATE KEY-----/i.test(value) || /[\r\n]/.test(value);
+const containsPrivateKeyMaterial = (value: string): boolean => /-----BEGIN [^-]+PRIVATE KEY-----/i.test(value) || /-----END [^-]+PRIVATE KEY-----/i.test(value);
 
-const parseIntegerField = (value: string, label: string, min: number, max: number) => {
+const parseIntegerField = (value: string, label: string, min: number, max: number): string | null => {
   if (!/^\d+$/.test(value.trim())) {
     return `${label} must be a whole number.`;
   }
@@ -139,21 +182,43 @@ const parseIntegerField = (value: string, label: string, min: number, max: numbe
   return null;
 };
 
-export const validateSettingsForm = (form: SettingsFormState) => {
+export const validateSettingsFormResult = (form: SettingsFormState): SettingsValidationResult => {
+  const fieldErrors: MutableSettingsFieldErrors = {};
+  if (form.name.trim() === '') {
+    fieldErrors.name = 'Server name is required.';
+  }
+  if (form.host.trim() === '') {
+    fieldErrors.host = 'Host is required.';
+  }
+  if (form.username.trim() === '') {
+    fieldErrors.username = 'Username is required.';
+  }
+
   const portError = parseIntegerField(form.port, 'SSH port', 1, 65535);
   if (portError) {
-    return portError;
+    fieldErrors.port = portError;
   }
   if (form.pollingIntervalSeconds.trim() !== '') {
     const pollingError = parseIntegerField(form.pollingIntervalSeconds, 'Polling interval', 1, 86_400);
     if (pollingError) {
-      return pollingError;
+      fieldErrors.pollingIntervalSeconds = pollingError;
     }
   }
   if (containsPrivateKeyMaterial(form.sshKeyPath)) {
-    return 'SSH key path must be a single filesystem path, not private key material.';
+    fieldErrors.sshKeyPath = 'SSH key path must be a filesystem path, not private key material.';
+  } else if (/[\r\n]/.test(form.sshKeyPath)) {
+    fieldErrors.sshKeyPath = 'SSH key path must be a single line.';
   }
-  return null;
+
+  return {
+    isValid: Object.keys(fieldErrors).length === 0,
+    fieldErrors
+  };
+};
+
+export const validateSettingsForm = (form: SettingsFormState): string | null => {
+  const { fieldErrors } = validateSettingsFormResult(form);
+  return fieldErrors.name ?? fieldErrors.host ?? fieldErrors.username ?? fieldErrors.port ?? fieldErrors.pollingIntervalSeconds ?? fieldErrors.sshKeyPath ?? null;
 };
 
 export const invalidateSettings = (queryClient: QueryClient) =>

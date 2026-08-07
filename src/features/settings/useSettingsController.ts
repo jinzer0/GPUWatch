@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { deleteServer, listServers, listSshConfigHosts, queryKeys, saveServer, setServerEnabled, testConnection } from '../../lib/api';
 import { useUiStore } from '../../lib/store';
-import type { Server, ServerInput, SshConfigImportCandidate } from '../../lib/types';
+import type { ConnectionTestResultDto, Server, ServerInput, SshConfigImportCandidate } from '../../lib/types';
 import {
   buildBulkImportServerInputs,
   emptySettingsForm,
@@ -14,8 +14,9 @@ import {
   invalidateSettings,
   toBulkImportServerInput,
   toServerInput,
-  validateSettingsForm,
+  validateSettingsFormResult,
   type BulkImportCandidateMetadata,
+  type SettingsFieldErrors,
   type SettingsFormState
 } from './settingsModel';
 
@@ -31,42 +32,94 @@ interface BulkImportSaveResult {
   readonly failed: readonly BulkImportSaveFailure[];
 }
 
-const errorMessageFromUnknown = (error: unknown) => (error instanceof Error ? error.message : 'Unknown save failure.');
+interface EditorState {
+  readonly baseline: SettingsFormState;
+  readonly form: SettingsFormState;
+  readonly selectedServerId: string | null;
+}
+
+interface TargetedRequest<Input> {
+  readonly input: Input;
+  readonly targetVersion: number;
+}
+
+interface EnableOperation {
+  readonly error: Error | null;
+  readonly isPending: boolean;
+}
+
+interface DeleteTarget {
+  readonly id: string;
+  readonly name: string;
+}
+
+const errorFromUnknown = (error: unknown, fallback: string): Error => error instanceof Error ? error : new Error(fallback);
 
 export const useSettingsController = () => {
   const queryClient = useQueryClient();
   const editingServerId = useUiStore((state) => state.editingServerId);
-  const editServer = useUiStore((state) => state.editServer);
+  const setEditingServer = useUiStore((state) => state.editServer);
   const selectServer = useUiStore((state) => state.selectServer);
-  const [form, setForm] = useState<SettingsFormState>(emptySettingsForm);
-  const [formError, setFormError] = useState<string | null>(null);
+  const [editor, setEditor] = useState<EditorState>({ baseline: emptySettingsForm, form: emptySettingsForm, selectedServerId: null });
+  const [fieldErrors, setFieldErrors] = useState<SettingsFieldErrors>({});
+  const [connectionResult, setConnectionResult] = useState<ConnectionTestResultDto | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
+  const [enableOperations, setEnableOperations] = useState<Readonly<Record<string, EnableOperation | undefined>>>({});
   const [selectedImportHostAliases, setSelectedImportHostAliases] = useState<readonly string[]>([]);
   const [bulkImportSaveResult, setBulkImportSaveResult] = useState<BulkImportSaveResult | null>(null);
+  const targetVersion = useRef(0);
   const serversQuery = useQuery({ queryKey: queryKeys.servers, queryFn: listServers });
   const servers = serversQuery.data;
   const editingServer = useMemo(() => servers?.find((server) => server.id === editingServerId) ?? null, [editingServerId, servers]);
 
+  const replaceEditor = (form: SettingsFormState, selectedServerId: string | null) => {
+    targetVersion.current += 1;
+    setConnectionResult(null);
+    setFieldErrors({});
+    setEditor({ baseline: form, form, selectedServerId });
+  };
+
   const saveMutation = useMutation({
-    mutationFn: saveServer,
+    mutationFn: ({ input }: TargetedRequest<ServerInput>) => saveServer(input),
     onSuccess: (server) => {
+      replaceEditor(formFromServer(server), server.id);
       selectServer(server.id);
-      editServer(server.id);
+      setEditingServer(server.id);
       return invalidateSettings(queryClient);
     }
   });
   const deleteMutation = useMutation({
     mutationFn: deleteServer,
     onSuccess: () => {
-      editServer(null);
+      replaceEditor(emptySettingsForm, null);
+      setDeleteTarget(null);
+      setEditingServer(null);
       selectServer(null);
       return invalidateSettings(queryClient);
     }
   });
   const enabledMutation = useMutation({
-    mutationFn: ({ id, enabled }: { readonly id: string; readonly enabled: boolean }) => setServerEnabled(id, enabled),
+    mutationFn: async ({ id, enabled }: { readonly id: string; readonly enabled: boolean }) => {
+      setEnableOperations((current) => ({ ...current, [id]: { error: null, isPending: true } }));
+      try {
+        const server = await setServerEnabled(id, enabled);
+        setEnableOperations((current) => ({ ...current, [id]: { error: null, isPending: false } }));
+        return server;
+      } catch (error) {
+        setEnableOperations((current) => ({ ...current, [id]: { error: errorFromUnknown(error, 'Unknown enable failure.'), isPending: false } }));
+        throw error;
+      }
+    },
     onSuccess: () => invalidateSettings(queryClient)
   });
-  const testMutation = useMutation({ mutationFn: testConnection });
+  const testMutation = useMutation({
+    mutationFn: ({ input }: TargetedRequest<string>) => testConnection(input),
+    onSuccess: (result, request) => {
+      if (request.targetVersion === targetVersion.current) {
+        setConnectionResult(result);
+      }
+    }
+  });
   const sshConfigImportMutation = useMutation({
     mutationFn: listSshConfigHosts,
     onSuccess: () => {
@@ -84,101 +137,113 @@ export const useSettingsController = () => {
       const selectedAliases = new Set(selectedImportHostAliases);
       const selectedMetadata = bulkImportCandidateMetadata.filter((item) => selectedAliases.has(item.candidate.hostAlias));
       const selection = buildBulkImportServerInputs({
-        candidates: importResult?.candidates ?? [],
-        existingServers: servers ?? [],
-        selectedHostAliases: selectedImportHostAliases
+        candidates: importResult?.candidates ?? [], existingServers: servers ?? [], selectedHostAliases: selectedImportHostAliases
       });
-      const saveableItems = selectedMetadata.filter((item) => item.selectable);
       const saved: Server[] = [];
       const failed: BulkImportSaveFailure[] = [];
-
-      for (const item of saveableItems) {
+      for (const item of selectedMetadata.filter((metadata) => metadata.selectable)) {
         const input = toBulkImportServerInput(item.candidate);
         try {
           saved.push(await saveServer(input));
         } catch (error) {
-          failed.push({ candidate: item.candidate, input, message: errorMessageFromUnknown(error) });
+          failed.push({ candidate: item.candidate, input, message: errorFromUnknown(error, 'Unknown save failure.').message });
         }
       }
-
       if (saved.length > 0) {
         await invalidateSettings(queryClient);
       }
-
       return { saved, skipped: selection.skipped, failed };
     },
-    onSuccess: (result) => {
-      setBulkImportSaveResult(result);
-    }
+    onSuccess: setBulkImportSaveResult
   });
-  const resetTestMutation = testMutation.reset;
 
   useEffect(() => {
-    setForm(editingServer ? formFromServer(editingServer) : emptySettingsForm);
-    setFormError(null);
-    resetTestMutation();
-  }, [editingServer, resetTestMutation]);
+    if (editingServerId === editor.selectedServerId) {
+      return;
+    }
+    if (editingServerId === null) {
+      replaceEditor(emptySettingsForm, null);
+    } else if (editingServer) {
+      replaceEditor(formFromServer(editingServer), editingServer.id);
+    }
+  }, [editingServer, editingServerId, editor.selectedServerId]);
 
+  const editServer = (id: string | null) => {
+    if (id === null) {
+      replaceEditor(emptySettingsForm, null);
+    } else {
+      const server = servers?.find((item) => item.id === id);
+      if (server) {
+        replaceEditor(formFromServer(server), server.id);
+      }
+    }
+    setEditingServer(id);
+  };
   const updateField = (field: keyof SettingsFormState, value: string | boolean) => {
-    setFormError(null);
-    setForm((current) => ({ ...current, [field]: value }));
+    setFieldErrors({});
+    setEditor((current) => ({ ...current, form: { ...current.form, [field]: value } }));
   };
-
   const importCandidate = (candidate: SshConfigImportCandidate) => {
-    setFormError(null);
-    setForm(formFromSshConfigCandidate(candidate));
+    setEditingServer(null);
+    replaceEditor(formFromSshConfigCandidate(candidate), null);
   };
-
+  const submitForm = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const validation = validateSettingsFormResult(editor.form);
+    setFieldErrors(validation.fieldErrors);
+    if (validation.isValid) {
+      saveMutation.mutate({ input: toServerInput(editor.form), targetVersion: targetVersion.current });
+    }
+  };
+  const testCurrentConnection = () => {
+    if (editor.form.id) {
+      setConnectionResult(null);
+      testMutation.mutate({ input: editor.form.id, targetVersion: targetVersion.current });
+    }
+  };
+  const requestDelete = () => {
+    if (editor.form.id) {
+      deleteMutation.reset();
+      setDeleteTarget({ id: editor.form.id, name: editor.form.name });
+    }
+  };
+  const confirmDelete = () => {
+    if (deleteTarget) {
+      deleteMutation.mutate(deleteTarget.id);
+    }
+  };
+  const cancelDelete = () => {
+    deleteMutation.reset();
+    setDeleteTarget(null);
+  };
   const selectAllImportableCandidates = () => {
     setBulkImportSaveResult(null);
     setSelectedImportHostAliases(bulkImportCandidateMetadata.filter((item) => item.selectable).map((item) => item.candidate.hostAlias));
   };
-
   const toggleImportCandidateSelection = (hostAlias: string) => {
     setBulkImportSaveResult(null);
-    setSelectedImportHostAliases((current) => {
-      if (current.includes(hostAlias)) {
-        return current.filter((selectedHostAlias) => selectedHostAlias !== hostAlias);
-      }
-      return [...current, hostAlias];
-    });
+    setSelectedImportHostAliases((current) => current.includes(hostAlias)
+      ? current.filter((selectedHostAlias) => selectedHostAlias !== hostAlias)
+      : [...current, hostAlias]);
   };
-
-  const saveSelectedImportCandidates = () => bulkImportSaveMutation.mutateAsync();
-
-  const submitForm = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const validationError = validateSettingsForm(form);
-    if (validationError) {
-      setFormError(validationError);
-      return;
-    }
-    saveMutation.mutate(toServerInput(form));
-  };
+  const saveTargetsCurrentEditor = saveMutation.variables?.targetVersion === targetVersion.current;
+  const activeTestRequest = testMutation.variables?.targetVersion === targetVersion.current ? testMutation : null;
 
   return {
-    connectionResult: testMutation.data,
-    bulkImportCandidateMetadata,
-    bulkImportSaveMutation,
-    bulkImportSaveResult,
-    deleteMutation,
-    editServer,
-    enabledMutation,
-    form,
-    formError,
-    importCandidate,
-    importResult,
-    mutationError: saveMutation.error ?? deleteMutation.error ?? enabledMutation.error ?? testMutation.error,
-    saveMutation,
-    saveSelectedImportCandidates,
-    selectAllImportableCandidates,
-    selectedImportHostAliases,
-    servers,
-    serversQuery,
-    sshConfigImportMutation,
-    submitForm,
-    testMutation,
-    toggleImportCandidateSelection,
-    updateField
-  };
+    bulkImportCandidateMetadata, bulkImportSaveMutation, bulkImportSaveResult,
+    cancelDelete, confirmDelete,
+    connectionResult, connectionTestError: activeTestRequest?.error ?? null,
+    deleteError: deleteMutation.error, deleteTarget, editServer, enableOperations,
+    enableServer: enabledMutation.mutate, fieldErrors, form: editor.form,
+    formError: Object.values(fieldErrors)[0] ?? null, importCandidate, importResult,
+    isConnectionTestPending: activeTestRequest?.isPending ?? false,
+		isDeletePending: deleteMutation.isPending,
+		isFormDirty: editor.form !== editor.baseline, isSavePending: saveMutation.isPending,
+		requestDelete, saveError: saveTargetsCurrentEditor ? saveMutation.error : null,
+		saveSelectedImportCandidates: () => bulkImportSaveMutation.mutateAsync(),
+		saveTargetId: saveMutation.isPending ? saveMutation.variables?.input.id ?? null : null,
+		selectAllImportableCandidates, selectedImportHostAliases, selectedServerId: editor.selectedServerId, servers, serversQuery,
+		sshConfigImportMutation, submitForm, testCurrentConnection,
+		toggleImportCandidateSelection, updateField
+	};
 };
