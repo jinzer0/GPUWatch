@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   formatCommand,
+  formatDrawerCommand,
   formatKiBPerSecond,
   formatMiB,
   formatPercent,
@@ -11,6 +12,34 @@ import {
   formatWatts,
   sanitizeMessage
 } from './format';
+
+const secretPhraseCases = [
+  {
+    input: 'python --token "secret value" --flag ok',
+    output: 'python --token=[redacted] --flag ok',
+    residuals: ['secret value', 'value"']
+  },
+  {
+    input: 'python --api-key="alpha beta" --verbose',
+    output: 'python --api-key=[redacted] --verbose',
+    residuals: ['alpha beta', 'beta"']
+  },
+  {
+    input: 'password hunter 2',
+    output: 'password=[redacted]',
+    residuals: ['hunter 2', ' 2']
+  },
+  {
+    input: "python --access-token 'gamma delta' --check",
+    output: 'python --access-token=[redacted] --check',
+    residuals: ['gamma delta', "delta'"]
+  },
+  {
+    input: 'secret red green blue',
+    output: 'secret=[redacted]',
+    residuals: ['red green blue', ' green blue']
+  }
+] as const;
 
 describe('format helpers', () => {
   it('renders unavailable metrics as unknown instead of zero', () => {
@@ -61,6 +90,48 @@ describe('format helpers', () => {
     expect(formatCommand('/Users/alice/.ssh/id_ed25519')).toBe('[path redacted]');
   });
 
+  it('fully redacts quoted and unquoted secret phrases in messages', () => {
+    // Given: secret-bearing messages with quoted values, unquoted phrases, and following command flags.
+    for (const testCase of secretPhraseCases) {
+      // When: the message boundary sanitizes the value.
+      const message = sanitizeMessage(testCase.input);
+
+      // Then: no trailing secret fragment remains and safe following flags are preserved.
+      expect(message).toBe(testCase.output);
+      for (const residual of testCase.residuals) {
+        expect(message).not.toContain(residual);
+      }
+    }
+  });
+
+  it('fully redacts quoted and unquoted secret phrases in command previews', () => {
+    // Given: secret-bearing commands short enough to avoid preview truncation.
+    for (const testCase of secretPhraseCases) {
+      // When: the command preview is formatted.
+      const command = formatCommand(testCase.input);
+
+      // Then: the complete secret phrase is removed without consuming the next flag.
+      expect(command).toBe(testCase.output);
+      for (const residual of testCase.residuals) {
+        expect(command).not.toContain(residual);
+      }
+    }
+  });
+
+  it('fully redacts quoted and unquoted secret phrases in drawer commands', () => {
+    // Given: secret-bearing full commands that the drawer renders without truncation.
+    for (const testCase of secretPhraseCases) {
+      // When: the full drawer command is formatted.
+      const command = formatDrawerCommand(testCase.input);
+
+      // Then: no secret fragment remains and safe command context remains visible.
+      expect(command).toBe(testCase.output);
+      for (const residual of testCase.residuals) {
+        expect(command).not.toContain(residual);
+      }
+    }
+  });
+
   it('sanitizes multi-line diagnostics while preserving safe context', () => {
     const message = sanitizeMessage(
       '\u001b[31mPermission denied\u001b[0m\u0007\nWARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!\npassword hunter2\ntoken=abc123\n/Users/alice/.ssh/id_ed25519'
@@ -92,5 +163,19 @@ describe('format helpers', () => {
     expect(formatCommand(longCommand)).toContain('...');
     expect(formatCommand(longCommand)).not.toContain('supersecret');
     expect(formatCommand(longCommand)).not.toContain('hidden-tail-marker');
+  });
+
+  it('redacts a full drawer command without diagnostic or preview truncation', () => {
+    const longCommand = `python train.py --token=supersecret --identity /Users/alice/.ssh/id_ed25519 ${'x'.repeat(340)} -----BEGIN OPENSSH PRIVATE KEY-----\nprivate-material\n-----END OPENSSH PRIVATE KEY----- safe-drawer-tail-marker`;
+
+    const command = formatDrawerCommand(longCommand);
+
+    expect(command).toContain('--token=[redacted]');
+    expect(command).toContain('[path redacted]');
+    expect(command).toContain('[private key redacted]');
+    expect(command).toContain('safe-drawer-tail-marker');
+    expect(command).not.toContain('supersecret');
+    expect(command).not.toContain('/Users/alice/.ssh/id_ed25519');
+    expect(command).not.toContain('private-material');
   });
 });

@@ -1,5 +1,23 @@
 const unknownText = 'unknown';
 const diagnosticCap = 320;
+const commandPreviewCap = 96;
+const secretAssignmentPattern = /((?:--?)?(?:access[-_]?token|api[-_]?key|token|password|secret|key))[ \t]*[=:][ \t]*(?:"(?:\\.|[^"\\\r\n])*"|'(?:\\.|[^'\\\r\n])*'|[^\s\r\n]+)/gi;
+const secretPhrasePattern = /((?:--?)?(?:access[-_]?token|api[-_]?key|token|password|secret)|--?key)[ \t]+(?:"(?:\\.|[^"\\\r\n])*"|'(?:\\.|[^'\\\r\n])*'|[^\r\n]*?)(?=[ \t]+--?[A-Za-z][\w-]*(?:[ \t]|[=:]|$)|[ \t]*(?:&&|\|\||[;|])|$)/gim;
+
+const sanitizeSensitiveText = (value: string) =>
+  value
+    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '')
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '')
+    .replace(/(?:~|(?:\b[A-Za-z]:)?\/)(?:[^\s]+\/)*(?:\.ssh|\.gnupg)\/[^\s]+|(?:\b[A-Za-z]:)?\/?(?:[\w.-]+\/)+(?:id_[\w.-]+|[^\s]+\.(?:pem|key))\b/g, '[path redacted]')
+    .replace(secretAssignmentPattern, '$1=[redacted]')
+    .replace(secretPhrasePattern, '$1=[redacted]')
+    .replace(/-----BEGIN [^-]+PRIVATE KEY-----[\s\S]*?-----END [^-]+PRIVATE KEY-----/g, '[private key redacted]')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .join('\n');
+
+const truncateText = (value: string, cap: number) => (value.length > cap ? `${value.slice(0, cap - 3)}...` : value);
 
 export const formatUnknown = (value: string | number | null | undefined) => {
   if (value === null || value === undefined || value === '') {
@@ -77,25 +95,16 @@ export const sanitizeMessage = (value: string | null | undefined) => {
   if (!value) {
     return unknownText;
   }
-  const sanitized = value
-    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '')
-    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '')
-    .replace(/-----BEGIN [^-]+PRIVATE KEY-----[\s\S]*?-----END [^-]+PRIVATE KEY-----/g, '[private key redacted]')
-    .replace(/(?:~|(?:\b[A-Za-z]:)?\/)(?:[^\s]+\/)*(?:\.ssh|\.gnupg)\/[^\s]+|(?:\b[A-Za-z]:)?\/?(?:[\w.-]+\/)+(?:id_[\w.-]+|[^\s]+\.(?:pem|key))\b/g, '[path redacted]')
-    .replace(/((?:--?)?(?:access-token|api-key|token|password|secret|key))(?:\s*[=:]\s*|\s+)\S+/gi, '$1=[redacted]')
-    .replace('[private key=[redacted]', '[private key redacted]')
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0)
-    .join('\n');
-  return sanitized.length > diagnosticCap ? `${sanitized.slice(0, diagnosticCap - 3)}...` : sanitized;
+  return truncateText(sanitizeSensitiveText(value), diagnosticCap);
 };
 
 export const formatCommand = (value: string | null | undefined) => {
-  const sanitized = sanitizeMessage(value);
-  if (sanitized === unknownText) {
-    return sanitized;
+  if (!value) {
+    return unknownText;
   }
-  const redacted = sanitized.replace(/\b(token|password|secret|api[-_]?key|access[-_]?token)(?:\s*[=:]\s*|\s+)\S+/gi, '$1=[redacted]');
-  return redacted.length > 96 ? `${redacted.slice(0, 93)}...` : redacted;
+  const sanitized = truncateText(sanitizeSensitiveText(value), diagnosticCap);
+  return truncateText(sanitized, commandPreviewCap);
 };
+
+export const formatDrawerCommand = (value: string | null | undefined) =>
+  !value ? unknownText : sanitizeSensitiveText(value);
