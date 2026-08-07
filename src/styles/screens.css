@@ -39,6 +39,17 @@
     padding: var(--density-space-3);
   }
 
+  .overview-summary .metric-value {
+    line-height: 1.05;
+  }
+
+  .overview-summary-gpu-value {
+    font-size: clamp(1.05rem, 1.5vw, var(--component-metric-value-size));
+    letter-spacing: -0.035em;
+    overflow-wrap: normal;
+    text-wrap: balance;
+  }
+
   .overview-server-row {
     display: grid;
     gap: var(--overview-row-gap);
@@ -72,11 +83,13 @@
   }
 
   .overview-server-name {
-    overflow-wrap: anywhere;
     font-family: var(--font-display);
     font-size: 1.35rem;
     font-weight: 900;
-    letter-spacing: -0.05em;
+    letter-spacing: -0.035em;
+    line-height: 1.08;
+    overflow-wrap: anywhere;
+    text-wrap: balance;
   }
 
   .overview-server-host,
@@ -133,6 +146,10 @@
     font-size: 1.15rem;
   }
 
+  .app-shell[data-density="compact"] .overview-summary-gpu-value {
+    font-size: 1rem;
+  }
+
   .detail-page {
     --detail-card-padding: var(--density-card-padding);
     --detail-section-gap: var(--density-space-4);
@@ -151,11 +168,35 @@
   }
 
   .detail-health-strip {
-    grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(14rem, 100%), 1fr));
     gap: var(--detail-metric-gap);
     margin: 0;
     padding: 0;
     list-style: none;
+  }
+
+  .detail-health-value {
+    font-size: clamp(1rem, 1.45vw, var(--component-metric-value-size));
+    letter-spacing: -0.025em;
+    line-height: 1.16;
+    overflow-wrap: anywhere;
+  }
+
+  .detail-refresh-button {
+    max-inline-size: min(24rem, 100%);
+  }
+
+  .detail-status-badge {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .detail-refresh-button-label {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .detail-health-strip > li,
@@ -201,6 +242,16 @@
   .detail-gpu-panel table {
     width: 100%;
     table-layout: fixed;
+  }
+
+  .detail-process-table-shell {
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+  }
+
+  .detail-process-table {
+    min-width: 42rem;
   }
 
   .detail-gpus {
@@ -264,6 +315,109 @@
     white-space: normal;
   }
 
+  .process-ledger-page {
+    --process-ledger-card-padding: var(--density-card-padding);
+    --process-ledger-command-grid: minmax(18rem, 2fr) minmax(10rem, 0.9fr) minmax(10rem, 0.9fr) auto;
+    --process-ledger-gap: var(--density-space-3);
+    --process-ledger-header-gap: var(--density-space-3);
+    --process-ledger-summary-grid: minmax(0, auto) minmax(0, 1fr);
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .process-ledger-header,
+  .process-ledger-header * {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .process-ledger-summary,
+  .process-ledger-command-strip,
+  .process-ledger-filtered-empty {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    padding: var(--process-ledger-card-padding);
+  }
+
+  .process-ledger-summary {
+    display: grid;
+    grid-template-columns: var(--process-ledger-summary-grid);
+    align-items: center;
+    gap: var(--density-space-2) var(--process-ledger-header-gap);
+    border-color: color-mix(in srgb, var(--color-accent) 30%, var(--color-line));
+    background: linear-gradient(90deg, color-mix(in srgb, var(--color-accent-soft) 72%, var(--color-surface)), var(--color-surface));
+  }
+
+  .process-ledger-summary-copy {
+    margin: 0;
+    color: var(--color-muted);
+    font-size: 0.85rem;
+    line-height: 1.65;
+  }
+
+  .process-ledger-command-strip {
+    display: grid;
+    gap: var(--process-ledger-gap);
+    background: color-mix(in srgb, var(--color-panel) 84%, var(--color-canvas-deep));
+  }
+
+  .process-ledger-command-primary {
+    display: grid;
+    grid-template-columns: var(--process-ledger-command-grid);
+    align-items: end;
+    gap: var(--process-ledger-gap);
+  }
+
+  .process-ledger-command-primary > button {
+    justify-self: end;
+    min-inline-size: max-content;
+    white-space: nowrap;
+  }
+
+  .process-ledger-command-search,
+  .process-ledger-command-server,
+  .process-ledger-command-gpu {
+    min-width: 0;
+  }
+
+  .process-ledger-command-primary > *,
+  .process-ledger-command-secondary > * {
+    min-width: 0;
+  }
+
+  .process-ledger-command-secondary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: var(--density-space-2);
+    border-top: 1px solid var(--color-line);
+    padding-top: var(--density-space-3);
+  }
+
+  .process-ledger-command-secondary > div {
+    flex: 0 1 12rem;
+  }
+
+  .process-ledger-command-secondary > button {
+    flex: 0 0 auto;
+  }
+
+  .process-ledger-filtered-empty {
+    display: grid;
+    justify-items: center;
+    gap: var(--density-space-3);
+    min-height: 12rem;
+    text-align: center;
+  }
+
+  .process-ledger-filtered-empty p {
+    max-width: 36rem;
+    color: var(--color-muted);
+    font-size: 0.875rem;
+    line-height: 1.6;
+  }
+
   .history-monitor-screen div:has(> .history-chart-panel) {
     grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
     gap: var(--history-panel-gap);
@@ -285,6 +439,10 @@
     padding: var(--density-space-2);
   }
 
+  .app-shell[data-density="compact"] .detail-health-value {
+    font-size: 1rem;
+  }
+
   .app-shell[data-density="compact"] .detail-gpu-panel h4,
   .app-shell[data-density="compact"] .history-chart-panel-header h3 {
     font-size: 1.35rem;
@@ -294,6 +452,260 @@
     --history-card-padding: var(--density-space-3);
     --history-panel-gap: var(--density-space-3);
     --history-control-gap: var(--density-space-2);
+  }
+
+  .app-shell[data-density="compact"] .process-ledger-page {
+    --process-ledger-card-padding: var(--density-space-3);
+    --process-ledger-gap: var(--density-space-2);
+    --process-ledger-header-gap: var(--density-space-2);
+  }
+
+  .app-shell[data-density="compact"] .process-ledger-summary-copy {
+    font-size: 0.78rem;
+    line-height: 1.55;
+  }
+
+  .settings-screen {
+    --settings-surface-padding: var(--density-card-padding);
+    --settings-section-gap: var(--density-space-5);
+    --settings-inner-gap: var(--density-space-4);
+    --settings-tight-gap: var(--density-space-3);
+    --settings-registry-pane-size: clamp(20rem, 32vw, 30rem);
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .settings-screen:where(.app-shell[data-density="compact"] *) {
+    --settings-surface-padding: var(--density-space-3);
+    --settings-section-gap: var(--density-space-3);
+    --settings-inner-gap: var(--density-space-3);
+    --settings-tight-gap: var(--density-space-2);
+  }
+
+  .settings-screen,
+  .settings-screen :where(.surface, .panel, fieldset, section, article, div, p, span, h2, h3, label, input, button, table, th, td) {
+    min-width: 0;
+  }
+
+  .settings-screen :where(p, span, h2, h3, label, button, th, td, code, .surface, .panel) {
+    overflow-wrap: anywhere;
+  }
+
+  .settings-header,
+  .settings-summary,
+  .settings-registry-workspace,
+  .settings-import-workspace {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .settings-header > div {
+    align-items: flex-start;
+  }
+
+  .settings-header-copy {
+    flex: 1 1 24rem;
+  }
+
+  .settings-header-actions,
+  .settings-import-actions,
+  .settings-actions,
+  .settings-danger-actions {
+    gap: var(--settings-tight-gap);
+  }
+
+  .settings-summary,
+  .settings-registry-pane,
+  .settings-editor,
+  .settings-import-workspace,
+  .settings-editor-section,
+  .settings-connection-result,
+  .settings-import-summary,
+  .settings-import-warnings {
+    padding: var(--settings-surface-padding);
+  }
+
+  .settings-summary {
+    grid-template-columns: repeat(auto-fit, minmax(min(10rem, 100%), 1fr));
+    gap: var(--settings-tight-gap);
+  }
+
+  .settings-registry-workspace {
+    grid-template-columns: minmax(17rem, var(--settings-registry-pane-size)) minmax(0, 1fr);
+    align-items: start;
+    gap: var(--settings-section-gap);
+  }
+
+  .settings-registry-pane,
+  .settings-editor,
+  .settings-import-workspace {
+    overflow: hidden;
+  }
+
+  .settings-registry-list,
+  .settings-editor,
+  .settings-import-results {
+    gap: var(--settings-inner-gap);
+  }
+
+  .settings-registry-row {
+    padding: var(--settings-tight-gap);
+  }
+
+  .settings-registry-row-main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) max-content;
+    align-items: start;
+  }
+
+  .settings-registry-row-select {
+    width: 100%;
+  }
+
+  .settings-registry-row-name,
+  .settings-import-alias {
+    line-height: 1.05;
+  }
+
+  .settings-registry-row-host,
+  .settings-registry-row-meta,
+  .settings-field-helper,
+  .settings-field-error,
+  .settings-import-draft-host,
+  .settings-import-status,
+  .settings-import-candidate-warnings,
+  .settings-import-summary-failures,
+  .settings-import-summary-skips,
+  .settings-registry-row-feedback,
+  .settings-action-feedback,
+  .settings-danger-feedback,
+  .settings-import-feedback,
+  .settings-connection-test-feedback {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  .settings-registry-row-action {
+    justify-self: end;
+    min-inline-size: max-content;
+    white-space: nowrap;
+  }
+
+  .settings-editor-section {
+    gap: var(--settings-inner-gap);
+  }
+
+  .settings-editor-section.grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .settings-field .input {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .settings-toggle-field {
+    align-items: flex-start;
+  }
+
+  .settings-connection-test-header,
+  .settings-import-header,
+  .settings-import-results-header,
+  .settings-import-summary-counts {
+    gap: var(--settings-tight-gap);
+  }
+
+  .settings-connection-test-copy,
+  .settings-import-copy,
+  .settings-import-results-copy {
+    flex: 1 1 18rem;
+  }
+
+  .settings-import-ledger {
+    max-width: 100%;
+    overscroll-behavior-inline: contain;
+  }
+
+  .settings-import-ledger-table {
+    table-layout: fixed;
+  }
+
+  .settings-import-ledger-table :where(th, td) {
+    vertical-align: top;
+    overflow-wrap: anywhere;
+  }
+
+  .settings-import-ledger-table :where(th:nth-child(1), td:nth-child(1)) {
+    width: 5rem;
+  }
+
+  .settings-import-ledger-table :where(th:nth-child(2), td:nth-child(2)) {
+    width: 15rem;
+  }
+
+  .settings-import-ledger-table :where(th:nth-child(4), td:nth-child(4), th:nth-child(5), td:nth-child(5), th:nth-child(7), td:nth-child(7)) {
+    width: 7rem;
+  }
+
+  .settings-screen:where(.app-shell[data-density="compact"] *) .settings-registry-row-name,
+  .settings-screen:where(.app-shell[data-density="compact"] *) .settings-import-alias {
+    font-size: 1.1rem;
+  }
+
+  .settings-screen:where(.app-shell[data-density="compact"] *) .settings-import-ledger-table {
+    min-width: 52rem;
+  }
+
+  @media (max-width: 82rem) {
+    .settings-registry-workspace {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .settings-registry-pane,
+    .settings-editor {
+      width: 100%;
+    }
+
+    .settings-editor-section.grid-cols-2 {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .settings-editor-wide-field {
+      grid-column: auto;
+    }
+  }
+
+  @media (max-width: 64rem) {
+    .process-ledger-page {
+      --process-ledger-command-grid: repeat(3, minmax(0, 1fr));
+    }
+
+    .process-ledger-command-primary > button {
+      grid-column: 1 / -1;
+      justify-self: start;
+    }
+  }
+
+  @media (max-width: 48rem) {
+    .settings-header > div,
+    .settings-import-header,
+    .settings-import-results-header,
+    .settings-connection-test-header {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .settings-header-actions > button,
+    .settings-import-header > button,
+    .settings-import-actions > button,
+    .settings-connection-test-header > button,
+    .settings-actions > button,
+    .settings-danger-actions > button,
+    .settings-registry-row-action {
+      width: 100%;
+    }
   }
 
   .app-shell[data-density="compact"] .history-chart-panel {
@@ -330,8 +742,16 @@
       flex-direction: column;
     }
 
+    .process-ledger-summary {
+      grid-template-columns: 1fr;
+    }
+
     .detail-header button,
     .history-monitor-controls button,
+    .process-ledger-command-primary button,
+    .process-ledger-command-secondary button,
+    .process-ledger-command-strip select,
+    .process-ledger-command-strip input,
     .history-monitor-controls select {
       width: 100%;
     }
@@ -339,6 +759,7 @@
     .detail-health-strip,
     .detail-gpu-panel section > div:last-child,
     .detail-gpu-panel div:has(> .surface .time-series-chart),
+    .process-ledger-command-primary,
     .history-monitor-screen div:has(> .history-chart-panel) {
       grid-template-columns: 1fr;
     }
