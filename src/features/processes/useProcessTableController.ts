@@ -29,18 +29,41 @@ import {
   type ProcessTableOption
 } from './processTableModel';
 
+type ProcessTableDefaultState = {
+  readonly gpuFilter: string;
+  readonly processKindFilter: string;
+  readonly searchText: string;
+  readonly serverFilter: string;
+  readonly sortDirection: ProcessSortDirection;
+  readonly sortKey: ProcessTableSortKey;
+  readonly staleFilter: ProcessTableFilters['stale'];
+  readonly viewMode: ProcessTableViewMode;
+};
+
+const DEFAULT_PROCESS_TABLE_STATE: ProcessTableDefaultState = {
+  gpuFilter: ALL_PROCESS_FILTER_VALUE,
+  processKindFilter: DEFAULT_PROCESS_TABLE_FILTERS.processKind ?? ALL_PROCESS_FILTER_VALUE,
+  searchText: DEFAULT_PROCESS_TABLE_FILTERS.searchText,
+  serverFilter: ALL_PROCESS_FILTER_VALUE,
+  sortDirection: DEFAULT_PROCESS_TABLE_SORT.direction,
+  sortKey: DEFAULT_PROCESS_TABLE_SORT.key,
+  staleFilter: DEFAULT_PROCESS_TABLE_FILTERS.stale,
+  viewMode: 'flat'
+};
+
 export const useProcessTableController = (): ProcessTableController => {
   const processesQuery = useQuery({ queryKey: queryKeys.processes, queryFn: listProcesses });
   const processRows = processesQuery.data ?? [];
+  const focusFallbackRef = useRef<HTMLHeadingElement>(null);
   const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
-  const [searchText, setSearchText] = useState(DEFAULT_PROCESS_TABLE_FILTERS.searchText);
-  const [serverFilter, setServerFilter] = useState(ALL_PROCESS_FILTER_VALUE);
-  const [gpuFilter, setGpuFilter] = useState(ALL_PROCESS_FILTER_VALUE);
-  const [processKindFilter, setProcessKindFilter] = useState(DEFAULT_PROCESS_TABLE_FILTERS.processKind ?? ALL_PROCESS_FILTER_VALUE);
-  const [staleFilter, setStaleFilter] = useState<ProcessTableFilters['stale']>(DEFAULT_PROCESS_TABLE_FILTERS.stale);
-  const [viewMode, setViewMode] = useState<ProcessTableViewMode>('flat');
-  const [sortKey, setSortKey] = useState<ProcessTableSortKey>(DEFAULT_PROCESS_TABLE_SORT.key);
-  const [sortDirection, setSortDirection] = useState<ProcessSortDirection>(DEFAULT_PROCESS_TABLE_SORT.direction);
+  const [searchText, setSearchText] = useState(DEFAULT_PROCESS_TABLE_STATE.searchText);
+  const [serverFilter, setServerFilter] = useState(DEFAULT_PROCESS_TABLE_STATE.serverFilter);
+  const [gpuFilter, setGpuFilter] = useState(DEFAULT_PROCESS_TABLE_STATE.gpuFilter);
+  const [processKindFilter, setProcessKindFilter] = useState(DEFAULT_PROCESS_TABLE_STATE.processKindFilter);
+  const [staleFilter, setStaleFilter] = useState<ProcessTableFilters['stale']>(DEFAULT_PROCESS_TABLE_STATE.staleFilter);
+  const [viewMode, setViewMode] = useState<ProcessTableViewMode>(DEFAULT_PROCESS_TABLE_STATE.viewMode);
+  const [sortKey, setSortKey] = useState<ProcessTableSortKey>(DEFAULT_PROCESS_TABLE_STATE.sortKey);
+  const [sortDirection, setSortDirection] = useState<ProcessSortDirection>(DEFAULT_PROCESS_TABLE_STATE.sortDirection);
   const [selectedProcessKey, setSelectedProcessKey] = useState<string | null>(null);
   const [returnFocusProcessKey, setReturnFocusProcessKey] = useState<string | null>(null);
   const [refreshFeedback, setRefreshFeedback] = useState<ProcessRefreshFeedback | null>(null);
@@ -76,6 +99,18 @@ export const useProcessTableController = (): ProcessTableController => {
     return [{ label: 'All kinds', value: ALL_PROCESS_FILTER_VALUE }, ...uniqueKinds.map((kind) => ({ label: formatUnknown(kind), value: kind }))];
   }, [processRows]);
 
+  useEffect(() => {
+    if (serverFilter !== ALL_PROCESS_FILTER_VALUE && !serverOptions.some((option) => option.value === serverFilter)) {
+      setServerFilter(ALL_PROCESS_FILTER_VALUE);
+    }
+  }, [serverFilter, serverOptions]);
+
+  useEffect(() => {
+    if (gpuFilter !== ALL_PROCESS_FILTER_VALUE && !gpuOptions.some((option) => option.value === gpuFilter)) {
+      setGpuFilter(ALL_PROCESS_FILTER_VALUE);
+    }
+  }, [gpuFilter, gpuOptions]);
+
   const selectedServer = serverOptions.find((option) => option.value === serverFilter) ?? null;
   const selectedGpu = gpuOptions.find((option) => option.value === gpuFilter) ?? null;
   const filters = useMemo<ProcessTableFilters>(
@@ -105,6 +140,7 @@ export const useProcessTableController = (): ProcessTableController => {
   useEffect(() => {
     if (selectedProcessKey !== null && selectedProcess === null) {
       setSelectedProcessKey(null);
+      focusFallbackRef.current?.focus();
     }
   }, [selectedProcess, selectedProcessKey]);
 
@@ -114,12 +150,6 @@ export const useProcessTableController = (): ProcessTableController => {
       setReturnFocusProcessKey(null);
     }
   }, [returnFocusProcessKey, selectedProcess]);
-
-  useEffect(() => {
-    if (selectedProcess !== null) {
-      document.querySelector<HTMLButtonElement>('[aria-label="Close drawer"]')?.focus();
-    }
-  }, [selectedProcess]);
 
   const openProcessDetails = (row: ProcessRowDto) => setSelectedProcessKey(processRowKey(row));
   const closeProcessDetails = () => {
@@ -152,14 +182,14 @@ export const useProcessTableController = (): ProcessTableController => {
   };
 
   const resetFilters = () => {
-    setSearchText(DEFAULT_PROCESS_TABLE_FILTERS.searchText);
-    setServerFilter(ALL_PROCESS_FILTER_VALUE);
-    setGpuFilter(ALL_PROCESS_FILTER_VALUE);
-    setProcessKindFilter(ALL_PROCESS_FILTER_VALUE);
-    setStaleFilter(DEFAULT_PROCESS_TABLE_FILTERS.stale);
-    setViewMode('flat');
-    setSortKey(DEFAULT_PROCESS_TABLE_SORT.key);
-    setSortDirection(DEFAULT_PROCESS_TABLE_SORT.direction);
+    setSearchText(DEFAULT_PROCESS_TABLE_STATE.searchText);
+    setServerFilter(DEFAULT_PROCESS_TABLE_STATE.serverFilter);
+    setGpuFilter(DEFAULT_PROCESS_TABLE_STATE.gpuFilter);
+    setProcessKindFilter(DEFAULT_PROCESS_TABLE_STATE.processKindFilter);
+    setStaleFilter(DEFAULT_PROCESS_TABLE_STATE.staleFilter);
+    setViewMode(DEFAULT_PROCESS_TABLE_STATE.viewMode);
+    setSortKey(DEFAULT_PROCESS_TABLE_STATE.sortKey);
+    setSortDirection(DEFAULT_PROCESS_TABLE_STATE.sortDirection);
   };
 
   const handleRefreshRows = async () => {
@@ -175,6 +205,7 @@ export const useProcessTableController = (): ProcessTableController => {
   };
 
   return {
+    focusFallbackRef,
     filters,
     gpuOptions,
     gpuFilter,

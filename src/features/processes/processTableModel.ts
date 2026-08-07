@@ -40,7 +40,21 @@ export type ProcessTableOption = LabeledSelectOption & {
   readonly uuid?: string;
 };
 
+export type ProcessLedgerMemoryStatus = 'known' | 'partial' | 'unknown';
+
+export type ProcessLedgerSummary = {
+  readonly totalProcessRowCount: number;
+  readonly visibleProcessRowCount: number;
+  readonly uniqueServerIdCount: number;
+  readonly uniqueGpuUuidCount: number;
+  readonly currentProcessRowCount: number;
+  readonly staleProcessRowCount: number;
+  readonly gpuMemoryUsedMiB: number | null;
+  readonly memoryStatus: ProcessLedgerMemoryStatus;
+};
+
 export type ProcessTableController = {
+  readonly focusFallbackRef: RefObject<HTMLHeadingElement | null>;
   readonly filters: ProcessTableFilters;
   readonly gpuOptions: readonly ProcessTableOption[];
   readonly gpuFilter: string;
@@ -93,6 +107,43 @@ export const gpuFilterValue = (gpuIndex: number, gpuUuid: string) => `${gpuIndex
 export const processRowKey = (row: ProcessRowDto) => `${row.serverId}-${row.gpuUuid}-${row.pid}`;
 
 export const processStatus = (row: ProcessRowDto) => (row.stale ? 'stale' : 'current');
+
+export const summarizeProcessLedger = (processRows: readonly ProcessRowDto[], visibleRows: readonly ProcessRowDto[]): ProcessLedgerSummary => {
+  const serverIds = new Set<string>();
+  const gpuUuids = new Set<string>();
+  let currentProcessRowCount = 0;
+  let staleProcessRowCount = 0;
+  let knownMemoryRowCount = 0;
+  let gpuMemoryUsedMiB = 0;
+
+  for (const row of visibleRows) {
+    serverIds.add(row.serverId);
+    gpuUuids.add(row.gpuUuid);
+    if (row.stale) {
+      staleProcessRowCount += 1;
+    } else {
+      currentProcessRowCount += 1;
+    }
+    if (row.gpuMemoryUsedMiB !== null) {
+      knownMemoryRowCount += 1;
+      gpuMemoryUsedMiB += row.gpuMemoryUsedMiB;
+    }
+  }
+
+  const memoryStatus: ProcessLedgerMemoryStatus =
+    knownMemoryRowCount === 0 ? 'unknown' : knownMemoryRowCount === visibleRows.length ? 'known' : 'partial';
+
+  return {
+    totalProcessRowCount: processRows.length,
+    visibleProcessRowCount: visibleRows.length,
+    uniqueServerIdCount: serverIds.size,
+    uniqueGpuUuidCount: gpuUuids.size,
+    currentProcessRowCount,
+    staleProcessRowCount,
+    gpuMemoryUsedMiB: knownMemoryRowCount === 0 ? null : gpuMemoryUsedMiB,
+    memoryStatus
+  };
+};
 
 export const isProcessRow = (item: VisibleProcessRow): item is Extract<VisibleProcessRow, { kind: 'process' }> => item.kind === 'process';
 

@@ -215,6 +215,13 @@ export const processTableRows: ProcessRowDto[] = [
   })
 ];
 
+export const processLedgerCollisionRows: ProcessRowDto[] = [
+  makeProcessRow({ serverId: 'shared-a', serverName: 'Shared Node', gpuIndex: 0, gpuUuid: 'GPU-shared-a', pid: 700, username: 'zoe', command: 'python shared-a.py', gpuMemoryUsedMiB: 400 }),
+  makeProcessRow({ serverId: 'shared-b', serverName: 'Shared Node', gpuIndex: 0, gpuUuid: 'GPU-shared-b', pid: 700, username: 'amy', command: 'python shared-b.py', gpuMemoryUsedMiB: 300 }),
+  makeProcessRow({ serverId: 'shared-a', serverName: 'Alias Node', gpuIndex: 1, gpuUuid: 'GPU-repeated', pid: 701, username: 'zoe', command: 'python alias.py', gpuMemoryUsedMiB: 200 }),
+  makeProcessRow({ serverId: 'beta', serverName: 'Beta Node', gpuIndex: 2, gpuUuid: 'GPU-repeated', pid: 700, username: 'amy', command: 'python beta.py', gpuMemoryUsedMiB: 100 })
+];
+
 export const apiProcessRow = makeProcessRow({
   serverId: 'server-2',
   serverName: 'Saved GPU',

@@ -12,7 +12,8 @@ import {
   type OverviewSortKey,
   type ProcessTableSortKey
 } from './visibility';
-import { gpuCardFixture, makeProcessRow, visibilityProcessRows as processRows } from '../test-utils/process-fixtures';
+import { processRowKey } from '../features/processes/processTableModel';
+import { gpuCardFixture, makeProcessRow, processLedgerCollisionRows, visibilityProcessRows as processRows } from '../test-utils/process-fixtures';
 import { overviewRows } from '../test-utils/server-fixtures';
 
 describe('visibility helpers', () => {
@@ -148,6 +149,30 @@ describe('visibility helpers', () => {
     expect(descRows[1]).toBe(processRows[1]);
   });
 
+  it('keeps server, GPU, and PID in canonical process row identity when PIDs collide', () => {
+    const samePidRows = processLedgerCollisionRows.filter((row) => row.pid === 700);
+
+    expect(new Set(samePidRows.map(processRowKey)).size).toBe(samePidRows.length);
+    expect(new Set(samePidRows.map((row) => row.pid)).size).toBe(1);
+  });
+
+  it('applies generic filters before exact identities, sorting, grouping, and focusable-row projection', () => {
+    const genericRows = filterProcessRows(processLedgerCollisionRows, {
+      ...DEFAULT_PROCESS_TABLE_FILTERS,
+      serverName: 'Shared Node',
+      gpuIndex: 0
+    });
+    const exactRows = genericRows.filter((row) => row.serverId === 'shared-b' && row.gpuUuid === 'GPU-shared-b');
+    const sortedRows = sortProcessRows(exactRows, { key: 'pid', direction: 'asc' });
+    const groupedRows = getVisibleProcessRows(sortedRows, 'userGrouped');
+    const focusableRows = groupedRows.filter((item) => item.kind === 'process');
+
+    expect(genericRows.map(processRowKey)).toEqual(['shared-a-GPU-shared-a-700', 'shared-b-GPU-shared-b-700']);
+    expect(exactRows.map(processRowKey)).toEqual(['shared-b-GPU-shared-b-700']);
+    expect(groupedRows.map((item) => item.kind)).toEqual(['section', 'process']);
+    expect(focusableRows.map((item) => processRowKey(item.row))).toEqual(['shared-b-GPU-shared-b-700']);
+  });
+
   it('keeps process rows flat by default after existing sort order', () => {
     const parentRows = [
       makeProcessRow({ pid: 20, command: 'python parent.py', gpuMemoryUsedMiB: 10, gpuUtilizationPercent: 10 }),
@@ -208,14 +233,16 @@ describe('visibility helpers', () => {
       makeProcessRow({ gpuIndex: 2, pid: 10, username: 'alice', command: 'python alpha-alice-low.py', gpuUuid: 'GPU-alpha-2', gpuMemoryUsedMiB: 10, gpuUtilizationPercent: 10 })
     ];
 
+    const sortedUserRows = sortProcessRows(userRows, { key: 'pid', direction: 'asc' });
+
     expect(
-      getVisibleProcessRows(userRows, 'userGrouped').map((item) =>
+      getVisibleProcessRows(sortedUserRows, 'userGrouped').map((item) =>
         item.kind === 'section' ? `${item.kind}:${item.label}` : `${item.kind}:${item.depth}:${item.row.serverName}:${item.row.username || 'unknown'}:${item.row.pid}`
       )
     ).toEqual([
       'section:Alpha Node / alice',
-      'process:1:Alpha Node:alice:50',
       'process:1:Alpha Node:alice:10',
+      'process:1:Alpha Node:alice:50',
       'section:Alpha Node / unknown user',
       'process:1:Alpha Node:unknown:20',
       'section:Beta Node / unknown user',
