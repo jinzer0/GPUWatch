@@ -30,7 +30,11 @@ export async function clickText(cdp, text) {
     `(() => {
       const needle = ${JSON.stringify(text)};
       const element = Array.from(document.querySelectorAll('button, a')).find((candidate) =>
-        candidate.textContent.trim().includes(needle) && (!('disabled' in candidate) || !candidate.disabled)
+        (() => {
+          const visibleName = candidate.textContent.trim();
+          const accessibleName = candidate.getAttribute('aria-label') || visibleName;
+          return (accessibleName.includes(needle) || visibleName.includes(needle)) && (!('disabled' in candidate) || !candidate.disabled);
+        })()
       );
       if (!element) throw new Error('No enabled clickable element with text: ' + needle);
       element.click();
@@ -46,7 +50,11 @@ export async function waitForEnabledClickableText(cdp, text, timeoutMs = 15000) 
       `(() => {
         const needle = ${JSON.stringify(text)};
         const element = Array.from(document.querySelectorAll('button, a')).find((candidate) =>
-          candidate.textContent.trim().includes(needle) && (!('disabled' in candidate) || !candidate.disabled)
+          (() => {
+            const visibleName = candidate.textContent.trim();
+            const accessibleName = candidate.getAttribute('aria-label') || visibleName;
+            return (accessibleName.includes(needle) || visibleName.includes(needle)) && (!('disabled' in candidate) || !candidate.disabled);
+          })()
         );
         return Boolean(element);
       })()`
@@ -78,8 +86,9 @@ export async function selectByLabel(cdp, label, value) {
         candidate.textContent.trim().startsWith(labelText)
       );
       if (!labelNode) throw new Error('No label found: ' + labelText);
-      const select = labelNode.querySelector('select');
-      if (!select) throw new Error('No select found for label: ' + labelText);
+       const control = labelNode.htmlFor ? document.getElementById(labelNode.htmlFor) : labelNode.querySelector('select');
+       if (!(control instanceof HTMLSelectElement)) throw new Error('No select found for label: ' + labelText);
+       const select = control;
       select.value = ${JSON.stringify(value)};
       select.dispatchEvent(new Event('change', { bubbles: true }));
       return select.value;
@@ -96,8 +105,9 @@ export async function setInputByLabel(cdp, label, value) {
         candidate.textContent.trim().startsWith(labelText)
       );
       if (!labelNode) throw new Error('No label found: ' + labelText);
-      const input = labelNode.querySelector('input');
-      if (!input) throw new Error('No input found for label: ' + labelText);
+       const control = labelNode.htmlFor ? document.getElementById(labelNode.htmlFor) : labelNode.querySelector('input');
+       if (!(control instanceof HTMLInputElement)) throw new Error('No input found for label: ' + labelText);
+       const input = control;
       const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
       setter.call(input, ${JSON.stringify(value)});
       input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -116,8 +126,8 @@ export async function setCheckboxByLabel(cdp, label, checked) {
         candidate.textContent.trim().includes(labelText)
       );
       if (!labelNode) throw new Error('No checkbox label found: ' + labelText);
-      const input = labelNode.querySelector('input[type="checkbox"]');
-      if (!input) throw new Error('No checkbox found for label: ' + labelText);
+      const input = labelNode.htmlFor ? document.getElementById(labelNode.htmlFor) : labelNode.querySelector('input[type="checkbox"]');
+      if (!(input instanceof HTMLInputElement) || input.type !== 'checkbox') throw new Error('No checkbox found for label: ' + labelText);
       if (input.checked !== ${checked ? 'true' : 'false'}) {
         input.click();
       }
@@ -162,7 +172,7 @@ export async function visibleErrorText(cdp) {
     cdp,
     `(() => {
       const resultSurface = Array.from(document.querySelectorAll('.surface, [role="alert"]')).find((element) =>
-        /ssh_unreachable|connection refused|helper|backend_unavailable|failed|error/i.test(element.textContent || '')
+        /ssh_unreachable|connection refused|backend_unavailable|failed|error|Type:\\s*\\w+_\\w+/i.test(element.textContent || '')
       );
       if (!resultSurface) return null;
       resultSurface.scrollIntoView({ block: 'center' });

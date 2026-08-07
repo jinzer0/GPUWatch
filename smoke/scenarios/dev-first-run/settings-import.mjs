@@ -3,14 +3,77 @@ import { evaluate, screenshot } from '../../shared/cdp.mjs';
 import { evidenceDir } from '../../shared/paths.mjs';
 import { waitFor } from '../../shared/wait.mjs';
 
+const importWorkspaceSelector = '[aria-labelledby="ssh-config-import-heading"]';
+
+async function clickButtonByExactName(cdp, name, { withinSelector } = {}) {
+  await evaluate(
+    cdp,
+    `(() => {
+      const name = ${JSON.stringify(name)};
+      const withinSelector = ${JSON.stringify(withinSelector ?? null)};
+      const scope = withinSelector ? document.querySelector(withinSelector) : document;
+      if (!scope) throw new Error('Button scope missing: ' + withinSelector);
+      const button = Array.from(scope.querySelectorAll('button')).find((candidate) => {
+        const accessibleName = candidate.getAttribute('aria-label') || candidate.textContent.trim();
+        return accessibleName === name && !candidate.disabled;
+      });
+      if (!button) throw new Error('No enabled button named: ' + name);
+      button.click();
+      return true;
+    })()`
+  );
+}
+
+async function assertImportWorkspaceOutsideEditorForm(cdp) {
+  return evaluate(
+    cdp,
+    `(() => {
+      const importWorkspace = document.querySelector(${JSON.stringify(importWorkspaceSelector)});
+      if (!importWorkspace) throw new Error('SSH config import workspace missing');
+      const editorForm = document.querySelector('form.settings-editor');
+      if (!editorForm) throw new Error('Settings editor form missing');
+      if (editorForm.contains(importWorkspace)) {
+        throw new Error('SSH config import workspace is inside the settings editor form');
+      }
+      return true;
+    })()`
+  );
+}
+
+async function verifyHeaderImportShortcut(cdp) {
+  await clickButtonByExactName(cdp, 'Import SSH config');
+  const shortcutResult = await evaluate(
+    cdp,
+    `(() => {
+      const importHeading = document.getElementById('ssh-config-import-heading');
+      if (!importHeading) throw new Error('SSH config import heading missing');
+      const importWorkspace = document.querySelector(${JSON.stringify(importWorkspaceSelector)});
+      if (!importWorkspace) throw new Error('SSH config import workspace missing');
+      const candidatesVisible = /SSH config import candidates/i.test(importWorkspace.textContent || '');
+      return {
+        activeElementId: document.activeElement?.id || '',
+        candidatesVisible
+      };
+    })()`
+  );
+  if (shortcutResult.activeElementId !== 'ssh-config-import-heading') {
+    throw new Error(`Expected header import shortcut to focus ssh-config-import-heading, got: ${shortcutResult.activeElementId}`);
+  }
+  if (shortcutResult.candidatesVisible) {
+    throw new Error('Header import shortcut triggered SSH config scan instead of only focusing the import workspace');
+  }
+}
+
 async function importUnavailableEvidence(cdp, smokeWaitForText) {
-  await clickText(cdp, 'Import from SSH config');
+  await assertImportWorkspaceOutsideEditorForm(cdp);
+  await verifyHeaderImportShortcut(cdp);
+  await clickButtonByExactName(cdp, 'Import from SSH config', { withinSelector: importWorkspaceSelector });
   await smokeWaitForText(cdp, 'SSH config import candidates');
   await smokeWaitForText(cdp, 'No importable SSH host aliases found').catch(() => smokeWaitForText(cdp, 'task14-import-warning'));
   const importSurface = await evaluate(
     cdp,
     `(() => {
-      const element = document.querySelector('[aria-labelledby="ssh-config-import-heading"]');
+      const element = document.querySelector(${JSON.stringify(importWorkspaceSelector)});
       if (!element) throw new Error('SSH config import surface missing');
       return element.textContent || '';
     })()`

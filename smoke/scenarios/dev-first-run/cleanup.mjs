@@ -7,6 +7,8 @@ export async function runSettingsCleanupScenario(cdp, { smokeWaitForText, screen
   await clickNav(cdp, 'Settings');
   await smokeWaitForText(cdp, 'Server registry');
   await clickText(cdp, 'Delete');
+  await smokeWaitForText(cdp, 'Confirm delete Task 14 Smoke Server Edited');
+  await clickText(cdp, 'Confirm delete Task 14 Smoke Server Edited');
   await waitFor('deleted server list', async () => {
     const listed = await bridgeListServers(cdp);
     return listed.length === 0 ? listed : null;
