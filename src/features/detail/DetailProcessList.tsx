@@ -7,14 +7,14 @@ export const DetailProcessList = ({ processes }: { readonly processes: readonly 
   }
 
   return (
-    <div className="overflow-hidden rounded-[var(--radius-md)] border border-[color:var(--color-border)]">
-      <table className="w-full text-sm">
+    <div className="detail-process-table-shell overflow-hidden rounded-[var(--radius-md)] border border-[color:var(--color-border)]">
+      <table aria-label="GPU processes" className="detail-process-table w-full text-sm">
         <thead className="bg-white/5 text-left table-head">
           <tr>
-            <th className="px-3 py-2">PID</th>
-            <th className="px-3 py-2">User</th>
-            <th className="px-3 py-2">GPU memory</th>
-            <th className="px-3 py-2">Command</th>
+            <th className="px-3 py-2" scope="col">PID</th>
+            <th className="px-3 py-2" scope="col">User</th>
+            <th className="px-3 py-2" scope="col">GPU memory</th>
+            <th className="px-3 py-2" scope="col">Command</th>
           </tr>
         </thead>
         <tbody>
