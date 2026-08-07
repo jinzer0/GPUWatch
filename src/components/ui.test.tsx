@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -322,6 +323,63 @@ describe('shared UI primitives', () => {
     fireEvent.keyDown(document, { key: 'Escape' });
 
     expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps right drawer focus contained and restores the opener after Escape', () => {
+    const DrawerHarness = () => {
+      const [isOpen, setIsOpen] = useState(false);
+
+      return (
+        <div>
+          <Button onClick={() => setIsOpen(true)}>Open drawer</Button>
+          <Button>Background action</Button>
+          {isOpen ? (
+            <RightDrawer ariaLabel="Process details" onClose={() => setIsOpen(false)} title="PID 4242">
+              <Button>Inspect command</Button>
+              <a href="/diagnostics">Diagnostics link</a>
+            </RightDrawer>
+          ) : null}
+        </div>
+      );
+    };
+
+    render(<DrawerHarness />);
+
+    const opener = screen.getByRole('button', { name: 'Open drawer' });
+    opener.focus();
+    fireEvent.click(opener);
+
+    const closeButton = screen.getByRole('button', { name: 'Close drawer' });
+    const diagnosticsLink = screen.getByRole('link', { name: 'Diagnostics link' });
+
+    expect(document.activeElement).toBe(closeButton);
+
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(diagnosticsLink);
+
+    fireEvent.keyDown(document, { key: 'Tab' });
+    expect(document.activeElement).toBe(closeButton);
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Process details' })).toBeNull();
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it('blocks background clicks while the right drawer is modal', () => {
+    const onBackgroundAction = vi.fn();
+
+    render(
+      <div>
+        <Button onClick={onBackgroundAction}>Background action</Button>
+        <RightDrawer ariaLabel="Process details" onClose={() => undefined} title="PID 4242">
+          <Button>Inspect command</Button>
+        </RightDrawer>
+      </div>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Background action' }));
+
+    expect(onBackgroundAction).not.toHaveBeenCalled();
   });
 
   it('renders a mini line chart with an accessible label and numeric points only', () => {
