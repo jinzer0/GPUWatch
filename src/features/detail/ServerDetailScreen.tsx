@@ -6,7 +6,7 @@ import { useServerDetailController } from './useServerDetailController';
 const ServerHealthItem = ({ label, value }: { readonly label: string; readonly value: React.ReactNode }) => (
   <li className="surface min-w-0 p-4">
     <div className="metric-label">{label}</div>
-    <div className="metric-value break-words">{value}</div>
+    <div className="detail-health-value metric-value">{value}</div>
   </li>
 );
 
@@ -42,12 +42,14 @@ export const ServerDetailScreen = ({ selectedServerId }: { readonly selectedServ
             <div className="eyebrow">Detail</div>
             <div className="mt-2 flex items-center gap-3">
               <h2 className="break-words text-2xl font-semibold tracking-[-0.03em]">{detail.server.name}</h2>
-              <StatusBadge status={detail.health.status} />
+              <span className="detail-status-badge">
+                <StatusBadge status={detail.health.status} />
+              </span>
             </div>
             <p className="mt-3 break-words text-sm text-[color:var(--color-muted)]">{detail.server.username}@{detail.server.host}:{detail.server.port}</p>
           </div>
-          <Button aria-label={`Refresh ${detail.server.name}`} disabled={controller.refreshMutation.isPending} onClick={() => controller.refreshMutation.mutate(detail.server.id)} type="button" variant="primary">
-            Refresh {detail.server.name}
+          <Button aria-label={`Refresh ${detail.server.name}`} className="detail-refresh-button" disabled={controller.refreshMutation.isPending} onClick={() => controller.refreshMutation.mutate(detail.server.id)} type="button" variant="primary">
+            <span className="detail-refresh-button-label">Refresh {detail.server.name}</span>
           </Button>
         </div>
         {hasRefreshDiagnostic ? (
@@ -57,7 +59,7 @@ export const ServerDetailScreen = ({ selectedServerId }: { readonly selectedServ
         ) : null}
       </header>
 
-      <ul aria-label="Server health" className="detail-health-strip grid grid-cols-5 gap-3" role="list">
+      <ul aria-label="Server health" className="detail-health-strip grid gap-3" role="list">
         <ServerHealthItem label="Health" value={detail.health.status} />
         <ServerHealthItem label="Last successful poll" value={formatTime(detail.health.lastSuccessAt)} />
         <ServerHealthItem label="Snapshot received" value={formatTime(detail.receivedAt)} />
