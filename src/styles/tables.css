@@ -1,4 +1,14 @@
 @layer components {
+  .process-ledger-page {
+    --process-ledger-table-min-width: 78rem;
+    --process-ledger-cell-padding-block: var(--density-space-3);
+    --process-ledger-cell-padding-inline: var(--density-space-4);
+    --process-ledger-primary-cell-width: 24rem;
+    --process-ledger-context-cell-width: 18rem;
+    --process-ledger-user-cell-width: 12rem;
+    --process-ledger-command-cell-width: 22rem;
+  }
+
   .table-head {
     color: var(--color-ink-soft);
     font-size: 0.72rem;
@@ -21,6 +31,196 @@
   .app-shell[data-density="compact"] td {
     padding-top: var(--density-space-2);
     padding-bottom: var(--density-space-2);
+  }
+
+  .process-ledger-table-shell {
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    border-color: var(--color-line-strong);
+    background: color-mix(in srgb, var(--color-panel) 88%, var(--color-canvas-deep));
+    scrollbar-gutter: stable;
+  }
+
+  .process-ledger-table {
+    min-width: var(--process-ledger-table-min-width);
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  .process-ledger-table-head th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--color-panel-strong);
+    box-shadow: inset 0 -1px 0 var(--color-line-strong);
+    white-space: nowrap;
+  }
+
+  .process-ledger-table-head button {
+    max-width: 100%;
+  }
+
+  .process-ledger-group-row {
+    border-top: 1px solid var(--color-border);
+    background: color-mix(in srgb, var(--color-accent-soft) 50%, var(--color-panel));
+  }
+
+  .process-ledger-group-label {
+    display: flex;
+    align-items: center;
+    gap: var(--density-space-3);
+    color: var(--color-accent);
+  }
+
+  .process-ledger-group-count {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-xl);
+    color: var(--color-muted);
+    padding: var(--density-space-1) var(--density-space-2);
+  }
+
+  .process-ledger-row {
+    cursor: pointer;
+    border-top: 1px solid var(--color-border);
+    background: transparent;
+    outline: 2px solid transparent;
+    outline-offset: calc(-1 * var(--density-space-1));
+    transition:
+      background-color var(--interaction-transition-duration) var(--interaction-transition-timing),
+      color var(--interaction-transition-duration) var(--interaction-transition-timing),
+      outline-color var(--interaction-transition-duration) var(--interaction-transition-timing);
+  }
+
+  .process-ledger-row:hover,
+  .process-ledger-row:focus-visible {
+    background: color-mix(in srgb, var(--color-accent-soft) 68%, transparent);
+  }
+
+  .process-ledger-row:focus-visible {
+    outline-color: var(--color-brand);
+    box-shadow: inset 0 0 0 1px var(--color-brand);
+  }
+
+  .process-ledger-row-stale {
+    background: color-mix(in srgb, var(--color-stale) 9%, transparent);
+  }
+
+  .process-ledger-row-selected {
+    background: color-mix(in srgb, var(--color-brand-soft) 72%, var(--color-accent-soft));
+  }
+
+  .process-ledger-row-selected .process-ledger-memory-cell,
+  .process-ledger-row:hover .process-ledger-memory-cell,
+  .process-ledger-row:focus-visible .process-ledger-memory-cell {
+    color: var(--color-brand);
+  }
+
+  .process-ledger-cell {
+    vertical-align: top;
+  }
+
+  .process-ledger-process-cell {
+    width: var(--process-ledger-primary-cell-width);
+    min-width: var(--process-ledger-primary-cell-width);
+    max-width: var(--process-ledger-primary-cell-width);
+  }
+
+  .process-ledger-process-cell-frame {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--density-space-3);
+    min-width: 0;
+  }
+
+  .process-ledger-process-identity {
+    min-width: 0;
+  }
+
+  .process-ledger-command-preview,
+  .process-ledger-command-cell,
+  .process-ledger-server-name,
+  .process-ledger-user-cell,
+  .process-ledger-gpu-uuid {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .process-ledger-command-preview,
+  .process-ledger-server-name {
+    color: var(--color-text);
+    font-weight: 700;
+  }
+
+  .process-ledger-process-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--density-space-1) var(--density-space-3);
+    margin-top: var(--density-space-1);
+    color: var(--color-muted);
+    font-size: 0.75rem;
+  }
+
+  .process-ledger-context-cell {
+    width: var(--process-ledger-context-cell-width);
+    min-width: var(--process-ledger-context-cell-width);
+    max-width: var(--process-ledger-context-cell-width);
+  }
+
+  .process-ledger-gpu-uuid {
+    margin-top: var(--density-space-1);
+    color: var(--color-muted);
+    font-family: var(--font-display);
+    font-size: 0.75rem;
+  }
+
+  .process-ledger-user-cell {
+    width: var(--process-ledger-user-cell-width);
+    max-width: var(--process-ledger-user-cell-width);
+  }
+
+  .process-ledger-gpu-cell,
+  .process-ledger-metric-cell {
+    white-space: nowrap;
+  }
+
+  .process-ledger-gpu-cell {
+    min-width: 10rem;
+    font-family: var(--font-display);
+  }
+
+  .process-ledger-memory-cell {
+    color: var(--color-accent);
+    font-weight: 800;
+  }
+
+  .process-ledger-command-cell {
+    width: var(--process-ledger-command-cell-width);
+    max-width: var(--process-ledger-command-cell-width);
+    color: var(--color-muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.75rem;
+  }
+
+  .app-shell[data-density="compact"] .process-ledger-page {
+    --process-ledger-cell-padding-block: var(--density-space-2);
+    --process-ledger-cell-padding-inline: var(--density-space-3);
+    --process-ledger-primary-cell-width: 22rem;
+    --process-ledger-context-cell-width: 16rem;
+    --process-ledger-user-cell-width: 10rem;
+    --process-ledger-command-cell-width: 20rem;
+  }
+
+  .app-shell[data-density="compact"] .process-ledger-table {
+    font-size: 0.78rem;
+  }
+
+  .app-shell[data-density="compact"] .process-ledger-process-meta,
+  .app-shell[data-density="compact"] .process-ledger-gpu-uuid,
+  .app-shell[data-density="compact"] .process-ledger-command-cell {
+    font-size: 0.7rem;
   }
 
   .app-shell[data-density="compact"] .mini-line-chart-full {
@@ -60,5 +260,19 @@
 
   .row-stale {
     background: color-mix(in srgb, var(--color-stale) 9%, transparent);
+  }
+
+  .process-ledger-row-selected {
+    background: color-mix(in srgb, var(--color-brand-soft) 72%, var(--color-accent-soft));
+  }
+}
+
+@layer utilities {
+  .process-ledger-cell {
+    padding: var(--process-ledger-cell-padding-block) var(--process-ledger-cell-padding-inline);
+  }
+
+  .process-ledger-group-cell {
+    padding: var(--density-space-2) var(--process-ledger-cell-padding-inline);
   }
 }

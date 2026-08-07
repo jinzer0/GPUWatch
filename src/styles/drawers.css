@@ -10,10 +10,83 @@
 
   .right-drawer-shell {
     width: min(34rem, calc(100vw - 2rem));
-    height: 100vh;
+    max-width: 100%;
+    height: 100dvh;
     overflow-y: auto;
     border-left: 1px solid var(--color-line-strong);
     background: var(--color-panel-strong);
     box-shadow: var(--shadow-panel);
+  }
+
+  .process-detail-inspector {
+    display: grid;
+    min-width: 0;
+    overflow: hidden;
+    background: color-mix(in srgb, var(--color-surface-raised) 88%, var(--color-canvas-deep));
+  }
+
+  .process-detail-identity {
+    min-width: 0;
+    overflow-wrap: break-word;
+    box-shadow: inset 0 -1px 0 var(--color-line);
+  }
+
+  .process-detail-section,
+  .process-detail-command,
+  .process-detail-readonly-note {
+    min-width: 0;
+  }
+
+  .process-detail-section {
+    background: transparent;
+  }
+
+  .process-detail-row {
+    min-width: 0;
+  }
+
+  .process-detail-row dd {
+    min-width: 0;
+  }
+
+  .process-detail-value {
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-wrap: normal;
+    overscroll-behavior-x: contain;
+    white-space: normal;
+    word-break: normal;
+  }
+
+  .process-detail-command pre {
+    max-width: 100%;
+    overscroll-behavior: contain;
+  }
+
+  @media (max-width: 48rem) {
+    .right-drawer-backdrop {
+      justify-content: stretch;
+    }
+
+    .right-drawer-shell {
+      width: 100vw;
+    }
+  }
+}
+
+@layer utilities {
+  .app-shell[data-density="compact"] .right-drawer-shell > div {
+    padding: var(--density-space-3);
+  }
+
+  .app-shell[data-density="compact"] .process-detail-identity,
+  .app-shell[data-density="compact"] .process-detail-section,
+  .app-shell[data-density="compact"] .process-detail-command,
+  .app-shell[data-density="compact"] .process-detail-readonly-note {
+    padding: var(--density-space-3);
+  }
+
+  .app-shell[data-density="compact"] .process-detail-row {
+    padding-block: var(--density-space-1);
   }
 }
