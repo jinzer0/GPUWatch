@@ -94,6 +94,63 @@ impl Repository {
             "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(2, ?1)",
             params![now_string()],
         )?;
+        let version_three_applied = self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version = ?1)",
+            params![3],
+            |row| row.get::<_, bool>(0),
+        )?;
+        if version_three_applied {
+            return Ok(());
+        }
+
+        let transaction = self.conn.unchecked_transaction()?;
+        transaction.execute_batch(
+            "
+            CREATE TABLE IF NOT EXISTS watch_rules (
+              id TEXT PRIMARY KEY,
+              server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+              kind TEXT NOT NULL CHECK(kind = 'gpu_available'),
+              gpu_uuid TEXT,
+              gpu_index INTEGER NOT NULL CHECK(gpu_index >= 0),
+              enabled INTEGER NOT NULL CHECK(enabled IN (0, 1)),
+              utilization_threshold_percent REAL NOT NULL CHECK(utilization_threshold_percent >= 0 AND utilization_threshold_percent <= 100),
+              memory_threshold_mib INTEGER NOT NULL CHECK(memory_threshold_mib >= 0),
+              sustain_seconds INTEGER NOT NULL CHECK(sustain_seconds >= 0),
+              cooldown_seconds INTEGER NOT NULL CHECK(cooldown_seconds >= 0),
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_watch_rules_server ON watch_rules(server_id);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_watch_rules_uuid_identity
+              ON watch_rules(server_id, kind, gpu_uuid) WHERE gpu_uuid IS NOT NULL;
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_watch_rules_index_identity
+              ON watch_rules(server_id, kind, gpu_index) WHERE gpu_uuid IS NULL;
+            CREATE TABLE IF NOT EXISTS watch_runtime_state (
+              rule_id TEXT PRIMARY KEY REFERENCES watch_rules(id) ON DELETE CASCADE,
+              condition_started_at TEXT,
+              last_triggered_at TEXT,
+              armed INTEGER NOT NULL CHECK(armed IN (0, 1)),
+              updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS notification_outbox (
+              id TEXT PRIMARY KEY,
+              rule_id TEXT NOT NULL REFERENCES watch_rules(id) ON DELETE CASCADE,
+              server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+              event_type TEXT NOT NULL,
+              title TEXT NOT NULL,
+              body TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              consumed_at TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_notification_outbox_pending
+              ON notification_outbox(consumed_at, created_at);
+            ",
+        )?;
+        transaction.execute(
+            "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(3, ?1)",
+            params![now_string()],
+        )?;
+        transaction.commit()?;
         Ok(())
     }
 }

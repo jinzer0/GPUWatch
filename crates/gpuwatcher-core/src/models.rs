@@ -72,6 +72,48 @@ pub struct LatestSnapshot {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
+pub struct GpuAvailableWatchInput {
+    pub id: Option<String>,
+    pub server_id: String,
+    pub gpu_uuid: Option<String>,
+    pub gpu_index: i64,
+    pub enabled: bool,
+    pub utilization_threshold_percent: Option<f64>,
+    pub memory_threshold_mib: Option<i64>,
+    pub sustain_seconds: Option<i64>,
+    pub cooldown_seconds: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuAvailableWatchRule {
+    pub id: String,
+    pub server_id: String,
+    pub gpu_uuid: Option<String>,
+    pub gpu_index: i64,
+    pub enabled: bool,
+    pub utilization_threshold_percent: f64,
+    pub memory_threshold_mib: i64,
+    pub sustain_seconds: i64,
+    pub cooldown_seconds: i64,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct NotificationOutboxEvent {
+    pub id: String,
+    pub rule_id: String,
+    pub server_id: String,
+    pub event_type: String,
+    pub title: String,
+    pub body: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct CollectorServerInfo {
     pub hostname: Option<String>,
     pub driver_version: Option<String>,

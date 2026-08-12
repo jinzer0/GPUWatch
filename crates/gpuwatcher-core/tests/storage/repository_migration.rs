@@ -80,7 +80,7 @@ fn repository_legacy_collector_command_migration_drops_column_and_preserves_sett
             |row| row.get::<_, String>(0),
         )
         .expect("migrations");
-    assert_eq!(migrations, "1,2");
+    assert_eq!(migrations, "1,2,3");
     let servers = repository.list_servers().expect("servers");
     assert_eq!(servers.len(), 1);
     let server = &servers[0];
@@ -114,7 +114,7 @@ fn repository_migration_creates_gpu_history_schema_indexes_and_version_markers_i
             |row| row.get::<_, String>(0),
         )
         .expect("migrations");
-    assert_eq!(migrations, "1,2");
+    assert_eq!(migrations, "1,2,3");
     assert_eq!(
         table_columns(&conn, "gpu_history_samples"),
         vec![
@@ -143,4 +143,51 @@ fn repository_migration_creates_gpu_history_schema_indexes_and_version_markers_i
     assert!(indexes.contains(&"idx_gpu_history_server_received".to_string()));
     assert!(indexes.contains(&"idx_gpu_history_server_gpu_index_received".to_string()));
     assert!(indexes.contains(&"idx_gpu_history_server_gpu_uuid_received".to_string()));
+    assert!(table_indexes(&conn, "watch_rules").contains(&"idx_watch_rules_server".to_string()));
+    assert!(table_indexes(&conn, "notification_outbox")
+        .contains(&"idx_notification_outbox_pending".to_string()));
+    assert!(
+        table_indexes(&conn, "watch_rules").contains(&"idx_watch_rules_uuid_identity".to_string())
+    );
+    assert!(
+        table_indexes(&conn, "watch_rules").contains(&"idx_watch_rules_index_identity".to_string())
+    );
+    assert_eq!(
+        table_columns(&conn, "watch_runtime_state"),
+        vec![
+            "rule_id",
+            "condition_started_at",
+            "last_triggered_at",
+            "armed",
+            "updated_at"
+        ]
+    );
+    let watch_sql: String = conn
+        .query_row(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'watch_rules'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("watch schema");
+    assert!(watch_sql.contains("CHECK(kind = 'gpu_available')"));
+    assert!(watch_sql.contains("CHECK(enabled IN (0, 1))"));
+    assert!(watch_sql.contains("CHECK(gpu_index >= 0)"));
+    conn.execute(
+        "INSERT INTO servers(id, name, host, port, username, polling_interval_seconds, enabled, config_revision, created_at, updated_at) VALUES('watch-server', 'Watch', 'watch.test', 22, 'watch', 30, 1, 1, 'now', 'now')",
+        [],
+    )
+    .expect("server");
+    assert!(conn.execute(
+        "INSERT INTO watch_rules(id, server_id, kind, gpu_uuid, gpu_index, enabled, utilization_threshold_percent, memory_threshold_mib, sustain_seconds, cooldown_seconds, created_at, updated_at) VALUES('invalid', 'watch-server', 'other', NULL, -1, 2, 101, -1, -1, -1, 'now', 'now')",
+        [],
+    ).is_err());
+    conn.execute(
+        "INSERT INTO watch_rules(id, server_id, kind, gpu_uuid, gpu_index, enabled, utilization_threshold_percent, memory_threshold_mib, sustain_seconds, cooldown_seconds, created_at, updated_at) VALUES('uuid-rule', 'watch-server', 'gpu_available', 'GPU-1', 0, 1, 5, 1024, 300, 900, 'now', 'now')",
+        [],
+    )
+    .expect("uuid rule");
+    assert!(conn.execute(
+        "INSERT INTO watch_rules(id, server_id, kind, gpu_uuid, gpu_index, enabled, utilization_threshold_percent, memory_threshold_mib, sustain_seconds, cooldown_seconds, created_at, updated_at) VALUES('duplicate-uuid', 'watch-server', 'gpu_available', 'GPU-1', 1, 1, 5, 1024, 300, 900, 'now', 'now')",
+        [],
+    ).is_err());
 }
