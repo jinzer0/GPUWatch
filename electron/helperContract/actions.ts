@@ -170,6 +170,54 @@ export const helperContract = [
     notes: 'Electron main performs due polling with list_servers, get_server_detail, and refresh_server without adding a renderer-callable polling method.'
   },
   {
+    frontendApi: 'listWatchRules',
+    helperAction: 'list_watch_rules',
+    visibility: 'renderer',
+    electronPreloadMethod: 'listWatchRules',
+    timeoutClass: 'local-10s',
+    dbMutation: 'none',
+    pollingOverlapKey: 'none',
+    helperEnvelope: 'request:{action:string,payload:object};response:{ok:true,data}|{ok:false,error:{layer,type,message}}',
+    fallbackBehavior: 'Return an empty array when the server has no configured GPU availability watches.',
+    notes: 'Reads GPU availability watch rules for one server.'
+  },
+  {
+    frontendApi: 'saveGpuAvailableWatch',
+    helperAction: 'save_gpu_available_watch',
+    visibility: 'renderer',
+    electronPreloadMethod: 'saveGpuAvailableWatch',
+    timeoutClass: 'local-10s',
+    dbMutation: 'watch-rules-write',
+    pollingOverlapKey: 'server-id',
+    helperEnvelope: 'request:{action:string,payload:object};response:{ok:true,data}|{ok:false,error:{layer,type,message}}',
+    fallbackBehavior: 'Serialize the watch rule write and reset runtime state when its configuration changes.',
+    notes: 'Creates or updates one GPU availability watch rule.'
+  },
+  {
+    frontendApi: 'deleteWatchRule',
+    helperAction: 'delete_watch_rule',
+    visibility: 'renderer',
+    electronPreloadMethod: 'deleteWatchRule',
+    timeoutClass: 'local-10s',
+    dbMutation: 'watch-rules-delete',
+    pollingOverlapKey: 'none',
+    helperEnvelope: 'request:{action:string,payload:object};response:{ok:true,data}|{ok:false,error:{layer,type,message}}',
+    fallbackBehavior: 'Serialize the watch rule deletion and return null data.',
+    notes: 'Deletes a watch rule and its runtime state.'
+  },
+  {
+    frontendApi: null,
+    helperAction: 'consume_notification_events',
+    visibility: 'main-only',
+    electronPreloadMethod: null,
+    timeoutClass: 'local-10s',
+    dbMutation: 'notification-outbox-consume',
+    pollingOverlapKey: 'none',
+    helperEnvelope: 'request:{action:string,payload:object};response:{ok:true,data}|{ok:false,error:{layer,type,message}}',
+    fallbackBehavior: 'Electron main consumes pending notification events exactly once; renderer bridge and IPC do not expose it.',
+    notes: 'Consumes pending native notification events from the local outbox.'
+  },
+  {
     frontendApi: null,
     helperAction: 'health',
     visibility: 'renderer',

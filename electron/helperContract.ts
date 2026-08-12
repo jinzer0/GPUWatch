@@ -13,6 +13,10 @@ export type HelperAction =
   | 'test_connection'
   | 'refresh_server'
   | 'poll_due_servers'
+  | 'list_watch_rules'
+  | 'save_gpu_available_watch'
+  | 'delete_watch_rule'
+  | 'consume_notification_events'
   | 'health';
 
 export type ActionVisibility = 'renderer' | 'main-only';
@@ -25,7 +29,10 @@ export type DbMutation =
   | 'servers-delete'
   | 'server-enabled-write'
   | 'demo-seed-write'
-  | 'poll-health-start-and-result-write';
+  | 'poll-health-start-and-result-write'
+  | 'watch-rules-write'
+  | 'watch-rules-delete'
+  | 'notification-outbox-consume';
 
 export type PollingOverlapKey = 'none' | 'server-id' | 'electron-main-scheduler';
 

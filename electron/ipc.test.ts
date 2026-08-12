@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { Script, createContext } from 'node:vm';
+import { transpileModule, ModuleKind, ScriptTarget } from 'typescript';
 import * as frontendApi from '../src/lib/api';
 
 vi.mock('electron', () => ({
@@ -38,6 +40,9 @@ const expectedMethods = [
   'listProcesses',
   'testConnection',
   'refreshServer',
+  'listWatchRules',
+  'saveGpuAvailableWatch',
+  'deleteWatchRule',
   'helperHealth'
 ];
 
@@ -83,6 +88,23 @@ function extractRustContractEntries(source: string) {
   });
 }
 
+function packagedPreloadMethods(): string[] {
+  const source = readFileSync(resolve(process.cwd(), 'electron/preload-runtime.cts'), 'utf8');
+  const compiled = transpileModule(source, {
+    compilerOptions: { module: ModuleKind.CommonJS, target: ScriptTarget.ES2022 }
+  }).outputText;
+  const exposures = new Map<string, unknown>();
+  const electron = {
+    contextBridge: { exposeInMainWorld: (name: string, value: unknown) => exposures.set(name, value) },
+    ipcRenderer: { invoke: vi.fn() }
+  };
+  const context = createContext({ exports: {}, module: { exports: {} }, require: (name: string) => (name === 'electron' ? electron : undefined), process });
+
+  new Script(compiled).runInContext(context);
+
+  return Object.keys(exposures.get('gpuwatcher') ?? {});
+}
+
 describe('Electron IPC bridge contract', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -109,6 +131,19 @@ describe('Electron IPC bridge contract', () => {
     expect(invoke).toHaveBeenCalledWith('gpuwatcher:helper:refreshServer', { id: 'server-1' });
   });
 
+  it('keeps the packaged preload bridge aligned with the renderer contract', () => {
+    const methods = packagedPreloadMethods();
+
+    expect(methods).toEqual(rendererHelperContract.map((entry) => entry.electronPreloadMethod));
+    expect(methods).toContain('listWatchRules');
+    expect(methods).toContain('saveGpuAvailableWatch');
+    expect(methods).toContain('deleteWatchRule');
+    expect(methods).not.toContain('consumeNotificationEvents');
+    expect(methods).not.toContain('pollDueServers');
+    expect(methods).not.toContain('invoke');
+    expect(methods).not.toContain('runAction');
+  });
+
   it('exposes neutral Electron metadata without migration status or deferred task labels', () => {
     const metadataExposure = exposedGlobalsAtImport.find(([name]) => name === 'gpuWatcherElectron');
     const metadata = metadataExposure?.[1];
@@ -125,14 +160,17 @@ describe('Electron IPC bridge contract', () => {
     expect(`${preloadSource}\n${runtimePreloadSource}`).not.toContain(forbiddenDeferredLabel);
   });
 
-  it('keeps poll_due_servers main-only and out of renderer IPC/preload', () => {
-    expect(mainOnlyHelperContract.map((entry) => entry.helperAction)).toEqual(['poll_due_servers']);
-    expect(mainOnlyHelperContract[0].electronPreloadMethod).toBeNull();
+  it('keeps main-only actions out of renderer IPC/preload', () => {
+    expect(mainOnlyHelperContract.map((entry) => entry.helperAction)).toEqual(['poll_due_servers', 'consume_notification_events']);
+    expect(mainOnlyHelperContract.every((entry) => entry.electronPreloadMethod === null)).toBe(true);
     expect(helperIpcChannels.map((entry) => entry.action)).not.toContain('poll_due_servers');
     expect(helperIpcChannels.map((entry) => entry.channel)).not.toContain('gpuwatcher:helper:pollDueServers');
+    expect(helperIpcChannels.map((entry) => entry.action)).not.toContain('consume_notification_events');
+    expect(helperIpcChannels.map((entry) => entry.channel)).not.toContain('gpuwatcher:helper:consumeNotificationEvents');
 
     const bridge = createGpuwatcherBridge(vi.fn());
     expect(Object.keys(bridge)).not.toContain('pollDueServers');
+    expect(Object.keys(bridge)).not.toContain('consumeNotificationEvents');
   });
 
   it('keeps TypeScript and Rust contract metadata aligned for actions and visibility', () => {
@@ -156,7 +194,7 @@ describe('Electron IPC bridge contract', () => {
       .map(([name]) => name)
       .sort();
 
-    expect(helperContract).toHaveLength(15);
+    expect(helperContract).toHaveLength(19);
     expect(helperContract.map((entry) => entry.helperAction)).toEqual([
       'initialize_app',
       'list_overview',
@@ -172,6 +210,10 @@ describe('Electron IPC bridge contract', () => {
       'test_connection',
       'refresh_server',
       'poll_due_servers',
+      'list_watch_rules',
+      'save_gpu_available_watch',
+      'delete_watch_rule',
+      'consume_notification_events',
       'health'
     ]);
     expect(rustEntries).toEqual(
@@ -192,7 +234,10 @@ describe('Electron IPC bridge contract', () => {
     );
     expect(expectedMethods).toEqual(rendererHelperContract.map((entry) => entry.electronPreloadMethod));
     expect(helperIpcChannels.map((entry) => entry.action)).toEqual(rendererHelperContract.map((entry) => entry.helperAction));
-    expect(mainOnlyHelperContract).toEqual([expect.objectContaining({ helperAction: 'poll_due_servers', visibility: 'main-only' })]);
+    expect(mainOnlyHelperContract).toEqual([
+      expect.objectContaining({ helperAction: 'poll_due_servers', visibility: 'main-only' }),
+      expect.objectContaining({ helperAction: 'consume_notification_events', visibility: 'main-only' })
+    ]);
   });
 
   it('rejects malformed payloads with structured helper contract errors', () => {
@@ -221,6 +266,76 @@ describe('Electron IPC bridge contract', () => {
         type: 'invalid_payload',
         message: 'Payload for list_ssh_config_hosts must be empty.'
       }
+    });
+
+    expect(validateHelperPayload('list_watch_rules', { serverId: '  ' })).toMatchObject({
+      ok: false,
+      error: { type: 'invalid_payload' }
+    });
+    expect(
+      validateHelperPayload('save_gpu_available_watch', {
+        input: {
+          id: '  ',
+          serverId: 'server-1',
+          gpuUuid: null,
+          gpuIndex: 0,
+          enabled: true,
+          utilizationThresholdPercent: null,
+          memoryThresholdMiB: null,
+          sustainSeconds: null,
+          cooldownSeconds: null
+        }
+      })
+    ).toMatchObject({ ok: false, error: { type: 'invalid_payload' } });
+    expect(validateHelperPayload('delete_watch_rule', { id: '' })).toMatchObject({ ok: false, error: { type: 'invalid_payload' } });
+    expect(validateHelperPayload('consume_notification_events', { unexpected: true })).toMatchObject({
+      ok: false,
+      error: { type: 'invalid_payload' }
+    });
+
+    for (const input of [
+      { id: null, serverId: 'server-1', gpuUuid: '  ', gpuIndex: 0, enabled: true },
+      { id: null, serverId: 'server-1', gpuUuid: null, gpuIndex: -1, enabled: true },
+      { id: null, serverId: 'server-1', gpuUuid: null, gpuIndex: 0.5, enabled: true },
+      { id: null, serverId: 'server-1', gpuUuid: null, gpuIndex: Number.NaN, enabled: true },
+      { id: null, serverId: 'server-1', gpuUuid: null, gpuIndex: 0, enabled: true, utilizationThresholdPercent: 101 },
+      { id: null, serverId: 'server-1', gpuUuid: null, gpuIndex: 0, enabled: true, utilizationThresholdPercent: Number.POSITIVE_INFINITY },
+      { id: null, serverId: 'server-1', gpuUuid: null, gpuIndex: 0, enabled: true, memoryThresholdMiB: -1 },
+      { id: null, serverId: 'server-1', gpuUuid: null, gpuIndex: 0, enabled: true, sustainSeconds: 1.5 },
+      { id: null, serverId: 'server-1', gpuUuid: null, gpuIndex: 0, enabled: 'true' }
+    ]) {
+      expect(validateHelperPayload('save_gpu_available_watch', { input })).toMatchObject({ ok: false, error: { type: 'invalid_payload' } });
+    }
+  });
+
+  it('accepts typed watch action payloads', () => {
+    const input = {
+      id: null,
+      serverId: 'server-1',
+      gpuUuid: null,
+      gpuIndex: 0,
+      enabled: true,
+      utilizationThresholdPercent: null,
+      memoryThresholdMiB: 1024,
+      sustainSeconds: null,
+      cooldownSeconds: 900
+    };
+
+    expect(validateHelperPayload('list_watch_rules', { serverId: 'server-1' })).toEqual({ ok: true, data: { serverId: 'server-1' } });
+    expect(validateHelperPayload('save_gpu_available_watch', { input })).toEqual({ ok: true, data: { input } });
+    expect(validateHelperPayload('delete_watch_rule', { id: 'rule-1' })).toEqual({ ok: true, data: { id: 'rule-1' } });
+    expect(validateHelperPayload('consume_notification_events', {})).toEqual({ ok: true, data: {} });
+    expect(
+      validateHelperPayload('save_gpu_available_watch', {
+        input: {
+          serverId: 'server-1',
+          gpuIndex: 0,
+          enabled: true
+        }
+      })
+    ).toEqual({
+      ok: true,
+      data: { input: { serverId: 'server-1', gpuIndex: 0, enabled: true } }
     });
   });
 
