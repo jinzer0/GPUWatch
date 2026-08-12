@@ -12,6 +12,7 @@ mod polling;
 mod schema;
 mod servers;
 mod snapshots;
+mod watches;
 
 const SQLITE_BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 
