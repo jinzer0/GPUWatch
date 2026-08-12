@@ -23,6 +23,10 @@ pub fn action_name(action: HelperAction) -> &'static str {
         HelperAction::TestConnection => "test_connection",
         HelperAction::RefreshServer => "refresh_server",
         HelperAction::PollDueServers => "poll_due_servers",
+        HelperAction::ListWatchRules => "list_watch_rules",
+        HelperAction::SaveGpuAvailableWatch => "save_gpu_available_watch",
+        HelperAction::DeleteWatchRule => "delete_watch_rule",
+        HelperAction::ConsumeNotificationEvents => "consume_notification_events",
         HelperAction::Health => "health",
     }
 }
