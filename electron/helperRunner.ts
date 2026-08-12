@@ -164,6 +164,7 @@ export function createHelperRunner(options: HelperRunnerOptions = {}): HelperRun
         const child = spawn(helperPath, [], {
           cwd: options.cwd ?? process.cwd(),
           detached: process.platform !== 'win32',
+          env: { ...process.env, ...options.env },
           shell: false,
           stdio: ['pipe', 'pipe', 'pipe']
         });

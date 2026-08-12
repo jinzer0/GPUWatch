@@ -78,6 +78,20 @@ process.stdin.on('end', () => {
     expect(response).toEqual({ ok: true, data: { action: 'health', payload: {} } });
   });
 
+  it('passes configured environment variables to the helper process', async () => {
+    const helperPath = await createExecutableScript(`
+process.stdin.resume();
+process.stdout.write(JSON.stringify({ ok: true, data: { testDataDir: process.env.GPUWATCHER_TEST_DATA_DIR } }));
+`);
+    const runner = createHelperRunner({
+      env: { [HELPER_PATH_ENV]: helperPath, GPUWATCHER_TEST_DATA_DIR: '/tmp/isolated-gpuwatcher-data' }
+    });
+
+    const response = await runner.run({ action: 'health', payload: {} });
+
+    expect(response).toEqual({ ok: true, data: { testDataDir: '/tmp/isolated-gpuwatcher-data' } });
+  });
+
   it('returns structured helper error envelopes from stdout without mixing stderr diagnostics', async () => {
     const helperPath = await createExecutableScript(`
 process.stdin.resume();
