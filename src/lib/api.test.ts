@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import * as api from './api';
 import {
+  deleteWatchRule,
   deleteServer,
   getServerDetail,
   initializeApp,
@@ -10,16 +11,45 @@ import {
   listProcesses,
   listServers,
   listSshConfigHosts,
+  listWatchRules,
   refreshServer,
   saveServer,
+  saveGpuAvailableWatch,
   seedDemoData,
   setServerEnabled,
   testConnection
 } from './api';
+import type { GpuAvailableWatchInput, WatchRule } from './types';
 import { clearGpuWatcherBridge, okBridgeResponse, setGpuWatcherBridge } from '../test-utils/bridge';
 import { apiServerDetail as serverDetail, apiGpuHistory as gpuHistory } from '../test-utils/detail-fixtures';
 import { apiProcessRow as processRow } from '../test-utils/process-fixtures';
 import { connectionResult, overviewRow, savedServer, serverInput, sshConfigImportResult } from '../test-utils/server-fixtures';
+
+const watchInput: GpuAvailableWatchInput = {
+  id: null,
+  serverId: 'server-2',
+  gpuUuid: 'GPU-1',
+  gpuIndex: 0,
+  enabled: true,
+  utilizationThresholdPercent: null,
+  memoryThresholdMiB: null,
+  sustainSeconds: null,
+  cooldownSeconds: null
+};
+
+const watchRule: WatchRule = {
+  id: 'watch-1',
+  serverId: 'server-2',
+  gpuUuid: 'GPU-1',
+  gpuIndex: 0,
+  enabled: true,
+  utilizationThresholdPercent: 5,
+  memoryThresholdMiB: 1024,
+  sustainSeconds: 300,
+  cooldownSeconds: 900,
+  createdAt: '2026-06-07T00:00:00Z',
+  updatedAt: '2026-06-07T00:00:00Z'
+};
 
 describe('frontend backend transport adapter', () => {
   beforeEach(() => {
@@ -40,7 +70,10 @@ describe('frontend backend transport adapter', () => {
       listGpuHistory: vi.fn().mockResolvedValue(okBridgeResponse(gpuHistory)),
       listProcesses: vi.fn().mockResolvedValue(okBridgeResponse([processRow])),
       testConnection: vi.fn().mockResolvedValue(okBridgeResponse(connectionResult)),
-      refreshServer: vi.fn().mockResolvedValue(okBridgeResponse(connectionResult))
+      refreshServer: vi.fn().mockResolvedValue(okBridgeResponse(connectionResult)),
+      listWatchRules: vi.fn().mockResolvedValue(okBridgeResponse([watchRule])),
+      saveGpuAvailableWatch: vi.fn().mockResolvedValue(okBridgeResponse(watchRule)),
+      deleteWatchRule: vi.fn().mockResolvedValue(okBridgeResponse(undefined))
     } satisfies NonNullable<Window['gpuwatcher']>;
     setGpuWatcherBridge(bridge);
 
@@ -57,6 +90,9 @@ describe('frontend backend transport adapter', () => {
     await expect(listProcesses()).resolves.toEqual([processRow]);
     await expect(testConnection('server-2')).resolves.toEqual(connectionResult);
     await expect(refreshServer('server-2')).resolves.toEqual(connectionResult);
+    await expect(listWatchRules('server-2')).resolves.toEqual([watchRule]);
+    await expect(saveGpuAvailableWatch(watchInput)).resolves.toEqual(watchRule);
+    await expect(deleteWatchRule('watch-1')).resolves.toBeUndefined();
 
     expect(bridge.initializeApp).toHaveBeenCalledWith({});
     expect(bridge.listOverview).toHaveBeenCalledWith({});
@@ -71,6 +107,9 @@ describe('frontend backend transport adapter', () => {
     expect(bridge.listProcesses).toHaveBeenCalledWith({});
     expect(bridge.testConnection).toHaveBeenCalledWith({ id: 'server-2' });
     expect(bridge.refreshServer).toHaveBeenCalledWith({ id: 'server-2' });
+    expect(bridge.listWatchRules).toHaveBeenCalledWith({ serverId: 'server-2' });
+    expect(bridge.saveGpuAvailableWatch).toHaveBeenCalledWith({ input: watchInput });
+    expect(bridge.deleteWatchRule).toHaveBeenCalledWith({ id: 'watch-1' });
   });
 
   it('maps Electron error envelopes to normal typed errors', async () => {
@@ -103,6 +142,7 @@ describe('frontend backend transport adapter', () => {
       series: []
     });
     await expect(listProcesses()).resolves.toEqual([]);
+    await expect(listWatchRules('server-1')).resolves.toEqual([]);
 
     const listOverviewBridge = vi.fn().mockResolvedValue(okBridgeResponse([overviewRow]));
     setGpuWatcherBridge({ listOverview: listOverviewBridge });
@@ -124,6 +164,8 @@ describe('frontend backend transport adapter', () => {
     await expect(saveServer(serverInput)).rejects.toThrow('GPUWatcher backend is unavailable');
     await expect(deleteServer('server-1')).rejects.toThrow('GPUWatcher backend is unavailable');
     await expect(setServerEnabled('server-1', true)).rejects.toThrow('GPUWatcher backend is unavailable');
+    await expect(saveGpuAvailableWatch(watchInput)).rejects.toThrow('GPUWatcher backend is unavailable');
+    await expect(deleteWatchRule('watch-1')).rejects.toThrow('GPUWatcher backend is unavailable');
   });
 
   it('keeps SSH import pathless and bulk save orchestration on action-specific saveServer calls', async () => {

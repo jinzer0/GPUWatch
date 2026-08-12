@@ -1,5 +1,6 @@
 import type {
   ConnectionTestResultDto,
+  GpuAvailableWatchInput,
   GpuHistoryRange,
   GpuHistoryResponseDto,
   ProcessRowDto,
@@ -7,7 +8,8 @@ import type {
   ServerDetailDto,
   ServerInput,
   ServerOverviewDto,
-  SshConfigImportResult
+  SshConfigImportResult,
+  WatchRule
 } from './types';
 
 type HelperErrorEnvelope = {
@@ -62,6 +64,14 @@ interface CommandMap {
     electronMethod: 'refreshServer';
     fallback: 'connection-unavailable';
   };
+  list_watch_rules: { args: { serverId: string }; result: WatchRule[]; electronMethod: 'listWatchRules'; fallback: 'empty-array' };
+  save_gpu_available_watch: {
+    args: { input: GpuAvailableWatchInput };
+    result: WatchRule;
+    electronMethod: 'saveGpuAvailableWatch';
+    fallback: 'backend-required';
+  };
+  delete_watch_rule: { args: { id: string }; result: void; electronMethod: 'deleteWatchRule'; fallback: 'backend-required' };
 }
 
 const commandMeta: {
@@ -79,7 +89,10 @@ const commandMeta: {
   list_gpu_history: { electronMethod: 'listGpuHistory', fallback: 'empty-history' },
   list_processes: { electronMethod: 'listProcesses', fallback: 'empty-array' },
   test_connection: { electronMethod: 'testConnection', fallback: 'connection-unavailable' },
-  refresh_server: { electronMethod: 'refreshServer', fallback: 'connection-unavailable' }
+  refresh_server: { electronMethod: 'refreshServer', fallback: 'connection-unavailable' },
+  list_watch_rules: { electronMethod: 'listWatchRules', fallback: 'empty-array' },
+  save_gpu_available_watch: { electronMethod: 'saveGpuAvailableWatch', fallback: 'backend-required' },
+  delete_watch_rule: { electronMethod: 'deleteWatchRule', fallback: 'backend-required' }
 };
 
 const backendUnavailableMessage =
@@ -242,6 +255,18 @@ export function refreshServer(id: string): Promise<ConnectionTestResultDto> {
   return callCommand('refresh_server', { id });
 }
 
+export function listWatchRules(serverId: string): Promise<WatchRule[]> {
+  return callCommand('list_watch_rules', { serverId });
+}
+
+export function saveGpuAvailableWatch(input: GpuAvailableWatchInput): Promise<WatchRule> {
+  return callCommand('save_gpu_available_watch', { input });
+}
+
+export function deleteWatchRule(id: string): Promise<void> {
+  return callCommand('delete_watch_rule', { id });
+}
+
 export const queryKeys = {
   initialize: ['initialize'] as const,
   overview: ['overview'] as const,
@@ -253,5 +278,6 @@ export const queryKeys = {
     gpuUuid: string | null | undefined,
     range: GpuHistoryRange
   ) => ['gpu-history', serverId ?? null, gpuIndex ?? null, gpuUuid ?? null, range] as const,
-  processes: ['processes'] as const
+  processes: ['processes'] as const,
+  watchRules: (serverId: string) => ['watch-rules', serverId] as const
 };

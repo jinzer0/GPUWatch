@@ -2,6 +2,34 @@ export type ServerStatus = 'disabled' | 'idle' | 'polling' | 'online' | 'stale' 
 
 export type TabId = 'overview' | 'detail' | 'history' | 'processes' | 'settings';
 
+export type WatchKind = 'gpu_available';
+
+export interface GpuAvailableWatchInput {
+  id: string | null;
+  serverId: string;
+  gpuUuid: string | null;
+  gpuIndex: number;
+  enabled: boolean;
+  utilizationThresholdPercent: number | null;
+  memoryThresholdMiB: number | null;
+  sustainSeconds: number | null;
+  cooldownSeconds: number | null;
+}
+
+export interface WatchRule {
+  id: string;
+  serverId: string;
+  gpuUuid: string | null;
+  gpuIndex: number;
+  enabled: boolean;
+  utilizationThresholdPercent: number;
+  memoryThresholdMiB: number;
+  sustainSeconds: number;
+  cooldownSeconds: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Server {
   id: string;
   name: string;
