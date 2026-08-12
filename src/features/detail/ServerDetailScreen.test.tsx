@@ -3,22 +3,25 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ServerDetailScreen } from './ServerDetailScreen';
-import { getServerDetail, listGpuHistory, refreshServer } from '../../lib/api';
+import { getServerDetail, listGpuHistory, listWatchRules, refreshServer, saveGpuAvailableWatch } from '../../lib/api';
 import { getLiveGpuSampleKey } from '../../lib/liveHistory';
 import { useUiStore } from '../../lib/store';
-import type { GpuHistoryResponseDto, ServerDetailDto } from '../../lib/types';
+import type { GpuHistoryResponseDto, ServerDetailDto, WatchRule } from '../../lib/types';
 import { detailFixture, historyResponse, historySample, sessionSample } from '../../test-utils/detail-fixtures';
 import { makeTestQueryClient, renderWithQueryClient } from '../../test-utils/query';
 
 const apiMocks = vi.hoisted(() => ({
   getServerDetail: vi.fn(),
   listGpuHistory: vi.fn(),
+  listWatchRules: vi.fn(),
+  saveGpuAvailableWatch: vi.fn(),
   refreshServer: vi.fn()
 }));
 
 vi.mock('../../lib/api', () => ({
   getServerDetail: apiMocks.getServerDetail,
   listGpuHistory: apiMocks.listGpuHistory,
+  listWatchRules: apiMocks.listWatchRules,
   queryKeys: {
     detail: (id: string) => ['server-detail', id],
     gpuHistory: (serverId: string | null | undefined, gpuIndex: number | null | undefined, gpuUuid: string | null | undefined, range: string) => [
@@ -29,9 +32,11 @@ vi.mock('../../lib/api', () => ({
       range
     ],
     overview: ['overview'],
-    processes: ['processes']
+    processes: ['processes'],
+    watchRules: (serverId: string) => ['watch-rules', serverId]
   },
-  refreshServer: apiMocks.refreshServer
+  refreshServer: apiMocks.refreshServer,
+  saveGpuAvailableWatch: apiMocks.saveGpuAvailableWatch
 }));
 
 type QueryWithRefetchInterval = {
@@ -46,10 +51,26 @@ const renderDetail = (detail: ServerDetailDto = detailFixture, historyResult: Gp
   return renderWithQueryClient(<ServerDetailScreen selectedServerId={detail.server.id} />);
 };
 
+const watchRule = (overrides: Partial<WatchRule> = {}): WatchRule => ({
+  id: 'watch-1',
+  serverId: detailFixture.server.id,
+  gpuUuid: detailFixture.gpus[0].uuid,
+  gpuIndex: detailFixture.gpus[0].index,
+  enabled: true,
+  utilizationThresholdPercent: 5,
+  memoryThresholdMiB: 1024,
+  sustainSeconds: 300,
+  cooldownSeconds: 900,
+  createdAt: '2026-06-07T00:00:00Z',
+  updatedAt: '2026-06-07T00:00:00Z',
+  ...overrides
+});
+
 describe('ServerDetailScreen', () => {
   beforeEach(() => {
     vi.useRealTimers();
     vi.clearAllMocks();
+    apiMocks.listWatchRules.mockResolvedValue([]);
     useUiStore.setState(useUiStore.getInitialState(), true);
   });
 
@@ -555,5 +576,172 @@ describe('ServerDetailScreen', () => {
     expect(screen.queryByText(/hunter2/)).toBeNull();
     expect(screen.queryByText(/^success$/i)).toBeNull();
     expect(screen.getByText('Detail')).toBeDefined();
+  });
+
+  it('matches non-null watch UUIDs exactly and uses GPU index only for null UUID rules', async () => {
+    vi.mocked(listWatchRules).mockResolvedValue([
+      watchRule({ id: 'wrong-uuid', gpuUuid: 'GPU-other', gpuIndex: 0 }),
+      watchRule({ id: 'index-fallback', gpuUuid: null, gpuIndex: 1 }),
+      watchRule({ id: 'uuid-wins', gpuUuid: 'GPU-populated', gpuIndex: 99 })
+    ]);
+    renderDetail();
+
+    const nullableGpu = within((await screen.findByText('NVIDIA Test GPU')).closest('article') ?? document.body);
+    const populatedGpu = within(screen.getByText('NVIDIA Clocked GPU').closest('article') ?? document.body);
+
+    expect(nullableGpu.getByRole('button', { name: 'Notify when available' })).toBeDefined();
+    expect(populatedGpu.getByText('Watching')).toBeDefined();
+    expect(populatedGpu.getByRole('button', { name: 'Disable availability watch for GPU 1' })).toBeDefined();
+  });
+
+  it('associates the exact availability explanation with each enable and disable control', async () => {
+    vi.mocked(listWatchRules).mockResolvedValue([watchRule()]);
+    renderDetail();
+
+    const enableButton = await screen.findByRole('button', { name: 'Notify when available' });
+    const disableButton = screen.getByRole('button', { name: 'Disable availability watch for GPU 0' });
+    const enableDescriptionId = enableButton.getAttribute('aria-describedby');
+    const disableDescriptionId = disableButton.getAttribute('aria-describedby');
+
+    expect(enableDescriptionId).toBeTruthy();
+    expect(disableDescriptionId).toBeTruthy();
+    expect(enableDescriptionId).not.toBe(disableDescriptionId);
+    expect(document.getElementById(enableDescriptionId ?? '')?.textContent).toBe('GPU 사용률 ≤ 5%, VRAM ≤ 1GB가 5분 지속되면 알림');
+    expect(document.getElementById(disableDescriptionId ?? '')?.textContent).toBe('GPU 사용률 ≤ 5%, VRAM ≤ 1GB가 5분 지속되면 알림');
+  });
+
+  it('treats rejected watch-rule reads as unknown persisted state without allowing saves', async () => {
+    vi.mocked(listWatchRules).mockRejectedValue(new Error('watch read failed token=secret-token via /Users/alice/.ssh/id_ed25519'));
+    renderDetail();
+
+    const diagnostic = await screen.findByRole('region', { name: 'Watch diagnostic' });
+    expect(within(diagnostic).getByText(/watch read failed token=\[redacted\] via \[path redacted\]/)).toBeDefined();
+    expect(screen.queryByRole('button', { name: 'Notify when available' })).toBeNull();
+    const unavailableControls = screen.getAllByRole('button', { name: 'Watch status unavailable' });
+    expect(unavailableControls).toHaveLength(2);
+    expect(unavailableControls.every((control) => control.hasAttribute('disabled'))).toBe(true);
+
+    fireEvent.click(unavailableControls[0]);
+    expect(saveGpuAvailableWatch).not.toHaveBeenCalled();
+    expect(screen.queryByText(/secret-token|\/Users\/alice/)).toBeNull();
+  });
+
+  it('enables a GPU watch with backend defaults and refetches only server watch rules after success', async () => {
+    const enabledRule = watchRule();
+    vi.mocked(listWatchRules).mockResolvedValueOnce([]).mockResolvedValue([enabledRule]);
+    vi.mocked(saveGpuAvailableWatch).mockResolvedValue(enabledRule);
+    const { queryClient } = renderDetail();
+    const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries');
+
+    const firstGpu = within((await screen.findByText('NVIDIA Test GPU')).closest('article') ?? document.body);
+    fireEvent.click(firstGpu.getByRole('button', { name: 'Notify when available' }));
+
+    await waitFor(() => expect(saveGpuAvailableWatch).toHaveBeenCalledTimes(1));
+    expect(saveGpuAvailableWatch).toHaveBeenCalledWith({
+      id: null,
+      serverId: 'server-1',
+      gpuUuid: 'GPU-nullable',
+      gpuIndex: 0,
+      enabled: true,
+      utilizationThresholdPercent: null,
+      memoryThresholdMiB: null,
+      sustainSeconds: null,
+      cooldownSeconds: null
+    });
+    await waitFor(() => expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['watch-rules', 'server-1'] }));
+    expect(invalidateQueries).toHaveBeenCalledTimes(1);
+    expect(await firstGpu.findByText('Watching')).toBeDefined();
+  });
+
+  it('disables an existing watch by saving its persisted fields with enabled false', async () => {
+    const enabledRule = watchRule();
+    vi.mocked(listWatchRules).mockResolvedValueOnce([enabledRule]).mockResolvedValue([{ ...enabledRule, enabled: false }]);
+    vi.mocked(saveGpuAvailableWatch).mockResolvedValue({ ...enabledRule, enabled: false });
+    renderDetail();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Disable availability watch for GPU 0' }));
+
+    await waitFor(() => expect(saveGpuAvailableWatch).toHaveBeenCalledWith({
+      id: enabledRule.id,
+      serverId: enabledRule.serverId,
+      gpuUuid: enabledRule.gpuUuid,
+      gpuIndex: enabledRule.gpuIndex,
+      enabled: false,
+      utilizationThresholdPercent: enabledRule.utilizationThresholdPercent,
+      memoryThresholdMiB: enabledRule.memoryThresholdMiB,
+      sustainSeconds: enabledRule.sustainSeconds,
+      cooldownSeconds: enabledRule.cooldownSeconds
+    }));
+    const firstGpu = within((await screen.findByText('NVIDIA Test GPU')).closest('article') ?? document.body);
+    expect(await firstGpu.findByRole('button', { name: 'Notify when available' })).toBeDefined();
+  });
+
+  it('prevents rapid duplicate watch saves and disables only the pending GPU control', async () => {
+    let resolveSave: ((rule: WatchRule) => void) | undefined;
+    vi.mocked(saveGpuAvailableWatch).mockReturnValue(new Promise<WatchRule>((resolve) => {
+      resolveSave = resolve;
+    }));
+    renderDetail();
+    const firstGpu = within((await screen.findByText('NVIDIA Test GPU')).closest('article') ?? document.body);
+    const firstGpuButton = firstGpu.getByRole('button', { name: 'Notify when available' });
+    const gpuArticles = screen.getAllByRole('article');
+
+    fireEvent.click(firstGpuButton);
+    fireEvent.click(firstGpuButton);
+
+    await waitFor(() => expect(saveGpuAvailableWatch).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(firstGpuButton.hasAttribute('disabled')).toBe(true));
+    expect(within(gpuArticles[1] ?? document.body).getByRole('button', { name: 'Notify when available' }).hasAttribute('disabled')).toBe(false);
+    resolveSave?.(watchRule());
+  });
+
+  it('does not carry a pending GPU mutation to another server with the same GPU index', async () => {
+    let resolveSave: ((rule: WatchRule) => void) | undefined;
+    vi.mocked(saveGpuAvailableWatch).mockReturnValue(new Promise<WatchRule>((resolve) => {
+      resolveSave = resolve;
+    }));
+    vi.mocked(getServerDetail).mockImplementation(async (serverId: string) => ({
+      ...detailFixture,
+      server: { ...detailFixture.server, id: serverId, name: serverId },
+      gpus: [{ ...detailFixture.gpus[0], uuid: `GPU-${serverId}` }]
+    }));
+    vi.mocked(listGpuHistory).mockResolvedValue(historyResponse());
+    vi.mocked(listWatchRules).mockResolvedValue([]);
+    const { rerender, queryClient } = renderWithQueryClient(<ServerDetailScreen selectedServerId="server-1" />);
+    const firstServerButton = await screen.findByRole('button', { name: 'Notify when available' });
+
+    fireEvent.click(firstServerButton);
+    await waitFor(() => expect(firstServerButton.hasAttribute('disabled')).toBe(true));
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <ServerDetailScreen selectedServerId="server-2" />
+      </QueryClientProvider>
+    );
+
+    const secondServerButton = await screen.findByRole('button', { name: 'Notify when available' });
+    expect(screen.getByRole('heading', { level: 2, name: 'server-2' })).toBeDefined();
+    expect(secondServerButton.hasAttribute('disabled')).toBe(false);
+    resolveSave?.(watchRule());
+  });
+
+  it('keeps the disabled state and surfaces a sanitized watch diagnostic when save fails', async () => {
+    vi.mocked(saveGpuAvailableWatch).mockRejectedValue(new Error('watch failed token=secret-token via /Users/alice/.ssh/id_ed25519'));
+    renderDetail();
+
+    const firstGpu = within((await screen.findByText('NVIDIA Test GPU')).closest('article') ?? document.body);
+    fireEvent.click(firstGpu.getByRole('button', { name: 'Notify when available' }));
+
+    expect(await screen.findByRole('region', { name: 'Watch diagnostic' })).toBeDefined();
+    expect(screen.getByText(/watch failed token=\[redacted\] via \[path redacted\]/)).toBeDefined();
+    expect(screen.queryByText('Watching')).toBeNull();
+    expect(screen.queryByText(/secret-token|\/Users\/alice/)).toBeNull();
+  });
+
+  it('renders disabled watch controls when the persisted-rule read returns the browser empty fallback', async () => {
+    vi.mocked(listWatchRules).mockResolvedValue([]);
+    renderDetail();
+
+    expect(await screen.findAllByRole('button', { name: 'Notify when available' })).toHaveLength(2);
+    expect(screen.queryByText('Watching')).toBeNull();
   });
 });

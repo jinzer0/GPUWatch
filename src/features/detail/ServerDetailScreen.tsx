@@ -1,7 +1,8 @@
 import { Button, DiagnosticPanel, EmptyState, ErrorState, LoadingState, StatusBadge } from '../../components/ui';
 import { formatTime, formatUnknown } from '../../lib/format';
+import type { GpuCardDto, WatchRule } from '../../lib/types';
 import { DetailGpuCard } from './DetailGpuCard';
-import { useServerDetailController } from './useServerDetailController';
+import { getWatchTargetKey, useServerDetailController } from './useServerDetailController';
 
 const ServerHealthItem = ({ label, value }: { readonly label: string; readonly value: React.ReactNode }) => (
   <li className="surface min-w-0 p-4">
@@ -9,6 +10,16 @@ const ServerHealthItem = ({ label, value }: { readonly label: string; readonly v
     <div className="detail-health-value metric-value">{value}</div>
   </li>
 );
+
+const findGpuWatchRule = (rules: readonly WatchRule[], gpu: GpuCardDto) =>
+  rules.find((rule) => rule.gpuUuid === gpu.uuid) ?? rules.find((rule) => rule.gpuUuid === null && rule.gpuIndex === gpu.index) ?? null;
+
+const getErrorType = (error: Error | null) => {
+  if (error && 'type' in error && typeof error.type === 'string') {
+    return error.type;
+  }
+  return null;
+};
 
 export const ServerDetailScreen = ({ selectedServerId }: { readonly selectedServerId: string | null }) => {
   const controller = useServerDetailController(selectedServerId);
@@ -33,6 +44,7 @@ export const ServerDetailScreen = ({ selectedServerId }: { readonly selectedServ
 
   const hasHealthDiagnostic = detail.health.lastErrorType !== null || detail.health.lastErrorMessage !== null;
   const hasRefreshDiagnostic = refreshResult !== undefined && !refreshResult.ok;
+  const watchError = controller.watchRulesQuery.error ?? controller.watchMutation.error;
 
   return (
     <section className="detail-page space-y-6">
@@ -81,13 +93,36 @@ export const ServerDetailScreen = ({ selectedServerId }: { readonly selectedServ
         </div>
       ) : null}
 
+      {watchError ? (
+        <section aria-label="Watch diagnostic" role="region">
+          <DiagnosticPanel errorType={getErrorType(watchError)} message={watchError.message} title="Watch diagnostic" />
+        </section>
+      ) : null}
+
       <section aria-labelledby="detail-gpus-heading" className="detail-gpus grid gap-4">
         <h3 className="section-title" id="detail-gpus-heading">
           GPUs
         </h3>
-        {detail.gpus.map((gpu) => (
-          <DetailGpuCard detail={detail} gpu={gpu} key={gpu.uuid} liveSamples={controller.liveSamples} storedHistory={controller.storedHistory} storedHistoryReady={controller.storedHistoryReady} />
-        ))}
+        {detail.gpus.map((gpu) => {
+          const watchRule = findGpuWatchRule(controller.watchRules, gpu);
+          const watchTarget = getWatchTargetKey(detail.server.id, watchRule ? watchRule.gpuUuid : gpu.uuid, gpu.index);
+          const watchPending = controller.pendingWatchTargets.includes(watchTarget);
+
+          return (
+            <DetailGpuCard
+              detail={detail}
+              gpu={gpu}
+              key={gpu.uuid}
+              liveSamples={controller.liveSamples}
+              saveWatch={controller.saveWatch}
+              storedHistory={controller.storedHistory}
+              storedHistoryReady={controller.storedHistoryReady}
+              watchPending={watchPending}
+              watchRule={watchRule}
+              watchRulesReady={controller.watchRulesQuery.isSuccess}
+            />
+          );
+        })}
       </section>
     </section>
   );

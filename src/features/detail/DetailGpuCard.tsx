@@ -1,8 +1,10 @@
-import { MetricCard, StatusBadge } from '../../components/ui';
+import { useId } from 'react';
+
+import { Button, MetricCard, StatusBadge } from '../../components/ui';
 import { formatKiBPerSecond, formatMiB, formatPercent, formatTemperature, formatUnknown, formatWatts } from '../../lib/format';
 import { getLiveGpuSampleKey } from '../../lib/liveHistory';
 import type { LiveGpuSample } from '../../lib/liveHistory';
-import type { GpuCardDto, GpuHistoryResponseDto, ServerDetailDto } from '../../lib/types';
+import type { GpuAvailableWatchInput, GpuCardDto, GpuHistoryResponseDto, ServerDetailDto, WatchRule } from '../../lib/types';
 import { DetailGpuHistorySection } from './DetailGpuHistorySection';
 import { DetailProcessList } from './DetailProcessList';
 import {
@@ -46,20 +48,58 @@ export const DetailGpuCard = ({
   gpu,
   liveSamples,
   storedHistory,
-  storedHistoryReady
+  storedHistoryReady,
+  watchRulesReady,
+  watchPending,
+  watchRule,
+  saveWatch
 }: {
   readonly detail: ServerDetailDto;
   readonly gpu: GpuCardDto;
   readonly liveSamples: Readonly<Record<string, readonly LiveGpuSample[]>>;
   readonly storedHistory: GpuHistoryResponseDto | null;
   readonly storedHistoryReady: boolean;
+  readonly watchRulesReady: boolean;
+  readonly watchPending: boolean;
+  readonly watchRule: WatchRule | null;
+  readonly saveWatch: (input: GpuAvailableWatchInput) => void;
 }) => {
+  const watchDescriptionId = useId();
   const chartData = resolveGpuHistoryChartData({
     gpu,
     history: storedHistory,
     isStoredHistoryReady: storedHistoryReady,
     sessionSamples: liveSamples[getLiveGpuSampleKey(detail.server.id, gpu.index)] ?? []
   });
+  const watchTitle = 'GPU 사용률 ≤ 5%, VRAM ≤ 1GB가 5분 지속되면 알림';
+  const toggleWatch = () => {
+    if (watchRule?.enabled) {
+      saveWatch({
+        id: watchRule.id,
+        serverId: watchRule.serverId,
+        gpuUuid: watchRule.gpuUuid,
+        gpuIndex: watchRule.gpuIndex,
+        enabled: false,
+        utilizationThresholdPercent: watchRule.utilizationThresholdPercent,
+        memoryThresholdMiB: watchRule.memoryThresholdMiB,
+        sustainSeconds: watchRule.sustainSeconds,
+        cooldownSeconds: watchRule.cooldownSeconds
+      });
+      return;
+    }
+
+    saveWatch({
+      id: null,
+      serverId: detail.server.id,
+      gpuUuid: gpu.uuid,
+      gpuIndex: gpu.index,
+      enabled: true,
+      utilizationThresholdPercent: null,
+      memoryThresholdMiB: null,
+      sustainSeconds: null,
+      cooldownSeconds: null
+    });
+  };
 
   return (
     <article className="detail-gpu-panel panel p-5" key={gpu.uuid}>
@@ -72,7 +112,26 @@ export const DetailGpuCard = ({
           </div>
           <p className="mt-1 break-words text-xs text-[color:var(--color-muted)]">{gpu.uuid}</p>
         </div>
-        <StatusBadge status={gpu.busy ? 'busy' : 'free'} />
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <StatusBadge status={gpu.busy ? 'busy' : 'free'} />
+          <span className="sr-only" id={watchDescriptionId}>{watchTitle}</span>
+          {!watchRulesReady ? (
+            <Button aria-describedby={watchDescriptionId} aria-label="Watch status unavailable" disabled size="sm" variant="secondary">
+              Watch unavailable
+            </Button>
+          ) : watchRule?.enabled ? (
+            <div className="flex flex-wrap items-center justify-end gap-2" title={watchTitle}>
+              <span className="text-xs font-semibold text-[color:var(--color-brand)]">Watching</span>
+              <Button aria-describedby={watchDescriptionId} aria-label={`Disable availability watch for GPU ${gpu.index}`} disabled={watchPending} onClick={toggleWatch} size="sm" variant="ghost">
+                Disable
+              </Button>
+            </div>
+          ) : (
+            <Button aria-describedby={watchDescriptionId} disabled={watchPending} onClick={toggleWatch} size="sm" title={watchTitle} variant="secondary">
+              Notify when available
+            </Button>
+          )}
+        </div>
       </div>
       <GpuMetricSection eyebrow="Live utilization" title="Primary telemetry">
         <MetricCard label="Utilization" value={formatPercent(gpu.gpuUtilizationPercent)} />
