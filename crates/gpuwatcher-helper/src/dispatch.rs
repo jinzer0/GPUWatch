@@ -17,7 +17,10 @@ pub(crate) fn dispatch_action(
         | HelperAction::ListOverview
         | HelperAction::ListServers
         | HelperAction::SeedDemoData
-        | HelperAction::ListProcesses => server_actions::dispatch_empty_payload_action(action, payload),
+        | HelperAction::ListProcesses
+        | HelperAction::ConsumeNotificationEvents => {
+            server_actions::dispatch_empty_payload_action(action, payload)
+        }
         HelperAction::ListSshConfigHosts => server_actions::dispatch_ssh_config_import(payload),
         HelperAction::SaveServer
         | HelperAction::DeleteServer
@@ -25,7 +28,10 @@ pub(crate) fn dispatch_action(
         | HelperAction::GetServerDetail
         | HelperAction::ListGpuHistory
         | HelperAction::TestConnection
-        | HelperAction::RefreshServer => server_actions::dispatch_stateful_payload_action(action, payload),
+        | HelperAction::RefreshServer
+        | HelperAction::ListWatchRules
+        | HelperAction::SaveGpuAvailableWatch
+        | HelperAction::DeleteWatchRule => server_actions::dispatch_stateful_payload_action(action, payload),
         HelperAction::PollDueServers => error_response(
             "main_scheduler_owned",
             "poll_due_servers is main-only; Electron main owns due polling through list_servers, get_server_detail, and refresh_server",

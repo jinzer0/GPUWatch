@@ -5,8 +5,9 @@ use gpuwatcher_core::{service, ssh_config_import};
 
 use crate::contract::HelperAction;
 use crate::dispatch::payload::{
-    block_on_service, expect_empty_payload, payload_from_map, IdPayload, ListGpuHistoryPayload,
-    SaveServerPayload, SetServerEnabledPayload,
+    block_on_service, expect_empty_payload, payload_from_map, require_non_empty, IdPayload,
+    ListGpuHistoryPayload, SaveGpuAvailableWatchPayload, SaveServerPayload, ServerIdPayload,
+    SetServerEnabledPayload,
 };
 use crate::dispatch::with_state;
 use crate::response::{app_error_response, ok_response, to_value};
@@ -23,6 +24,9 @@ pub(super) fn dispatch_empty_payload_action(
             HelperAction::ListServers => service::list_servers(&state).and_then(to_value),
             HelperAction::SeedDemoData => service::seed_demo_data(&state).and_then(to_value),
             HelperAction::ListProcesses => service::list_processes(&state).and_then(to_value),
+            HelperAction::ConsumeNotificationEvents => {
+                service::consume_notification_outbox(&state).and_then(to_value)
+            }
             HelperAction::Health
             | HelperAction::ListSshConfigHosts
             | HelperAction::SaveServer
@@ -32,7 +36,10 @@ pub(super) fn dispatch_empty_payload_action(
             | HelperAction::ListGpuHistory
             | HelperAction::TestConnection
             | HelperAction::RefreshServer
-            | HelperAction::PollDueServers => Err(dispatch_route_error(action)),
+            | HelperAction::PollDueServers
+            | HelperAction::ListWatchRules
+            | HelperAction::SaveGpuAvailableWatch
+            | HelperAction::DeleteWatchRule => Err(dispatch_route_error(action)),
         }
     })
 }
@@ -83,6 +90,20 @@ pub(super) fn dispatch_stateful_payload_action(
             let request: IdPayload = payload_from_map(payload)?;
             block_on_service(service::refresh_server(&state, request.id)).and_then(to_value)
         }
+        HelperAction::ListWatchRules => {
+            let request: ServerIdPayload = payload_from_map(payload)?;
+            require_non_empty(request.server_id.as_str(), "serverId")?;
+            service::list_watch_rules(&state, request.server_id).and_then(to_value)
+        }
+        HelperAction::SaveGpuAvailableWatch => {
+            let request: SaveGpuAvailableWatchPayload = payload_from_map(payload)?;
+            service::save_gpu_available_watch(&state, request.into_input()?).and_then(to_value)
+        }
+        HelperAction::DeleteWatchRule => {
+            let request: IdPayload = payload_from_map(payload)?;
+            require_non_empty(request.id.as_str(), "id")?;
+            service::delete_watch_rule(&state, request.id).map(|()| Value::Null)
+        }
         HelperAction::InitializeApp
         | HelperAction::ListOverview
         | HelperAction::ListServers
@@ -90,6 +111,7 @@ pub(super) fn dispatch_stateful_payload_action(
         | HelperAction::SeedDemoData
         | HelperAction::ListProcesses
         | HelperAction::PollDueServers
+        | HelperAction::ConsumeNotificationEvents
         | HelperAction::Health => Err(dispatch_route_error(action)),
     })
 }
