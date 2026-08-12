@@ -7,7 +7,7 @@ import { evidenceDir } from '../shared/paths.mjs';
 const viteUrl = 'http://127.0.0.1:5173';
 const cdpPort = 9339;
 
-export function buildDevFirstRunEvidence({ tempDataDir, tempHomeDir, dbPath, bridgeInfo, electronMetaKeys, savedServerId, servers, importSurface, errorSurface, afterErrorBody, seededBody, processBody, historyBody, screenshots }) {
+export function buildDevFirstRunEvidence({ tempDataDir, tempHomeDir, dbPath, bridgeInfo, electronMetaKeys, savedServerId, servers, importSurface, errorSurface, afterErrorBody, seededBody, processBody, historyBody, watch, persistedWatch, lifecycle, screenshots }) {
   const parityEvidence = [
     'Task 9 Electron first-run UI parity evidence',
     'Command: npm run smoke:electron:first-run',
@@ -27,6 +27,10 @@ export function buildDevFirstRunEvidence({ tempDataDir, tempHomeDir, dbPath, bri
     `Settings SSH import warning excerpt: ${importSurface.split('\n').filter((line) => /include|proxycommand|no importable|task14/i.test(line)).slice(0, 6).join(' | ')}`,
     `Process Table refresh proved local read-model control: ${/Refresh rows loaded/i.test(processBody)}; User grouped visible: ${/User grouped/i.test(processBody)}`,
     `History refresh proved local read-model control: ${/History refreshed/i.test(historyBody)}; Stored GPU history visible: ${/Stored GPU history/i.test(historyBody)}`,
+    `Watch enable through Server Detail: Watching visible for GPU ${watch.rule.gpuIndex}; persisted UUID/index=${watch.rule.gpuUuid}/${watch.rule.gpuIndex}`,
+    `Watch persisted across Electron relaunch: same rule id=${watch.rule.id === persistedWatch.rule.id}; Watching visible after relaunch`,
+    `macOS window-close lifecycle: ${lifecycle}`,
+    'No remote refresh, SSH poll, notification trigger, or native notification was exercised by this watch persistence smoke.',
     `Screenshots: ${screenshots.join('; ')}`
   ].join('\n');
 
@@ -58,6 +62,9 @@ export function buildDevFirstRunEvidence({ tempDataDir, tempHomeDir, dbPath, bri
     `Local demo seed feedback: ${seededBody.split('\n').filter((line) => /Demo data seeded/i.test(line)).slice(0, 2).join(' | ')}; no refreshServer or remote SSH polling used for Process/History checks`,
     'Process Table: selected User grouped, clicked Refresh rows, observed local rows feedback and nonblank shell',
     'History: clicked Refresh history, observed Stored GPU history identity and success feedback',
+    `Watch: seeded Server Detail Notify when available -> Watching; rule persisted through fresh Electron process with GPU UUID/index ${watch.rule.gpuUuid}/${watch.rule.gpuIndex}`,
+    `Watch relaunch screenshot: ${persistedWatch.screenshotPath}; macOS lifecycle: ${lifecycle}`,
+    'Renderer isolation: watch list/save/delete are action-specific bridge methods; notification consumption and due polling remain absent from the renderer bridge.',
     `Canonical test DB exists: ${existsSync(dbPath)} (${dbPath})`,
     `Screenshots: ${screenshots.join('; ')}`,
     `Logs: ${path.join(evidenceDir, 'task-14-vite.log')}; ${path.join(evidenceDir, 'task-14-electron.log')}`,

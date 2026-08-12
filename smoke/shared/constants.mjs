@@ -1,4 +1,5 @@
 export const expectedBridgeKeys = [
+  'deleteWatchRule',
   'deleteServer',
   'getServerDetail',
   'helperHealth',
@@ -8,7 +9,9 @@ export const expectedBridgeKeys = [
   'listProcesses',
   'listServers',
   'listSshConfigHosts',
+  'listWatchRules',
   'refreshServer',
+  'saveGpuAvailableWatch',
   'saveServer',
   'seedDemoData',
   'setServerEnabled',
@@ -16,6 +19,8 @@ export const expectedBridgeKeys = [
 ];
 
 export const forbiddenBridgeKeys = [
+  'consumeNotificationEvents',
+  'consume_notification_events',
   'dispatch',
   'helperPath',
   'helperRunner',
