@@ -15,6 +15,9 @@ const rendererPreloadMethods = [
   'listProcesses',
   'testConnection',
   'refreshServer',
+  'listWatchRules',
+  'saveGpuAvailableWatch',
+  'deleteWatchRule',
   'helperHealth'
 ] as const;
 

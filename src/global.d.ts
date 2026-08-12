@@ -1,12 +1,14 @@
 import type {
   ConnectionTestResultDto,
+  GpuAvailableWatchInput,
   GpuHistoryResponseDto,
   ProcessRowDto,
   Server,
   ServerDetailDto,
   ServerInput,
   ServerOverviewDto,
-  SshConfigImportResult
+  SshConfigImportResult,
+  WatchRule
 } from './lib/types';
 
 type GpuwatcherHelperResponse<Data> = { ok: true; data: Data } | { ok: false; error: GpuwatcherHelperError };
@@ -36,6 +38,9 @@ interface GpuwatcherBridge {
   listProcesses?: (payload?: object) => Promise<GpuwatcherHelperResponse<ProcessRowDto[]>>;
   testConnection?: (payload: { id: string }) => Promise<GpuwatcherHelperResponse<ConnectionTestResultDto>>;
   refreshServer?: (payload: { id: string }) => Promise<GpuwatcherHelperResponse<ConnectionTestResultDto>>;
+  listWatchRules?: (payload: { serverId: string }) => Promise<GpuwatcherHelperResponse<WatchRule[]>>;
+  saveGpuAvailableWatch?: (payload: { input: GpuAvailableWatchInput }) => Promise<GpuwatcherHelperResponse<WatchRule>>;
+  deleteWatchRule?: (payload: { id: string }) => Promise<GpuwatcherHelperResponse<void>>;
   helperHealth?: (payload?: object) => Promise<GpuwatcherHelperResponse<unknown>>;
 }
 

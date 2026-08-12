@@ -7,10 +7,11 @@ const noPayloadActions = new Set<HelperAction>([
   'list_ssh_config_hosts',
   'seed_demo_data',
   'list_processes',
-  'health'
+  'health',
+  'consume_notification_events'
 ]);
 
-const idPayloadActions = new Set<HelperAction>(['delete_server', 'get_server_detail', 'test_connection', 'refresh_server']);
+const idPayloadActions = new Set<HelperAction>(['delete_server', 'get_server_detail', 'test_connection', 'refresh_server', 'delete_watch_rule']);
 
 function invalidPayload(message: string): HelperResponseEnvelope<never> {
   return {
@@ -29,6 +30,48 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isOptionalNonEmptyString(value: unknown): value is string | null | undefined {
+  return value === undefined || value === null || isNonEmptyString(value);
+}
+
+function isOptionalFiniteIntegerAtLeast(value: unknown, minimum: number): value is number | null | undefined {
+  return value === undefined || value === null || (typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value >= minimum);
+}
+
+function isOptionalFiniteNumberInRange(value: unknown, minimum: number, maximum: number): value is number | null | undefined {
+  return value === undefined || value === null || (typeof value === 'number' && Number.isFinite(value) && value >= minimum && value <= maximum);
+}
+
+function validateGpuAvailableWatchInput(value: unknown): HelperResponseEnvelope<{ input: object }> {
+  if (!isRecord(value)) {
+    return invalidPayload('Payload for save_gpu_available_watch must include an input object.');
+  }
+
+  if (!isNonEmptyString(value.serverId)) {
+    return invalidPayload('Payload for save_gpu_available_watch input must include a non-empty string serverId.');
+  }
+  if (!isOptionalNonEmptyString(value.id)) {
+    return invalidPayload('Payload for save_gpu_available_watch input id must be a non-empty string or null.');
+  }
+  if (!isOptionalNonEmptyString(value.gpuUuid)) {
+    return invalidPayload('Payload for save_gpu_available_watch input gpuUuid must be a non-empty string or null.');
+  }
+  if (!isOptionalFiniteIntegerAtLeast(value.gpuIndex, 0) || value.gpuIndex === undefined || value.gpuIndex === null) {
+    return invalidPayload('Payload for save_gpu_available_watch input gpuIndex must be a finite non-negative integer.');
+  }
+  if (typeof value.enabled !== 'boolean') {
+    return invalidPayload('Payload for save_gpu_available_watch input must include a boolean enabled value.');
+  }
+  if (!isOptionalFiniteNumberInRange(value.utilizationThresholdPercent, 0, 100)) {
+    return invalidPayload('Payload for save_gpu_available_watch input utilizationThresholdPercent must be a finite number from 0 to 100 or null.');
+  }
+  if (!isOptionalFiniteIntegerAtLeast(value.memoryThresholdMiB, 0) || !isOptionalFiniteIntegerAtLeast(value.sustainSeconds, 0) || !isOptionalFiniteIntegerAtLeast(value.cooldownSeconds, 0)) {
+    return invalidPayload('Payload for save_gpu_available_watch threshold durations must be finite non-negative integers or null.');
+  }
+
+  return { ok: true, data: { input: value } };
 }
 
 export function validateHelperPayload(action: HelperAction, payload: unknown): HelperResponseEnvelope<object> {
@@ -56,6 +99,16 @@ export function validateHelperPayload(action: HelperAction, payload: unknown): H
     return isRecord(payload.input)
       ? { ok: true, data: { input: payload.input } }
       : invalidPayload('Payload for save_server must include an input object.');
+  }
+
+  if (action === 'list_watch_rules') {
+    return isNonEmptyString(payload.serverId)
+      ? { ok: true, data: { serverId: payload.serverId } }
+      : invalidPayload('Payload for list_watch_rules must include a non-empty string serverId.');
+  }
+
+  if (action === 'save_gpu_available_watch') {
+    return validateGpuAvailableWatchInput(payload.input);
   }
 
   if (action === 'set_server_enabled') {
