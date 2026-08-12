@@ -4,6 +4,7 @@ use rusqlite::{params, OptionalExtension};
 
 use super::history::gpu_history_retention_cutoff;
 use super::mappers::read_snapshot;
+use super::watches::{evaluate_success, reset_server};
 use super::Repository;
 use crate::error::AppError;
 use crate::models::{LatestSnapshot, SuccessEnvelope};
@@ -120,6 +121,7 @@ impl Repository {
              WHERE server_id = ?2",
             params![finished_at, id],
         )?;
+        evaluate_success(&transaction, id, success, finished_at)?;
         transaction.commit()?;
         Ok(())
     }
@@ -150,6 +152,7 @@ impl Repository {
              WHERE server_id = ?5",
             params![status, error.error_type, error.message, finished_at, id],
         )?;
+        reset_server(&transaction, id, finished_at)?;
         transaction.commit()?;
         Ok(())
     }

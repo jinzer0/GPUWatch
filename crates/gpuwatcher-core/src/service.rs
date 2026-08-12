@@ -6,6 +6,7 @@ mod seed;
 mod writes;
 
 mod polling;
+mod watches;
 
 pub use connection::test_connection;
 pub use polling::{poll_server_owned, refresh_server, refresh_server_inner};
@@ -14,6 +15,9 @@ pub use queries::{
     list_servers,
 };
 pub use seed::seed_demo_data;
+pub use watches::{
+    consume_notification_outbox, delete_watch_rule, list_watch_rules, save_gpu_available_watch,
+};
 pub use writes::{delete_server, save_server, set_server_enabled};
 
 #[cfg(test)]
