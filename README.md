@@ -111,6 +111,8 @@ ssh -o BatchMode=yes USER@HOST 'nvidia-smi --query-compute-apps=gpu_uuid,pid,pro
 - `nvidia-smi` 기반 GPU 메모리, 사용률, 온도, 전력 정보를 표시합니다.
 - 가능할 때 `gpu_extra_csv`, `mig_list`, `dmon`, `dmon_pcie`, `pmon`, `ps` 섹션으로 더 많은 지표와 프로세스 정보를 더합니다.
 - Overview, Server Detail, Live Monitor, Process Table, Settings 화면으로 서버 상태와 최근 GPU 기록을 확인하고 관리합니다.
+- GPU availability watch를 지원합니다. 기본 조건은 GPU 사용률 5% 이하와 VRAM 1 GiB 이하가 5분 동안 유지되는 상태입니다.
+- Watch는 로컬 SQLite에 저장되며 macOS 앱이 실행 중이면 창을 닫아도 계속 확인합니다. Native notification 전달은 Electron main process가 맡습니다.
 - Live Monitor는 로컬 SQLite에 저장된 최근 24시간 GPU 기록을 서버, GPU, 범위, 지표별로 보여줍니다.
 - Server Detail 차트는 저장된 1시간 GPU 기록을 우선 사용하고, 저장 기록을 불러오는 중이거나 비어 있으면 현재 앱 세션의 live sample을 사용합니다.
 - 저장 GPU 기록은 성공한 poll에서 GPU별로만 추가됩니다. 실패한 poll은 health와 오류 metadata를 갱신하고 history sample은 만들지 않습니다.
@@ -118,6 +120,7 @@ ssh -o BatchMode=yes USER@HOST 'nvidia-smi --query-compute-apps=gpu_uuid,pid,pro
 - 기록 보관 기간은 고정 24시간입니다. 장기 audit history, raw snapshot history, process timeline은 저장하지 않습니다.
 - Prometheus exporter나 원격 background service는 제공하지 않습니다.
 - `N/A`, `-`, 비어 있는 선택 지표, 사라진 PID는 0으로 바꾸지 않습니다. 알 수 없는 값은 `unknown` 또는 `null`로 둡니다.
+- 알 수 없는 GPU 사용률이나 VRAM 값은 availability watch 조건을 만족한 것으로 보지 않습니다.
 - Process Table은 Flat 보기와 현재 보이는 GPU 프로세스만 묶는 Parent grouped 보기를 제공합니다.
 - Display mode의 Full과 Compact 전환은 현재 앱 세션에만 적용되며, 앱을 다시 시작하면 기본 Full 보기로 돌아갑니다.
 
