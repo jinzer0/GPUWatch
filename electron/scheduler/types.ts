@@ -1,3 +1,5 @@
+import type { NotificationNotifier } from '../notifications.js';
+
 export interface ServerRecord {
   id: string;
   enabled: boolean;
@@ -22,4 +24,5 @@ export interface ElectronSchedulerOptions {
   now?: () => Date;
   setIntervalFn?: typeof setInterval;
   clearIntervalFn?: typeof clearInterval;
+  notifier?: NotificationNotifier;
 }

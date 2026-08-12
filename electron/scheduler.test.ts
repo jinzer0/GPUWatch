@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createScheduler } from './scheduler.js';
 import type { HelperRunner } from './helperRunner.js';
@@ -75,6 +75,34 @@ describe('Electron scheduler', () => {
     releaseFirst.resolve();
     await Promise.all([first, second]);
     expect(maxActive).toBe(1);
+  });
+
+  it('drains pending notifications when the scheduler starts', async () => {
+    const show = vi.fn();
+    let consumes = 0;
+    const runner: HelperRunner = {
+      async run(request) {
+        if (request.action === 'consume_notification_events') {
+          consumes += 1;
+          return {
+            ok: true,
+            data: [{ id: 'event-startup', ruleId: 'rule-1', serverId: 'server-1', eventType: 'gpu_available', title: 'GPU available', body: 'GPU 0 is available', createdAt: '2026-06-07T00:00:00Z' }]
+          };
+        }
+        if (request.action === 'list_servers') {
+          return { ok: true, data: [] };
+        }
+        throw new Error(`unexpected action ${request.action}`);
+      }
+    };
+    const scheduler = createScheduler({ notifier: { show }, pollIntervalMs: 60_000 });
+
+    scheduler.start(runner);
+
+    await waitForCondition(() => expect(show).toHaveBeenCalledWith({ title: 'GPU available', body: 'GPU 0 is available' }));
+    expect(show).toHaveBeenCalledTimes(1);
+    expect(consumes).toBe(1);
+    scheduler.stop();
   });
 
   it('does not hold unrelated settings writes behind a long SSH refresh', async () => {
@@ -264,6 +292,65 @@ describe('Electron scheduler', () => {
     expect(refreshCalls).toBe(3);
   });
 
+  it('drains and displays pending notifications after a manual refresh while preserving its response', async () => {
+    const show = vi.fn();
+    let consumes = 0;
+    const runner: HelperRunner = {
+      async run(request) {
+        if (request.action === 'refresh_server') {
+          return { ok: false, error: { layer: 'transport_ssh', type: 'connection_failed', message: 'offline' } };
+        }
+        if (request.action === 'consume_notification_events') {
+          consumes += 1;
+          return consumes === 1 ? {
+            ok: true,
+            data: [{ id: 'event-1', ruleId: 'rule-1', serverId: 'server-1', eventType: 'gpu_available', title: 'GPU available', body: 'GPU 0 is available', createdAt: '2026-06-07T00:00:00Z' }]
+          } : { ok: true, data: [] };
+        }
+        throw new Error(`unexpected action ${request.action}`);
+      }
+    };
+    const scheduler = createScheduler({ notifier: { show } });
+    scheduler.start();
+
+    await expect(scheduler.run(runner, { action: 'refresh_server', payload: { id: 'server-1' } })).resolves.toEqual({
+      ok: false,
+      error: { layer: 'transport_ssh', type: 'connection_failed', message: 'offline' }
+    });
+    expect(show).toHaveBeenCalledWith({ title: 'GPU available', body: 'GPU 0 is available' });
+    await scheduler.run(runner, { action: 'refresh_server', payload: { id: 'server-1' } });
+    expect(show).toHaveBeenCalledTimes(1);
+    expect(consumes).toBe(2);
+  });
+
+  it('isolates consume and notifier failures so future refreshes still run', async () => {
+    let refreshes = 0;
+    let consumes = 0;
+    const runner: HelperRunner = {
+      async run(request) {
+        if (request.action === 'refresh_server') {
+          refreshes += 1;
+          return { ok: true, data: { refreshed: refreshes } };
+        }
+        if (request.action === 'consume_notification_events') {
+          consumes += 1;
+          if (consumes === 1) {
+            throw new Error('consume failed');
+          }
+          return { ok: true, data: [{ id: 'event-2', ruleId: 'rule-1', serverId: 'server-1', eventType: 'gpu_available', title: 'GPU available', body: 'GPU 1 is available', createdAt: '2026-06-07T00:00:00Z' }] };
+        }
+        throw new Error(`unexpected action ${request.action}`);
+      }
+    };
+    const scheduler = createScheduler({ notifier: { show: () => { throw new Error('notification failed'); } } });
+    scheduler.start();
+
+    await expect(scheduler.run(runner, { action: 'refresh_server', payload: { id: 'server-1' } })).resolves.toEqual({ ok: true, data: { refreshed: 1 } });
+    await expect(scheduler.run(runner, { action: 'refresh_server', payload: { id: 'server-1' } })).resolves.toEqual({ ok: true, data: { refreshed: 2 } });
+    expect(refreshes).toBe(2);
+    expect(consumes).toBe(2);
+  });
+
   it('releases same-server and global slots after a rejected helper run', async () => {
     let first = true;
     const runner: HelperRunner = {
@@ -393,6 +480,78 @@ describe('Electron scheduler', () => {
     });
     expect(actions.map((entry) => entry.action)).not.toContain('poll_due_servers');
     scheduler.stop();
+  });
+
+  it('drains notifications after scheduled refreshes', async () => {
+    const show = vi.fn();
+    let refreshed = false;
+    let consumes = 0;
+    const runner: HelperRunner = {
+      async run(request) {
+        if (request.action === 'list_servers') {
+          return { ok: true, data: [{ id: 'server-1', enabled: true, pollingIntervalSeconds: 30 }] };
+        }
+        if (request.action === 'get_server_detail') {
+          return { ok: true, data: { health: { status: 'idle', lastPollStartedAt: null, lastPollFinishedAt: null, lastSuccessAt: null } } };
+        }
+        if (request.action === 'refresh_server') {
+          refreshed = true;
+          return { ok: true, data: { ok: true, status: 'online', errorType: null, message: 'snapshot stored' } };
+        }
+        if (request.action === 'consume_notification_events') {
+          consumes += 1;
+          return refreshed && consumes === 2
+            ? { ok: true, data: [{ id: 'event-scheduled', ruleId: 'rule-1', serverId: 'server-1', eventType: 'gpu_available', title: 'GPU available', body: 'GPU 0 is available', createdAt: '2026-06-07T00:00:00Z' }] }
+            : { ok: true, data: [] };
+        }
+        throw new Error(`unexpected action ${request.action}`);
+      }
+    };
+    const scheduler = createScheduler({ notifier: { show }, pollIntervalMs: 60_000, now: () => new Date('2026-06-07T00:00:00.000Z') });
+
+    scheduler.start(runner);
+
+    await waitForCondition(() => expect(show).toHaveBeenCalledWith({ title: 'GPU available', body: 'GPU 0 is available' }));
+    expect(show).toHaveBeenCalledTimes(1);
+    expect(consumes).toBe(2);
+    scheduler.stop();
+  });
+
+  it('queues concurrent refresh drains and displays each consumed event exactly once', async () => {
+    const show = vi.fn();
+    const releaseFirstConsume = deferred<void>();
+    let consumes = 0;
+    const runner: HelperRunner = {
+      async run(request) {
+        if (request.action === 'refresh_server') {
+          return { ok: true, data: { ok: true } };
+        }
+        if (request.action === 'consume_notification_events') {
+          consumes += 1;
+          if (consumes === 1) {
+            await releaseFirstConsume.promise;
+            return { ok: true, data: [{ id: 'event-1', ruleId: 'rule-1', serverId: 'server-1', eventType: 'gpu_available', title: 'first', body: 'one', createdAt: '2026-06-07T00:00:00Z' }] };
+          }
+          return consumes === 2
+            ? { ok: true, data: [{ id: 'event-2', ruleId: 'rule-2', serverId: 'server-2', eventType: 'gpu_available', title: 'second', body: 'two', createdAt: '2026-06-07T00:00:00Z' }] }
+            : { ok: true, data: [] };
+        }
+        throw new Error(`unexpected action ${request.action}`);
+      }
+    };
+    const scheduler = createScheduler({ notifier: { show } });
+    scheduler.start();
+
+    const first = scheduler.run(runner, { action: 'refresh_server', payload: { id: 'server-1' } });
+    await waitForCondition(() => expect(consumes).toBe(1));
+    const second = scheduler.run(runner, { action: 'refresh_server', payload: { id: 'server-2' } });
+    releaseFirstConsume.resolve();
+
+    await Promise.all([first, second]);
+    expect(consumes).toBe(2);
+    expect(show).toHaveBeenCalledTimes(2);
+    expect(show).toHaveBeenNthCalledWith(1, { title: 'first', body: 'one' });
+    expect(show).toHaveBeenNthCalledWith(2, { title: 'second', body: 'two' });
   });
 
   it('limits scheduled polling concurrency across different due servers', async () => {
