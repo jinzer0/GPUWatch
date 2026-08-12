@@ -1,9 +1,10 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, Notification } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registerIpcScaffold } from './ipc.js';
 import { createHelperRunner } from './helperRunner.js';
 import { createScheduler } from './scheduler.js';
+import { createMacosNotificationNotifier } from './notifications.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -49,6 +50,7 @@ const helperRunner = createHelperRunner({ isPackaged: app.isPackaged, resourcesP
 registerIpcScaffold(helperRunner, scheduler);
 
 app.whenReady().then(async () => {
+  scheduler.setNotifier(createMacosNotificationNotifier(Notification));
   scheduler.start(helperRunner);
   await createMainWindow();
 
