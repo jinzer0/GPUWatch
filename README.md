@@ -23,20 +23,38 @@ GPUWatcher는 여러 Linux NVIDIA GPU 서버의 최신 GPU 상태, GPU 프로세
 
 ## Installation
 
-로컬 macOS에서 GPUWatcher를 실행하는 데 필요한 항목입니다.
+GitHub Release에서 받는 packaged app을 실행하는 데 필요한 항목입니다.
 
 | 구분 | 필요 항목 |
 | --- | --- |
-| 운영체제 | macOS |
+| 운영체제 | Apple Silicon Mac의 macOS |
+| SSH | macOS 기본 OpenSSH 또는 호환되는 system `ssh` |
+| 로컬 DB | 앱에 포함된 SQLite 사용 |
+
+GPUWatcher v0.1.0 public release는 Apple Silicon Mac 전용입니다. Intel Mac 또는 universal binary는 아직 제공하지 않습니다.
+
+v0.1.0은 unsigned이며 notarized되지 않았습니다. Developer ID signing과 notarization은 이후 release에서 준비할 예정이고, 현재 artifact에는 포함되어 있지 않습니다. 자동 업데이트도 제공하지 않습니다.
+
+DMG 또는 ZIP은 GitHub Releases에서 받을 수 있습니다.
+
+https://github.com/jinzer0/GPUWatch/releases/tag/v0.1.0
+
+처음 실행할 때 macOS Gatekeeper가 앱을 막을 수 있습니다. 기본 복구 흐름은 앱을 한 번 실행해 차단 메시지를 만든 뒤, `System Settings → Privacy & Security → Open Anyway`에서 GPUWatcher를 허용하고 확인 창에서 `Open`을 다시 누르는 방식입니다.
+
+저장소에서 개발 모드로 실행하려면 아래 개발 도구가 추가로 필요합니다.
+
+| 구분 | 필요 항목 |
+| --- | --- |
 | Node.js | Node.js 24 이상 |
 | 패키지 관리자 | npm |
 | Rust | Rust 1.95 이상 |
 | 로컬 DB | SQLite 3 |
-| SSH | macOS 기본 OpenSSH 또는 호환되는 system `ssh` |
 
-아직 signed 또는 notarized release는 없습니다. 지금은 저장소를 받아 개발 모드로 실행하거나, 로컬 unsigned `.app` 디렉터리와 내부 테스트용 unsigned DMG/ZIP artifact를 만들어 smoke test합니다.
+source build와 local package smoke도 signed 또는 notarized artifact를 만들지 않습니다.
 
 ## Quick Start
+
+소스에서 개발 모드로 실행하는 절차입니다.
 
 1. 저장소를 받고 프로젝트 디렉터리로 이동합니다.
 
@@ -152,13 +170,13 @@ test -n "$APP_PATH"
 open "$APP_PATH"
 ```
 
-내부 테스트용 unsigned DMG와 ZIP artifact가 필요하면 별도 명령을 사용합니다. 이 명령은 local build만 만들며 upload, publish, auto-update 설정을 하지 않습니다.
+로컬에서 unsigned DMG와 ZIP artifact가 필요하면 별도 명령을 사용합니다. 이 명령은 local build만 만들며 upload, publish, auto-update 설정을 하지 않습니다.
 
 ```bash
 npm run electron:dist:unsigned
 ```
 
-생성된 DMG/ZIP은 signed, notarized, uploaded, auto-updated, production release-ready artifact가 아닙니다. Gatekeeper가 막거나 quarantine 경고가 보이면 unsigned test artifact caveat로 기록하세요. 외부 배포나 production release 기준으로 쓰지 마세요.
+생성된 DMG/ZIP은 signed, notarized, uploaded, auto-updated, production release-ready artifact가 아닙니다. public GitHub Release에 올릴 때도 현재 v0.1.0과 같은 unsigned, non-notarized Apple Silicon artifact라는 점을 release note에 분명히 적어야 합니다. Gatekeeper가 막으면 앱을 한 번 실행한 뒤 `System Settings → Privacy & Security → Open Anyway → Open` 흐름으로 여는지 확인하세요.
 
 프론트엔드만 브라우저에서 보고 싶다면 다음 명령을 사용할 수 있습니다. 이 경우 Electron preload bridge가 없으므로 저장, refresh 같은 backend action은 동작하지 않습니다. 정적 화면 식별과 읽기 전용 empty state 확인에만 쓰세요.
 
