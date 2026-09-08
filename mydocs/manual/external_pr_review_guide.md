@@ -22,7 +22,7 @@
 - 구현 계획서: `pr_{번호}_review_impl.md` (필요 시)
 - 최종 보고서: `pr_{번호}_report.md`
 
-처리 완료 문서는 `mydocs/pr/archives/`로 이동한다.
+처리 중인 최신 round는 위 고정 이름을 사용한다. 처리 완료 문서는 기존 기록을 덮어쓰지 않도록 `mydocs/pr/archives/pr_{번호}_round{양의 정수}_{review|review_impl|report}.md`로 이동한다. 같은 PR을 다시 검토하면 다음 빈 round 번호를 사용한다.
 
 ## 절차
 
@@ -32,7 +32,7 @@
 4. `pr_{번호}_review.md`에 핵심 리스크와 수정 요청 정리
 5. 필요 시 `pr_{번호}_review_impl.md`에 재검토 계획 정리
 6. 최종 판단을 `pr_{번호}_report.md`로 기록
-7. 처리 완료 문서를 `mydocs/pr/archives/`로 이동
+7. 처리 완료 문서를 다음 빈 round 번호의 `mydocs/pr/archives/pr_{번호}_round{R}_*.md`로 이동
 
 ## 머지 전 체크
 

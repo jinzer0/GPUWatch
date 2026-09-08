@@ -18,7 +18,13 @@
 - `pr_{번호}_review_impl.md`
 - `pr_{번호}_report.md`
 
-처리 완료 문서는 `pr/archives/`로 이동한다.
+처리 중인 최신 round는 위 이름을 사용한다. 처리 완료 문서는 기존 기록을 덮어쓰지 않도록 다음 이름으로 `pr/archives/`에 이동한다.
+
+- `pr_{번호}_round{양의 정수}_review.md`
+- `pr_{번호}_round{양의 정수}_review_impl.md` (필요 시)
+- `pr_{번호}_round{양의 정수}_report.md`
+
+같은 PR을 다시 검토하면 다음 빈 round 번호를 사용한다.
 
 ## 사용 템플릿
 

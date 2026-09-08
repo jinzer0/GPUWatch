@@ -245,7 +245,7 @@ Lifecycle 판단 결과는 적용 전 보고 형식이지 `mydocs/`에 장기 �
 - 이 목차는 외부 기여 PR 검토에만 적용한다.
 - 외부 PR 검토 기록은 `mydocs/pr/`에 남긴다.
 - 파일명은 `pr_{번호}_review.md`, `pr_{번호}_review_impl.md`(필요 시), `pr_{번호}_report.md`를 사용한다.
-- 처리 완료 문서는 `mydocs/pr/archives/`로 이동한다.
+- 처리 중인 최신 round만 위 이름을 사용한다. 처리 완료 문서는 `mydocs/pr/archives/pr_{번호}_round{양의 정수}_{review|review_impl|report}.md`로 이동하며, 기존 archive와 충돌하면 다음 빈 round 번호를 사용하고 덮어쓰지 않는다.
 
 내부 타스크의 `수행 -> 구현 -> 단계별 보고 -> 최종 보고` 절차는 외부 기여 PR 검토에 그대로 적용하지 않는다. 상세는 [`pr_process_guide.md`](pr_process_guide.md) 참조.
 
