@@ -22,7 +22,18 @@ description: |
 
 ## 절차
 
-1. PR과 이슈 상태 확인
+1. 대상과 실행 위치 사전 확인 (read-only)
+   ```bash
+   gh pr view "$PR_NUMBER" --repo jinzer0/GPUWatch \
+     --json state,baseRefName,headRefName,headRepository,mergedAt,mergeCommit
+   gh issue view "$ISSUE_NUMBER" --repo jinzer0/GPUWatch --json state
+   git remote get-url origin
+   git remote get-url --push origin
+   git worktree list --porcelain
+   ```
+   - 작업지시자가 지정한 PR/이슈 번호, `MERGED`, `devel` <- `publish/taskN`, canonical repository, 기본/분리 worktree 경로를 확인한다.
+2. 승인받은 cleanup transaction 실행
+   - 아래 전체 block을 한 번의 shell 호출에서 실행한다. 일부만 떼어 실행하거나 중간에 `PR_NUMBER`, `ISSUE_NUMBER`, repository, worktree path를 다시 주입하지 않는다.
    ```bash
    set -euo pipefail
    case "${PR_NUMBER:-}" in
@@ -32,37 +43,63 @@ description: |
      ""|*[!0-9]*) printf 'ISSUE_NUMBER must contain decimal digits only\n' >&2; exit 1 ;;
    esac
    readonly PR_NUMBER ISSUE_NUMBER
+
+   CANONICAL_REPOSITORY="jinzer0/GPUWatch"
    EXPECTED_HEAD_REF="publish/task${ISSUE_NUMBER}"
-   EXPECTED_HEAD_REPOSITORY="jinzer0/GPUWatch"
-   read -r PR_STATE PR_BASE_REF PR_HEAD_REF PR_HEAD_REPOSITORY < <(
-     gh pr view "$PR_NUMBER" --json state,baseRefName,headRefName,headRepository \
-       --jq '[.state, .baseRefName, .headRefName, .headRepository.nameWithOwner] | @tsv'
-   )
+   EXPECTED_TASK_BRANCH="local/task${ISSUE_NUMBER}"
+   readonly CANONICAL_REPOSITORY EXPECTED_HEAD_REF EXPECTED_TASK_BRANCH
+
+   test "$(gh repo view "$CANONICAL_REPOSITORY" --json nameWithOwner --jq .nameWithOwner)" = "$CANONICAL_REPOSITORY"
+   for ORIGIN_URL in "$(git remote get-url origin)" "$(git remote get-url --push origin)"; do
+     case "$ORIGIN_URL" in
+       git@github.com:jinzer0/GPUWatch|git@github.com:jinzer0/GPUWatch.git|https://github.com/jinzer0/GPUWatch|https://github.com/jinzer0/GPUWatch.git|ssh://git@github.com/jinzer0/GPUWatch|ssh://git@github.com/jinzer0/GPUWatch.git) ;;
+       *) printf 'origin does not target the canonical repository\n' >&2; exit 1 ;;
+     esac
+   done
+
+   PR_TUPLE="$(gh pr view "$PR_NUMBER" --repo "$CANONICAL_REPOSITORY" \
+     --json state,baseRefName,headRefName,headRepository \
+     --jq '[.state, .baseRefName, .headRefName, .headRepository.nameWithOwner] | @tsv')"
+   case "$PR_TUPLE" in
+     *$'\n'*) printf 'PR identity query returned multiple lines\n' >&2; exit 1 ;;
+   esac
+   IFS=$'\t' read -r PR_STATE PR_BASE_REF PR_HEAD_REF PR_HEAD_REPOSITORY EXTRA_FIELD <<< "$PR_TUPLE"
+   test -z "${EXTRA_FIELD:-}"
    test "$PR_STATE" = "MERGED"
    test "$PR_BASE_REF" = "devel"
    test "$PR_HEAD_REF" = "$EXPECTED_HEAD_REF"
-   test "$PR_HEAD_REPOSITORY" = "$EXPECTED_HEAD_REPOSITORY"
-   gh issue view "$ISSUE_NUMBER" --json state
-   ```
-   - PR 상태, base, head 중 하나라도 다르면 즉시 중단하고 작업지시자에게 보고한다.
-2. 안전한 cleanup 실행 위치 확정
-   ```bash
-   set -euo pipefail
-   case "${ISSUE_NUMBER:-}" in
-     ""|*[!0-9]*) printf 'ISSUE_NUMBER must contain decimal digits only\n' >&2; exit 1 ;;
-   esac
-   readonly ISSUE_NUMBER
-   EXPECTED_TASK_BRANCH="local/task${ISSUE_NUMBER}"
+   test "$PR_HEAD_REPOSITORY" = "$CANONICAL_REPOSITORY"
+   gh issue view "$ISSUE_NUMBER" --repo "$CANONICAL_REPOSITORY" --json state >/dev/null
+
    CURRENT_WORKTREE="$(git rev-parse --show-toplevel)"
    COMMON_DIR="$(git rev-parse --path-format=absolute --git-common-dir)"
    case "$COMMON_DIR" in
      */.git) PRIMARY_WORKTREE="${COMMON_DIR%/.git}" ;;
      *) printf 'Unable to identify the primary worktree\n' >&2; exit 1 ;;
    esac
+
+   WORKTREE_LIST="$(git worktree list --porcelain)"
    TASK_WORKTREE_TO_REMOVE=""
+   CANDIDATE_WORKTREE=""
+   MATCH_COUNT=0
+   while IFS= read -r WORKTREE_LINE; do
+     case "$WORKTREE_LINE" in
+       worktree\ *) CANDIDATE_WORKTREE="${WORKTREE_LINE#worktree }" ;;
+       "branch refs/heads/${EXPECTED_TASK_BRANCH}")
+         TASK_WORKTREE_TO_REMOVE="$CANDIDATE_WORKTREE"
+         MATCH_COUNT=$((MATCH_COUNT + 1))
+         ;;
+     esac
+   done <<< "$WORKTREE_LIST"
+   test "$MATCH_COUNT" -le 1
+   if test "$TASK_WORKTREE_TO_REMOVE" = "$PRIMARY_WORKTREE"; then
+     test "$CURRENT_WORKTREE" = "$PRIMARY_WORKTREE"
+     TASK_WORKTREE_TO_REMOVE=""
+   fi
+
    if test "$CURRENT_WORKTREE" != "$PRIMARY_WORKTREE"; then
      test "$(git branch --show-current)" = "$EXPECTED_TASK_BRANCH"
-     TASK_WORKTREE_TO_REMOVE="$CURRENT_WORKTREE"
+     test "$TASK_WORKTREE_TO_REMOVE" = "$CURRENT_WORKTREE"
      cd -- "$PRIMARY_WORKTREE"
    fi
    test "$(git rev-parse --show-toplevel)" = "$PRIMARY_WORKTREE"
@@ -72,141 +109,43 @@ description: |
      devel|"$EXPECTED_TASK_BRANCH") ;;
      *) printf 'Primary worktree is on an unrelated branch\n' >&2; exit 1 ;;
    esac
-   git worktree list --porcelain
-   ```
-   - 기본 worktree에서 시작했지만 별도 `local/task{N}` worktree가 존재하면 위 목록에서 절대 경로를 확인해 `TASK_WORKTREE_TO_REMOVE`에 기록한다.
-   - 이후 모든 명령은 기본 worktree에서 실행한다. 기본 worktree가 dirty하거나 경로를 확정할 수 없으면 side effect 전에 중단한다.
-   - one-shot shell 도구를 사용하는 agent는 이후 호출의 `workdir`를 기록한 `PRIMARY_WORKTREE`로 지정하고, 제거할 경로가 있으면 기록한 `TASK_WORKTREE_TO_REMOVE`를 환경 변수로 명시 전달한다. 이전 호출의 `cd`나 shell 변수가 유지된다고 가정하지 않는다.
-3. devel 최신화
-   ```bash
-   set -euo pipefail
-   case "${PR_NUMBER:-}" in
-     ""|*[!0-9]*) printf 'PR_NUMBER must contain decimal digits only\n' >&2; exit 1 ;;
-   esac
-   case "${ISSUE_NUMBER:-}" in
-     ""|*[!0-9]*) printf 'ISSUE_NUMBER must contain decimal digits only\n' >&2; exit 1 ;;
-   esac
-   readonly PR_NUMBER ISSUE_NUMBER
-   read -r PR_STATE PR_BASE_REF PR_HEAD_REF PR_HEAD_REPOSITORY < <(
-     gh pr view "$PR_NUMBER" --json state,baseRefName,headRefName,headRepository \
-       --jq '[.state, .baseRefName, .headRefName, .headRepository.nameWithOwner] | @tsv'
-   )
-   test "$PR_STATE" = "MERGED"
-   test "$PR_BASE_REF" = "devel"
-   test "$PR_HEAD_REF" = "publish/task${ISSUE_NUMBER}"
-   test "$PR_HEAD_REPOSITORY" = "jinzer0/GPUWatch"
+
    git fetch origin --prune
-   if test "$(git branch --show-current)" != "devel"; then
+   if test "$PRIMARY_BRANCH" != "devel"; then
      git checkout devel
    fi
    git pull --ff-only
    test "$(git branch --show-current)" = "devel"
-   ```
-4. 원격 publish 브랜치 삭제 (이미 삭제된 경우 skip)
-   ```bash
-   set -euo pipefail
-   case "${PR_NUMBER:-}" in
-     ""|*[!0-9]*) printf 'PR_NUMBER must contain decimal digits only\n' >&2; exit 1 ;;
-   esac
-   case "${ISSUE_NUMBER:-}" in
-     ""|*[!0-9]*) printf 'ISSUE_NUMBER must contain decimal digits only\n' >&2; exit 1 ;;
-   esac
-   readonly PR_NUMBER ISSUE_NUMBER
-   read -r PR_STATE PR_BASE_REF PR_HEAD_REF PR_HEAD_REPOSITORY < <(
-     gh pr view "$PR_NUMBER" --json state,baseRefName,headRefName,headRepository \
-       --jq '[.state, .baseRefName, .headRefName, .headRepository.nameWithOwner] | @tsv'
-   )
-   test "$PR_STATE" = "MERGED"
-   test "$PR_BASE_REF" = "devel"
-   test "$PR_HEAD_REF" = "publish/task${ISSUE_NUMBER}"
-   test "$PR_HEAD_REPOSITORY" = "jinzer0/GPUWatch"
-   PUBLISH_REF="publish/task${ISSUE_NUMBER}"
-   REMOTE_PUBLISH_REF="$(git ls-remote --heads origin "refs/heads/${PUBLISH_REF}")"
-   if test -n "$REMOTE_PUBLISH_REF"; then
-     git push origin --delete "$PUBLISH_REF"
-   fi
-   ```
-5. 분리 worktree 사용했다면 기본 worktree에서 제거
-   ```bash
-   set -euo pipefail
-   case "${PR_NUMBER:-}" in
-     ""|*[!0-9]*) printf 'PR_NUMBER must contain decimal digits only\n' >&2; exit 1 ;;
-   esac
-   case "${ISSUE_NUMBER:-}" in
-     ""|*[!0-9]*) printf 'ISSUE_NUMBER must contain decimal digits only\n' >&2; exit 1 ;;
-   esac
-   readonly PR_NUMBER ISSUE_NUMBER
-   read -r PR_STATE PR_BASE_REF PR_HEAD_REF PR_HEAD_REPOSITORY < <(
-     gh pr view "$PR_NUMBER" --json state,baseRefName,headRefName,headRepository \
-       --jq '[.state, .baseRefName, .headRefName, .headRepository.nameWithOwner] | @tsv'
-   )
-   test "$PR_STATE" = "MERGED"
-   test "$PR_BASE_REF" = "devel"
-   test "$PR_HEAD_REF" = "publish/task${ISSUE_NUMBER}"
-   test "$PR_HEAD_REPOSITORY" = "jinzer0/GPUWatch"
-   if test -n "${TASK_WORKTREE_TO_REMOVE:-}"; then
-     CURRENT_ROOT="$(git rev-parse --show-toplevel)"
-     CURRENT_COMMON_DIR="$(git rev-parse --path-format=absolute --git-common-dir)"
+
+   if test -n "$TASK_WORKTREE_TO_REMOVE"; then
      TARGET_COMMON_DIR="$(git -C "$TASK_WORKTREE_TO_REMOVE" rev-parse --path-format=absolute --git-common-dir)"
-     test "$TASK_WORKTREE_TO_REMOVE" != "$CURRENT_ROOT"
-     test "$TARGET_COMMON_DIR" = "$CURRENT_COMMON_DIR"
-     test "$(git -C "$TASK_WORKTREE_TO_REMOVE" branch --show-current)" = "local/task${ISSUE_NUMBER}"
+     test "$TASK_WORKTREE_TO_REMOVE" != "$PRIMARY_WORKTREE"
+     test "$TARGET_COMMON_DIR" = "$COMMON_DIR"
+     test "$(git -C "$TASK_WORKTREE_TO_REMOVE" branch --show-current)" = "$EXPECTED_TASK_BRANCH"
      git worktree remove "$TASK_WORKTREE_TO_REMOVE"
      git worktree prune
    fi
-   ```
-   - dirty 또는 locked worktree는 강제 제거하지 않고 중단해 작업지시자에게 보고한다.
-6. 로컬 작업 브랜치 삭제 (재사용 가능성 없을 때만)
-   ```bash
-   set -euo pipefail
-   case "${PR_NUMBER:-}" in
-     ""|*[!0-9]*) printf 'PR_NUMBER must contain decimal digits only\n' >&2; exit 1 ;;
-   esac
-   case "${ISSUE_NUMBER:-}" in
-     ""|*[!0-9]*) printf 'ISSUE_NUMBER must contain decimal digits only\n' >&2; exit 1 ;;
-   esac
-   readonly PR_NUMBER ISSUE_NUMBER
-   read -r PR_STATE PR_BASE_REF PR_HEAD_REF PR_HEAD_REPOSITORY < <(
-     gh pr view "$PR_NUMBER" --json state,baseRefName,headRefName,headRepository \
-       --jq '[.state, .baseRefName, .headRefName, .headRepository.nameWithOwner] | @tsv'
-   )
-   test "$PR_STATE" = "MERGED"
-   test "$PR_BASE_REF" = "devel"
-   test "$PR_HEAD_REF" = "publish/task${ISSUE_NUMBER}"
-   test "$PR_HEAD_REPOSITORY" = "jinzer0/GPUWatch"
-   if git show-ref --verify --quiet "refs/heads/local/task${ISSUE_NUMBER}"; then
-     git branch -d "local/task${ISSUE_NUMBER}"
+
+   REMOTE_PUBLISH_REF="$(git ls-remote --heads origin "refs/heads/${EXPECTED_HEAD_REF}")"
+   if test -n "$REMOTE_PUBLISH_REF"; then
+     git push origin --delete "$EXPECTED_HEAD_REF"
    fi
-   # 강제 삭제는 작업지시자 명시 승인 후에만: git branch -D "local/task${ISSUE_NUMBER}"
-   ```
-7. 이슈 close (앞 단계가 모두 성공했고 자동 close되지 않은 경우만)
-   ```bash
-   set -euo pipefail
-   case "${PR_NUMBER:-}" in
-     ""|*[!0-9]*) printf 'PR_NUMBER must contain decimal digits only\n' >&2; exit 1 ;;
-   esac
-   case "${ISSUE_NUMBER:-}" in
-     ""|*[!0-9]*) printf 'ISSUE_NUMBER must contain decimal digits only\n' >&2; exit 1 ;;
-   esac
-   readonly PR_NUMBER ISSUE_NUMBER
-   read -r PR_STATE PR_BASE_REF PR_HEAD_REF PR_HEAD_REPOSITORY < <(
-     gh pr view "$PR_NUMBER" --json state,baseRefName,headRefName,headRepository \
-       --jq '[.state, .baseRefName, .headRefName, .headRepository.nameWithOwner] | @tsv'
-   )
-   test "$PR_STATE" = "MERGED"
-   test "$PR_BASE_REF" = "devel"
-   test "$PR_HEAD_REF" = "publish/task${ISSUE_NUMBER}"
-   test "$PR_HEAD_REPOSITORY" = "jinzer0/GPUWatch"
-   if test "$(gh issue view "$ISSUE_NUMBER" --json state --jq .state)" = "OPEN"; then
-     gh issue close "$ISSUE_NUMBER"
+   if git show-ref --verify --quiet "refs/heads/${EXPECTED_TASK_BRANCH}"; then
+     git branch -d "$EXPECTED_TASK_BRANCH"
+   fi
+
+   if test "$(gh issue view "$ISSUE_NUMBER" --repo "$CANONICAL_REPOSITORY" --json state --jq .state)" = "OPEN"; then
+     gh issue close "$ISSUE_NUMBER" --repo "$CANONICAL_REPOSITORY"
    fi
    ```
-8. 오늘할일 최종 정리: `mydocs/orders/{yyyymmdd}.md`의 `#${ISSUE_NUMBER}` 행이 `완료` + 시각 기록되어 있는지 재확인
-9. 결과 보고: 정리된 항목 목록을 작업지시자에게 짧게 회신
+   - dirty/locked worktree, unrelated primary branch, repository/PR tuple 불일치, fetch/pull/delete 실패는 transaction을 중단한다. `--force` 삭제로 우회하지 않는다.
+   - worktree 제거 → 원격 publish branch 삭제 → 로컬 task branch 삭제 → 이슈 close 순서를 유지한다.
+3. 오늘할일 최종 정리: `mydocs/orders/{yyyymmdd}.md`의 `#${ISSUE_NUMBER}` 행이 `완료` + 시각 기록되어 있는지 재확인
+4. 결과 보고: 정리된 항목 목록을 작업지시자에게 짧게 회신
 
 ## 검증
 
-- `gh pr view "$PR_NUMBER"`가 `MERGED`, base `devel`, head `publish/task${ISSUE_NUMBER}`임을 확인
+- `gh pr view "$PR_NUMBER" --repo jinzer0/GPUWatch`가 `MERGED`, base `devel`, head `publish/task${ISSUE_NUMBER}`, head repository `jinzer0/GPUWatch`임을 확인
 - `git branch -vv | grep "local/task${ISSUE_NUMBER}"` 출력 없음 (삭제된 경우)
 - `git ls-remote origin "publish/task${ISSUE_NUMBER}"` 빈 출력 (원격 삭제 확인)
 - `git worktree list` 출력에 정리 대상 worktree 미존재
@@ -223,6 +162,7 @@ description: |
 - 기본 worktree를 제거 대상으로 지정하거나 dirty/locked task worktree 강제 제거
 - cleanup 대상과 다른 PR/이슈 번호, base, head 조합으로 이슈 close 또는 브랜치 삭제
 - cleanup과 branch 삭제가 끝나기 전에 이슈 close
+- cleanup transaction의 일부 command만 분리 실행하거나 target 변수를 중간에 다시 주입
 
 ## 호출 방법
 
