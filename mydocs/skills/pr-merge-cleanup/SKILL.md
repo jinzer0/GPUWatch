@@ -33,13 +33,15 @@ description: |
    esac
    readonly PR_NUMBER ISSUE_NUMBER
    EXPECTED_HEAD_REF="publish/task${ISSUE_NUMBER}"
-   read -r PR_STATE PR_BASE_REF PR_HEAD_REF < <(
-     gh pr view "$PR_NUMBER" --json state,baseRefName,headRefName \
-       --jq '[.state, .baseRefName, .headRefName] | @tsv'
+   EXPECTED_HEAD_REPOSITORY="jinzer0/GPUWatch"
+   read -r PR_STATE PR_BASE_REF PR_HEAD_REF PR_HEAD_REPOSITORY < <(
+     gh pr view "$PR_NUMBER" --json state,baseRefName,headRefName,headRepository \
+       --jq '[.state, .baseRefName, .headRefName, .headRepository.nameWithOwner] | @tsv'
    )
    test "$PR_STATE" = "MERGED"
    test "$PR_BASE_REF" = "devel"
    test "$PR_HEAD_REF" = "$EXPECTED_HEAD_REF"
+   test "$PR_HEAD_REPOSITORY" = "$EXPECTED_HEAD_REPOSITORY"
    gh issue view "$ISSUE_NUMBER" --json state
    ```
    - PR 상태, base, head 중 하나라도 다르면 즉시 중단하고 작업지시자에게 보고한다.
@@ -78,6 +80,21 @@ description: |
 3. devel 최신화
    ```bash
    set -euo pipefail
+   case "${PR_NUMBER:-}" in
+     ""|*[!0-9]*) printf 'PR_NUMBER must contain decimal digits only\n' >&2; exit 1 ;;
+   esac
+   case "${ISSUE_NUMBER:-}" in
+     ""|*[!0-9]*) printf 'ISSUE_NUMBER must contain decimal digits only\n' >&2; exit 1 ;;
+   esac
+   readonly PR_NUMBER ISSUE_NUMBER
+   read -r PR_STATE PR_BASE_REF PR_HEAD_REF PR_HEAD_REPOSITORY < <(
+     gh pr view "$PR_NUMBER" --json state,baseRefName,headRefName,headRepository \
+       --jq '[.state, .baseRefName, .headRefName, .headRepository.nameWithOwner] | @tsv'
+   )
+   test "$PR_STATE" = "MERGED"
+   test "$PR_BASE_REF" = "devel"
+   test "$PR_HEAD_REF" = "publish/task${ISSUE_NUMBER}"
+   test "$PR_HEAD_REPOSITORY" = "jinzer0/GPUWatch"
    git fetch origin --prune
    if test "$(git branch --show-current)" != "devel"; then
      git checkout devel
@@ -88,10 +105,21 @@ description: |
 4. 원격 publish 브랜치 삭제 (이미 삭제된 경우 skip)
    ```bash
    set -euo pipefail
+   case "${PR_NUMBER:-}" in
+     ""|*[!0-9]*) printf 'PR_NUMBER must contain decimal digits only\n' >&2; exit 1 ;;
+   esac
    case "${ISSUE_NUMBER:-}" in
      ""|*[!0-9]*) printf 'ISSUE_NUMBER must contain decimal digits only\n' >&2; exit 1 ;;
    esac
-   readonly ISSUE_NUMBER
+   readonly PR_NUMBER ISSUE_NUMBER
+   read -r PR_STATE PR_BASE_REF PR_HEAD_REF PR_HEAD_REPOSITORY < <(
+     gh pr view "$PR_NUMBER" --json state,baseRefName,headRefName,headRepository \
+       --jq '[.state, .baseRefName, .headRefName, .headRepository.nameWithOwner] | @tsv'
+   )
+   test "$PR_STATE" = "MERGED"
+   test "$PR_BASE_REF" = "devel"
+   test "$PR_HEAD_REF" = "publish/task${ISSUE_NUMBER}"
+   test "$PR_HEAD_REPOSITORY" = "jinzer0/GPUWatch"
    PUBLISH_REF="publish/task${ISSUE_NUMBER}"
    REMOTE_PUBLISH_REF="$(git ls-remote --heads origin "refs/heads/${PUBLISH_REF}")"
    if test -n "$REMOTE_PUBLISH_REF"; then
@@ -101,10 +129,21 @@ description: |
 5. 분리 worktree 사용했다면 기본 worktree에서 제거
    ```bash
    set -euo pipefail
+   case "${PR_NUMBER:-}" in
+     ""|*[!0-9]*) printf 'PR_NUMBER must contain decimal digits only\n' >&2; exit 1 ;;
+   esac
    case "${ISSUE_NUMBER:-}" in
      ""|*[!0-9]*) printf 'ISSUE_NUMBER must contain decimal digits only\n' >&2; exit 1 ;;
    esac
-   readonly ISSUE_NUMBER
+   readonly PR_NUMBER ISSUE_NUMBER
+   read -r PR_STATE PR_BASE_REF PR_HEAD_REF PR_HEAD_REPOSITORY < <(
+     gh pr view "$PR_NUMBER" --json state,baseRefName,headRefName,headRepository \
+       --jq '[.state, .baseRefName, .headRefName, .headRepository.nameWithOwner] | @tsv'
+   )
+   test "$PR_STATE" = "MERGED"
+   test "$PR_BASE_REF" = "devel"
+   test "$PR_HEAD_REF" = "publish/task${ISSUE_NUMBER}"
+   test "$PR_HEAD_REPOSITORY" = "jinzer0/GPUWatch"
    if test -n "${TASK_WORKTREE_TO_REMOVE:-}"; then
      CURRENT_ROOT="$(git rev-parse --show-toplevel)"
      CURRENT_COMMON_DIR="$(git rev-parse --path-format=absolute --git-common-dir)"
@@ -120,10 +159,21 @@ description: |
 6. 로컬 작업 브랜치 삭제 (재사용 가능성 없을 때만)
    ```bash
    set -euo pipefail
+   case "${PR_NUMBER:-}" in
+     ""|*[!0-9]*) printf 'PR_NUMBER must contain decimal digits only\n' >&2; exit 1 ;;
+   esac
    case "${ISSUE_NUMBER:-}" in
      ""|*[!0-9]*) printf 'ISSUE_NUMBER must contain decimal digits only\n' >&2; exit 1 ;;
    esac
-   readonly ISSUE_NUMBER
+   readonly PR_NUMBER ISSUE_NUMBER
+   read -r PR_STATE PR_BASE_REF PR_HEAD_REF PR_HEAD_REPOSITORY < <(
+     gh pr view "$PR_NUMBER" --json state,baseRefName,headRefName,headRepository \
+       --jq '[.state, .baseRefName, .headRefName, .headRepository.nameWithOwner] | @tsv'
+   )
+   test "$PR_STATE" = "MERGED"
+   test "$PR_BASE_REF" = "devel"
+   test "$PR_HEAD_REF" = "publish/task${ISSUE_NUMBER}"
+   test "$PR_HEAD_REPOSITORY" = "jinzer0/GPUWatch"
    if git show-ref --verify --quiet "refs/heads/local/task${ISSUE_NUMBER}"; then
      git branch -d "local/task${ISSUE_NUMBER}"
    fi
@@ -132,10 +182,21 @@ description: |
 7. 이슈 close (앞 단계가 모두 성공했고 자동 close되지 않은 경우만)
    ```bash
    set -euo pipefail
+   case "${PR_NUMBER:-}" in
+     ""|*[!0-9]*) printf 'PR_NUMBER must contain decimal digits only\n' >&2; exit 1 ;;
+   esac
    case "${ISSUE_NUMBER:-}" in
      ""|*[!0-9]*) printf 'ISSUE_NUMBER must contain decimal digits only\n' >&2; exit 1 ;;
    esac
-   readonly ISSUE_NUMBER
+   readonly PR_NUMBER ISSUE_NUMBER
+   read -r PR_STATE PR_BASE_REF PR_HEAD_REF PR_HEAD_REPOSITORY < <(
+     gh pr view "$PR_NUMBER" --json state,baseRefName,headRefName,headRepository \
+       --jq '[.state, .baseRefName, .headRefName, .headRepository.nameWithOwner] | @tsv'
+   )
+   test "$PR_STATE" = "MERGED"
+   test "$PR_BASE_REF" = "devel"
+   test "$PR_HEAD_REF" = "publish/task${ISSUE_NUMBER}"
+   test "$PR_HEAD_REPOSITORY" = "jinzer0/GPUWatch"
    if test "$(gh issue view "$ISSUE_NUMBER" --json state --jq .state)" = "OPEN"; then
      gh issue close "$ISSUE_NUMBER"
    fi
