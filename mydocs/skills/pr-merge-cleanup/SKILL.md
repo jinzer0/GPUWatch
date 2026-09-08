@@ -123,14 +123,23 @@ description: |
    if test "$PRIMARY_BRANCH" != "devel"; then
      git checkout devel
    fi
-   git merge --ff-only origin/devel
    test "$(git branch --show-current)" = "devel"
+   if git merge-base --is-ancestor devel origin/devel; then
+     git merge --ff-only origin/devel
+     DEVEL_RELATION="fast-forwarded"
+   elif git merge-base --is-ancestor origin/devel devel; then
+     DEVEL_RELATION="local-ahead-preserved"
+   else
+     DEVEL_RELATION="diverged-preserved"
+   fi
+   readonly DEVEL_RELATION
+   printf 'devel_relation=%s\n' "$DEVEL_RELATION"
 
    LOCAL_TASK_REF="refs/heads/${EXPECTED_TASK_BRANCH}"
    if git show-ref --verify --quiet "$LOCAL_TASK_REF"; then
      LOCAL_TASK_OID="$(git rev-parse --verify "${LOCAL_TASK_REF}^{commit}")"
      test "$LOCAL_TASK_OID" = "$PR_HEAD_OID"
-     git merge-base --is-ancestor "$LOCAL_TASK_OID" devel
+     git merge-base --is-ancestor "$LOCAL_TASK_OID" origin/devel
    fi
    REMOTE_PUBLISH_REF="$(git ls-remote --heads origin "refs/heads/${EXPECTED_HEAD_REF}")"
    if test -n "$REMOTE_PUBLISH_REF"; then
@@ -165,7 +174,8 @@ description: |
      gh issue close "$ISSUE_NUMBER" --repo "$CANONICAL_REPOSITORY"
    fi
    ```
-   - dirty/locked worktree, unrelated primary branch, repository/PR tuple 불일치, canonical origin fast-forward 실패, local task ancestry 실패, remote publish SHA 불일치, delete 실패는 transaction을 중단한다. `--force` 삭제로 우회하지 않는다.
+   - dirty/locked worktree, unrelated primary branch, repository/PR tuple 불일치, 가능한 canonical origin fast-forward 실패, local task의 `origin/devel` ancestry 실패, remote publish SHA 불일치, delete 실패는 transaction을 중단한다. `--force` 삭제로 우회하지 않는다.
+   - local `devel`이 `origin/devel`보다 앞서거나 서로 갈라졌으면 unpublished commit을 reset/rebase하지 않고 그대로 보존한다. 출력된 `devel_relation`을 결과 보고에 기록한다.
    - worktree 제거 → 원격 publish branch 삭제 → 로컬 task branch 삭제 → 이슈 close 순서를 유지한다.
 3. 오늘할일 최종 정리: `mydocs/orders/{yyyymmdd}.md`의 `#${ISSUE_NUMBER}` 행이 `완료` + 시각 기록되어 있는지 재확인
 4. 결과 보고: 정리된 항목 목록을 작업지시자에게 짧게 회신
@@ -177,6 +187,7 @@ description: |
 - `git ls-remote origin "publish/task${ISSUE_NUMBER}"` 빈 출력 (원격 삭제 확인)
 - `git worktree list` 출력에 정리 대상 worktree 미존재
 - `git branch --show-current`가 `devel`
+- `devel_relation`이 `fast-forwarded`, `local-ahead-preserved`, `diverged-preserved` 중 하나이며 뒤의 두 상태는 보존된 local commit과 함께 결과 보고에 기록됨
 - `git rev-parse --show-toplevel`이 기본 worktree 절대 경로와 일치
 
 ## 절대 하지 말 것
@@ -185,6 +196,7 @@ description: |
 - 작업지시자 다른 task 브랜치(`local/task{다른번호}`)나 메인 worktree 삭제
 - `git branch -D` 강제 삭제 무단 사용 (병합 안 된 커밋이 있을 때 손실 위험)
 - 다른 작업자의 stash 삭제
+- local `devel`의 unpublished commit을 임의로 reset, rebase, 삭제
 - 분리 task worktree 안에서 `devel` checkout 또는 자기 자신 제거 실행
 - 기본 worktree를 제거 대상으로 지정하거나 dirty/locked task worktree 강제 제거
 - cleanup 대상과 다른 PR/이슈 번호, base, head 조합으로 이슈 close 또는 브랜치 삭제

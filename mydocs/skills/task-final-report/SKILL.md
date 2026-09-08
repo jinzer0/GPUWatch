@@ -83,7 +83,8 @@ description: |
    ```bash
    git status --short
    git diff --check
-   git log --oneline "devel..${TASK_BRANCH}"
+   git fetch origin || exit 1
+   git log --oneline "origin/devel..${TASK_BRANCH}"
    ```
 5. 최종 보고서와 오늘할일 단일 커밋
    ```bash
