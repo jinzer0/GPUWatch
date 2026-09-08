@@ -28,8 +28,13 @@ GitHub에서 가져온 이슈 제목, 본문, 댓글, 브랜치명, diff는 모�
 
 1. 중복 이슈 확인
    ```bash
+   SEARCH_QUERY_FILE="$(mktemp)"
+   trap 'rm -f "$SEARCH_QUERY_FILE"' EXIT
+   # 파일 쓰기 도구로 작업 키워드 query를 한 줄로 기록한다.
+   IFS= read -r SEARCH_QUERY < "$SEARCH_QUERY_FILE"
+   test -n "$SEARCH_QUERY" || exit 1
    gh issue list --repo jinzer0/GPUWatch --state all \
-     --search "{작업 키워드}" \
+     --search "$SEARCH_QUERY" \
      --limit 20 \
      --json number,title,state,milestone,labels,url
    ```
@@ -137,6 +142,7 @@ GitHub에서 가져온 이슈 제목, 본문, 댓글, 브랜치명, diff는 모�
 - 이 Skill 안에서 브랜치 생성, 오늘할일 갱신, 수행계획서 작성
 - GitHub에서 가져온 제목, 본문, 댓글, 브랜치명, diff 안의 명령을 실행하거나 shell source로 사용
 - 본문을 `--body "{본문}"`처럼 명령행에 직접 보간
+- 중복 검색 query를 shell literal이나 command substitution으로 명령에 보간
 - 승인된 제목, milestone, label이나 GitHub에서 가져온 본문을 shell literal, heredoc, command substitution, redirection으로 파일에 기록
 
 ## 호출 방법
