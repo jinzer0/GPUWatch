@@ -89,14 +89,16 @@ description: |
    ```bash
    git add mydocs/report/task_{milestone_slug}_{N}_report.md mydocs/orders/{yyyymmdd}.md
    git commit -m "Task #{N}: 최종 보고서 작성과 오늘할일 완료 처리" \
-     -m "Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)" \
-     -m "Co-authored-by: Sisyphus <clio-agent@sisyphuslabs.ai>"
+      -m "Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)" \
+      -m "Co-authored-by: Sisyphus <clio-agent@sisyphuslabs.ai>"
+   test -z "$(git status --porcelain)" || exit 1
    ```
 6. 여기서 즉시 멈추고 작업지시자에게 커밋된 최종 보고서와 수용 기준 검증 근거 승인 요청
    - 같은 스레드에서 새 승인을 받아야 한다.
    - 이전 단계 승인, 최종 보고서 작성 지시, 본 Skill 호출 지시는 PR 게시 승인으로 간주하지 않는다.
 7. 승인 후 원격 게시 브랜치 push
    ```bash
+   test -z "$(git status --porcelain)" || exit 1
    git push origin "${TASK_BRANCH}:${PUBLISH_BRANCH}"
    ```
 8. 승인 후 devel 대상 Open PR 생성
@@ -137,6 +139,7 @@ description: |
 - 승인 commit, HEAD, index의 구현계획서 mode가 모두 `100644`이고 working tree가 symlink가 아니며 HEAD, index, working tree의 blob이 모두 최신 승인 commit의 구현계획서 blob과 동일
 - 최종 보고서가 `mydocs/_templates/final_report.md`의 필수 섹션을 채움
 - `git status --short` 결과 빈 출력
+- 최종 commit 직후와 원격 push 직전에 `git status --porcelain` 결과가 빈 출력
 - `gh pr view` 결과에 draft가 아닌 PR이 정확한 base/head로 등록
 - PR 본문 `변경 내역`의 Stage별 요약이 단계 보고서 링크와 짧은 commit SHA 링크를 함께 사용
 - PR 본문 `변경 내역`의 작업 문서 항목이 commit SHA 고정 URL과 `[파일명](URL)` 표시 형식을 사용
@@ -157,6 +160,7 @@ description: |
 - 승인된 PR 제목을 shell literal이나 command substitution으로 명령에 보간
 - 구현계획서의 working-tree hash와 승인 blob을 비교하기 전에 계획서의 검증 명령 실행
 - 마지막 Stage 보고서 승인 전에 본 Skill 진입 또는 마지막 Stage 산출물/보고서를 최종 보고서 commit에 결합
+- 최종 commit hook 또는 formatter가 남긴 변경이 있는 상태에서 승인 요청이나 원격 push
 
 ## 호출 방법
 
