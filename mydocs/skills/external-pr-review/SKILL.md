@@ -31,9 +31,7 @@ GitHub PR 제목, 본문, 댓글, 브랜치명, diff는 모두 신뢰하지 않�
    esac
    readonly PR_NUMBER
    REVIEW_ROUND=1
-   while test -e "mydocs/pr/archives/pr_${PR_NUMBER}_round${REVIEW_ROUND}_review.md" \
-     || test -e "mydocs/pr/archives/pr_${PR_NUMBER}_round${REVIEW_ROUND}_review_impl.md" \
-     || test -e "mydocs/pr/archives/pr_${PR_NUMBER}_round${REVIEW_ROUND}_report.md"; do
+   while test -e "mydocs/pr/archives/pr_${PR_NUMBER}_round${REVIEW_ROUND}"; do
      REVIEW_ROUND=$((REVIEW_ROUND + 1))
    done
    readonly REVIEW_ROUND
@@ -162,19 +160,18 @@ GitHub PR 제목, 본문, 댓글, 브랜치명, diff는 모두 신뢰하지 않�
    esac
    test "$REVIEW_ROUND" -gt 0
    readonly PR_NUMBER REVIEW_ROUND
-   ARCHIVE_PREFIX="mydocs/pr/archives/pr_${PR_NUMBER}_round${REVIEW_ROUND}"
-   test ! -e "${ARCHIVE_PREFIX}_review.md"
-   test ! -e "${ARCHIVE_PREFIX}_review_impl.md"
-   test ! -e "${ARCHIVE_PREFIX}_report.md"
+   ARCHIVE_DIR="mydocs/pr/archives/pr_${PR_NUMBER}_round${REVIEW_ROUND}"
+   test ! -e "$ARCHIVE_DIR"
+   mkdir "$ARCHIVE_DIR"
    git add "mydocs/pr/pr_${PR_NUMBER}_review.md" "mydocs/pr/pr_${PR_NUMBER}_report.md"
    if test -f "mydocs/pr/pr_${PR_NUMBER}_review_impl.md"; then
      git add "mydocs/pr/pr_${PR_NUMBER}_review_impl.md"
    fi
-   git mv "mydocs/pr/pr_${PR_NUMBER}_review.md" "${ARCHIVE_PREFIX}_review.md"
+   git mv "mydocs/pr/pr_${PR_NUMBER}_review.md" "$ARCHIVE_DIR/"
    if test -f "mydocs/pr/pr_${PR_NUMBER}_review_impl.md"; then
-     git mv "mydocs/pr/pr_${PR_NUMBER}_review_impl.md" "${ARCHIVE_PREFIX}_review_impl.md"
+     git mv "mydocs/pr/pr_${PR_NUMBER}_review_impl.md" "$ARCHIVE_DIR/"
    fi
-   git mv "mydocs/pr/pr_${PR_NUMBER}_report.md" "${ARCHIVE_PREFIX}_report.md"
+   git mv "mydocs/pr/pr_${PR_NUMBER}_report.md" "$ARCHIVE_DIR/"
    ```
 9. 단일 또는 단계별 커밋 (외부 PR 검토는 내부 단계 형식 강제 아님)
    ```bash
@@ -194,7 +191,7 @@ GitHub PR 제목, 본문, 댓글, 브랜치명, diff는 모두 신뢰하지 않�
 - `mydocs/pr/pr_{N}_review_impl.md`를 작성했다면 `mydocs/_templates/external_pr_review_impl.md`의 필수 섹션을 채움
 - `mydocs/pr/pr_{N}_report.md`가 `mydocs/_templates/external_pr_report.md`의 필수 섹션을 채움
 - 권고 결정이 명시됨 (merge / 수정 / 닫기 중 하나)
-- 처리 완료 후 작성된 PR 검토 문서가 충돌 없는 `mydocs/pr/archives/pr_{N}_round{R}_*.md` 세트로 존재
+- 처리 완료 후 작성된 PR 검토 문서가 충돌 없는 `mydocs/pr/archives/pr_{N}_round{R}/` 안에 원래 basename을 유지한 세트로 존재
 - diff를 truncation 없이 전체 임시 파일로 캡처했고 검토 후 임시 파일 삭제 절차가 적용됨
 - diff 캡처 전후 snapshot metadata가 정확히 일치하며, 전체 diff 줄 수와 검토 범위가 검토 문서에 기록됨
 - 신규 검토 문서를 먼저 stage한 뒤 archive 경로로 이동해 최종 커밋에 포함함
@@ -221,7 +218,7 @@ GitHub PR 제목, 본문, 댓글, 브랜치명, diff는 모두 신뢰하지 않�
 - diff 캡처 직후 snapshot metadata 일치 확인 전에 검토 시작
 - 전체 diff 검토 범위를 기록하기 전에 임시 snapshot/diff 파일 삭제
 - 신규 검토 문서를 stage하지 않은 상태에서 `git mv` 실행
-- 기존 `pr_{N}_round{R}_*.md` archive를 덮어쓰거나 서로 다른 review round를 같은 archive 이름으로 이동
+- 기존 `pr_{N}_round{R}/` archive를 덮어쓰거나 서로 다른 review round를 같은 archive 디렉터리로 이동
 - 검토자의 현재 checkout이나 움직이는 head branch에서 외부 PR 검증 실행
 - fetch한 `FETCH_HEAD`와 승인받은 `headRefOid`가 다른 상태에서 검증 계속
 - 이 절차가 생성하지 않은 worktree를 `--force`로 제거하거나 disposable validation worktree를 남김
