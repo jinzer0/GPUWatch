@@ -29,7 +29,8 @@
 
 ## 명명 규칙
 
-- 마일스톤: `M{버전}` (예: M100=v1.0.0, M05x=v0.5.x). 문서 파일명은 `m{숫자}` 소문자 (예: `m100`)
+- `milestone_name`: GitHub milestone title 그대로 사용하며 `^M[0-9]+x?$`에 맞아야 한다. 예: `M100`, `M05x`
+- `milestone_slug`: `milestone_name`의 앞 `M`만 소문자로 바꾸고 숫자와 선택적 `x`는 보존한다. 예: `M100` -> `m100`, `M05x` -> `m05x`
 - 브랜치: `local/task{이슈번호}` (작업), `publish/task{이슈번호}` (`devel` 대상 PR 게시용)
 - 커밋 메시지:
   - 기존 상태의 이슈 없는 bootstrap 커밋은 기존 영어 Conventional Commit 형식(`feat(electron): ...`, `refactor(core): ...`, `docs(electron): ...`)을 따른다.
@@ -37,7 +38,7 @@
   - 단계: `Task #{번호} Stage {N}: 내용`
   - 하위 단계: `Task #{번호} [Stage {N.M}]: 내용`
   - 보고서 묶음: `Task #{번호} Stage {N} + 최종 보고서: 내용`
-- 문서 파일명: `task_{milestone}_{이슈번호}{_impl|_stage{N}|_report}?.md`. 신규 문서는 마일스톤 포함 형식 강제. 상세: [`document_structure_guide.md`](mydocs/manual/document_structure_guide.md)
+- 문서 파일명: `task_{milestone_slug}_{이슈번호}{_impl|_stage{N}|_report}?.md`. 신규 문서는 마일스톤 포함 형식 강제. 상세: [`document_structure_guide.md`](mydocs/manual/document_structure_guide.md)
 - 모든 문서는 이 저장소에 선택된 Hyper-Waterfall locale로 작성한다.
 
 ## 핵심 강제 규칙 (변경 전 매뉴얼 확인 필수)

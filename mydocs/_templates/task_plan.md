@@ -1,9 +1,9 @@
 # 수행계획서 템플릿
 
-이 파일은 `mydocs/plans/task_{milestone}_{issue}.md` 작성용 중앙 템플릿이다. 수행계획서는 구현 전에 작업 목적, 범위, 설계 방향, 검증 기준을 고정하고 작업지시자 승인을 받기 위한 문서다.
+이 파일은 `mydocs/plans/task_{milestone_slug}_{issue}.md` 작성용 중앙 템플릿이다. 수행계획서는 구현 전에 작업 목적, 범위, 설계 방향, 검증 기준을 고정하고 작업지시자 승인을 받기 위한 문서다.
 
 GitHub Issue: [#{issue}](https://github.com/jinzer0/GPUWatch/issues/{issue})
-마일스톤: M{milestone}
+마일스톤: {milestone_name}
 
 ## 목적
 
@@ -51,10 +51,10 @@ Hyper-Waterfall은 공식 문서 루트 이름을 고정하지 않는다. 대상
 이번 task 산출물:
 
 - `mydocs/orders/{yyyymmdd}.md`
-- `mydocs/plans/task_{milestone}_{issue}.md`
-- `mydocs/plans/task_{milestone}_{issue}_impl.md`
-- `mydocs/working/task_{milestone}_{issue}_stage{N}.md`
-- `mydocs/report/task_{milestone}_{issue}_report.md`
+- `mydocs/plans/task_{milestone_slug}_{issue}.md`
+- `mydocs/plans/task_{milestone_slug}_{issue}_impl.md`
+- `mydocs/working/task_{milestone_slug}_{issue}_stage{N}.md`
+- `mydocs/report/task_{milestone_slug}_{issue}_report.md`
 
 ## 잠정 단계
 
@@ -95,4 +95,4 @@ Hyper-Waterfall은 공식 문서 루트 이름을 고정하지 않는다. 대상
 
 - {작업지시자가 승인해야 할 범위, 설계 방향, 제외 항목}
 
-승인되면 `task_{milestone}_{issue}_impl.md`에서 단계별 산출물, 검증 명령, 커밋 메시지를 구체화한다.
+승인되면 `task_{milestone_slug}_{issue}_impl.md`에서 단계별 산출물, 검증 명령, 커밋 메시지를 구체화한다.

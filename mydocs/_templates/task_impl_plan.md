@@ -1,10 +1,10 @@
 # 구현계획서 템플릿
 
-이 파일은 `mydocs/plans/task_{milestone}_{issue}_impl.md` 작성용 중앙 템플릿이다. 구현계획서는 승인된 수행계획을 실제 Stage 단위 산출물, 검증 명령, 커밋 메시지로 고정하는 문서다.
+이 파일은 `mydocs/plans/task_{milestone_slug}_{issue}_impl.md` 작성용 중앙 템플릿이다. 구현계획서는 승인된 수행계획을 실제 Stage 단위 산출물, 검증 명령, 커밋 메시지로 고정하는 문서다.
 
-수행계획서: [`task_{milestone}_{issue}.md`](task_{milestone}_{issue}.md)
+수행계획서: [`task_{milestone_slug}_{issue}.md`](task_{milestone_slug}_{issue}.md)
 GitHub Issue: [#{issue}](https://github.com/jinzer0/GPUWatch/issues/{issue})
-마일스톤: M{milestone}
+마일스톤: {milestone_name}
 
 ## 단계 개요
 
@@ -106,7 +106,7 @@ Task #{issue} Stage 3: {핵심 내용 요약}
 
 ## 커밋
 
-- 단계 커밋은 단계 산출물과 `mydocs/working/task_{milestone}_{issue}_stage{N}.md`를 함께 묶는다.
+- 단계 커밋은 단계 산출물과 `mydocs/working/task_{milestone_slug}_{issue}_stage{N}.md`를 함께 묶는다.
 - 커밋 메시지는 `Task #{issue} Stage {N}: {핵심 내용 요약}` 형식을 따른다.
 
 ## 단계 의존성
