@@ -1,6 +1,6 @@
 # 외부 PR 검토 구현계획서 템플릿
 
-이 파일은 `mydocs/pr/pr_{번호}_review_impl.md` 작성용 중앙 템플릿이다. 외부 PR 검토 중 본 저장소에서 추가 검증, 보조 패치, 재현 절차 정리가 필요할 때 사용한다. 내부 task의 `task_{milestone}_{issue}_impl.md` 형식을 외부 PR에 강제하지 않는다.
+이 파일은 `mydocs/pr/pr_{번호}_review_impl.md` 작성용 중앙 템플릿이다. 외부 PR 검토 중 본 저장소에서 추가 검증, 보조 패치, 재현 절차 정리가 필요할 때 사용한다. 내부 task의 `task_{milestone_slug}_{issue}_impl.md` 형식을 외부 PR에 강제하지 않는다.
 
 ## 사용 위치
 

@@ -39,9 +39,9 @@ raw URL 대신 `[파일명](https://github.com/jinzer0/GPUWatch/blob/{head_sha}/
 해당 없는 항목은 삭제합니다.
 -->
 
-- 수행 계획서: [task_m{milestone}_{issue}.md](https://github.com/jinzer0/GPUWatch/blob/{head_sha}/mydocs/plans/task_m{milestone}_{issue}.md)
-- 구현 계획서: [task_m{milestone}_{issue}_impl.md](https://github.com/jinzer0/GPUWatch/blob/{head_sha}/mydocs/plans/task_m{milestone}_{issue}_impl.md)
-- 최종 보고서: [task_m{milestone}_{issue}_report.md](https://github.com/jinzer0/GPUWatch/blob/{head_sha}/mydocs/report/task_m{milestone}_{issue}_report.md)
+- 수행 계획서: [task_{milestone_slug}_{issue}.md](https://github.com/jinzer0/GPUWatch/blob/{head_sha}/mydocs/plans/task_{milestone_slug}_{issue}.md)
+- 구현 계획서: [task_{milestone_slug}_{issue}_impl.md](https://github.com/jinzer0/GPUWatch/blob/{head_sha}/mydocs/plans/task_{milestone_slug}_{issue}_impl.md)
+- 최종 보고서: [task_{milestone_slug}_{issue}_report.md](https://github.com/jinzer0/GPUWatch/blob/{head_sha}/mydocs/report/task_{milestone_slug}_{issue}_report.md)
 
 ## 핵심 리뷰 포인트
 

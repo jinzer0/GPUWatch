@@ -1,9 +1,9 @@
 # 단계 보고서 템플릿
 
-이 파일은 `mydocs/working/task_{milestone}_{issue}_stage{stage}.md` 작성용 중앙 템플릿이다. 단계 보고서는 한 Stage의 구현, 검증, 잔여 위험, 다음 단계 영향을 기록하고 다음 단계 진입 승인을 받기 위한 문서다.
+이 파일은 `mydocs/working/task_{milestone_slug}_{issue}_stage{stage}.md` 작성용 중앙 템플릿이다. 단계 보고서는 한 Stage의 구현, 검증, 잔여 위험, 다음 단계 영향을 기록하고 다음 단계 진입 승인을 받기 위한 문서다.
 
 GitHub Issue: [#{issue}](https://github.com/jinzer0/GPUWatch/issues/{issue})
-구현계획서: [`task_{milestone}_{issue}_impl.md`](../plans/task_{milestone}_{issue}_impl.md)
+구현계획서: [`task_{milestone_slug}_{issue}_impl.md`](../plans/task_{milestone_slug}_{issue}_impl.md)
 Stage: {stage}
 
 ## 단계 목적
