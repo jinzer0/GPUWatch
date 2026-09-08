@@ -1,82 +1,58 @@
 # 외부 PR 검토 템플릿
 
-이 파일은 `mydocs/pr/pr_{번호}_review.md` 작성용 중앙 템플릿이다. 외부 기여자 PR 검토의 초기 판단, 영향 범위, 검증 계획, 권고를 기록하고 작업지시자에게 검토 방향 승인을 받기 위한 문서다.
+`mydocs/pr/pr_{번호}_review.md`의 중앙 템플릿이다. 이 문서는 GitHub read-only 검토 증거, findings, 권고를 기록한다.
 
-## 사용 위치
+## 사용 위치, 작성 시점, 언어
 
-- 실제 파일: `mydocs/pr/pr_{번호}_review.md`
-- 작성 시점: 외부 기여자 PR 메타데이터와 diff를 확인한 직후
-- 작성 언어: 이 저장소에 선택된 Hyper-Waterfall locale을 따른다.
+- 실제 파일 위치: `mydocs/pr/pr_{번호}_review.md`
+- 작성 시점: 외부 PR의 immutable snapshot과 전체 diff를 수집한 뒤, 최종 보고서 작성 전에 작성한다.
+- 작성 언어: 저장소에 선택된 Hyper-Waterfall locale을 사용한다.
+
+## 필수 섹션
+
+- `PR 정보`, `불변 Review Snapshot`, `Findings, 검증, 권고`
+- snapshot identity, complete pagination, diff digest/범위, cleanup 또는 보존 상태를 빠짐없이 기록한다.
+
+## 선택 섹션
+
+- 재검토가 필요하면 검토 round별 변경점과 게시하지 않은 feedback 초안을 추가할 수 있다.
+
+## 검증 또는 승인 기준
+
+- `before`/`after` canonical snapshot이 byte-identical하고 immutable diff의 SHA-256, bytes, lines, 전체 읽기 범위가 일치해야 한다.
+- 이 문서 작성은 GitHub mutation 승인이 아니며 review/comment/request-changes/approve/merge/close를 허용하지 않는다.
+
+## 허용 대상과 고정 용어
+
+- 대상 repository: `github.com/jinzer0/GPUWatch`, ID `1256824919`
+- 허용 PR: `OPEN`, non-draft, base `devel`, direct external fork (`isFork=true`, `parentId=1256824919`)
+- snapshot: `review snapshot schema v2`
+- GitHub review, request-changes, comment, approve, merge, close는 이 문서와 Skill의 범위 밖이다.
 
 ## PR 정보
 
-- PR: #{번호}
-- 검토 round: {양의 정수}
-- 제목: {PR 제목}
-- 작성자: {작성자}
-- base/head: `{base}` ← `{head}`
-- head repository: `{fork 또는 same repo}`
-- 상태: {OPEN/MERGED/CLOSED}
-- 연결 이슈: {있으면 링크, 없으면 없음}
+- PR / 검토 round: #{번호} / {양의 정수}
+- 제목 / 작성자: {title} / {author}
+- state / draft / base/head: `OPEN` / `false` / `devel` ← `{head}`
+- labels: {정렬된 labels}
 
-## 검토 Snapshot
+## 불변 Review Snapshot
 
-- snapshot schema version: `1`
-- base host: `github.com`
-- base repository: `{owner/repository}`
-- base repository ID: `{GitHub repository numeric ID}`
-- captured snapshot SHA-256: `{승인 전 캡처한 64자 소문자 16진수 digest}`
-- number: {PR 번호}
-- state: {OPEN/MERGED/CLOSED}
-- baseRefName: `{base branch}`
-- baseRefOid: `{완전히 검토한 base commit SHA}`
-- headRepository.nameWithOwner: `{owner/repository}`
-- headRefName: `{head branch}`
-- headRefOid: `{완전히 검토한 commit SHA}`
-- mergeable / mergeStateStatus: `{MERGEABLE 등}` / `{CLEAN 등}`
-- reviewDecision: `{APPROVED/CHANGES_REQUESTED/REVIEW_REQUIRED/없음}`
-- check runs / commit statuses: {pending/failed/passing/no checks와 핵심 check 요약}
-- issue comments / reviews / review comments: {기존 검토 피드백과 답변 요약}
-- reviewThreads: {resolved/unresolved/outdated 상태와 답글 검토 결과}
-- complete pagination: {issue comments/reviews/review comments/review threads/check runs/commit statuses OK/MISS}
-- 캡처 전·후 canonical snapshot과 SHA-256 일치: {OK/MISS}
-- 전체 diff 줄 수: {N}
-- 검토 범위: `{첫 줄}-{마지막 줄}` / `{전체 N줄}`
+- captured snapshot SHA-256: `{64자 digest}`
+- repository / fork / base / diff-base / head identity: {각 ID, ref, 40자 OID}
+- canonical origin, exact `devel`/pull ref fetch OID compare: {OK/MISS}
+- diff: `git diff --no-ext-diff --no-textconv --binary --full-index {diffBaseOid} {headOid}`
+- diff SHA-256 / bytes / lines / read range: `{digest}` / `{N}` / `{N}` / `0-{N-1}`
+- title/body/author/state/draft/labels 및 `requestedReviewers`: {canonical snapshot 값}
+- complete pagination: issue comments / reviews / review comments-replies / review threads / check runs / commit statuses 모두 OK/MISS
+- check-run `total_count`와 수집 수 일치: {OK/MISS}
+- before/after canonical snapshot byte equality: {OK/MISS}
+- root/ref cleanup 또는 abandonment: {OK/MISS/보존 중}
 
-## 변경 요약
+## Findings, 검증, 권고
 
-- {PR이 바꾸는 핵심 내용}
-
-## 영향 범위와 호환성
-
-| 영역 | 영향 | 호환성 판단 |
-|---|---|---|
-| {영역} | {영향} | {호환/주의/위험} |
-
-## 코드/문서 점검 결과
-
-- {검토 중 발견한 주요 사항}
-
-## 검증 계획
-
-- 로컬 detached worktree: {contributor-controlled code를 실행하지 않는 정적 검토 또는 없음}
-- GitHub-hosted `pull_request` CI: {maintainer-controlled safe check 또는 없음}
-- 실행 검증 한계: {안전한 CI가 없으면 미수행 사유}
-
-```bash
-{필요한 검증 명령}
-```
-
-- {수동 확인 항목}
-
-## 권고
-
-권고: {merge / 수정 요청 / 닫기}
-
-근거:
-
-- {판단 근거}
-
-## 작업지시자 승인 요청
-
-- 위 검토 방향, `captured snapshot SHA-256`, 권고에 동의하면 해당 exact digest를 승인한다고 명시한다.
+- findings: {bug/risk/doc/note}
+- 로컬 검증은 contributor code를 실행하지 않는 정적 diff 검토만 수행: {결과}
+- GitHub-hosted safe CI 결과 또는 미수행 사유: {결과}
+- 권고: {merge / 수정 요청 / 닫기}
+- 선택적 제안 feedback text: {GitHub에 게시하지 않는 제안문 또는 없음}

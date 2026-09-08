@@ -1,83 +1,56 @@
 # 외부 PR 최종 보고서 템플릿
 
-이 파일은 `mydocs/pr/pr_{번호}_report.md` 작성용 중앙 템플릿이다. 외부 PR 검토의 최종 판단, 실행한 검증 결과, GitHub PR 코멘트 또는 리뷰 본문을 기록하는 문서다.
+`mydocs/pr/pr_{번호}_report.md`의 중앙 템플릿이다. read-only 외부 PR 검토의 증거와 최종 권고를 기록한다.
 
-## 사용 위치
+## 사용 위치, 작성 시점, 언어
 
-- 실제 파일: `mydocs/pr/pr_{번호}_report.md`
-- 작성 시점: 외부 PR 검토와 필요한 검증을 마친 뒤, GitHub PR에 코멘트/리뷰를 등록하기 전
-- 작성 언어: 이 저장소에 선택된 Hyper-Waterfall locale을 따른다.
+- 실제 파일 위치: `mydocs/pr/pr_{번호}_report.md`
+- 작성 시점: 외부 PR 검토 findings와 검증 한계를 확정한 뒤 archive 전에 작성한다.
+- 작성 언어: 저장소에 선택된 Hyper-Waterfall locale을 사용한다.
 
-## 검토 결과 요약
+## 필수 섹션
 
-- PR: #{번호}
-- 검토 round: {양의 정수}
-- 최종 권고: {merge / 수정 요청 / 닫기}
+- `결과 요약`, `Immutable Evidence`, `Findings와 검증`, `권고와 선택적 Feedback`
+- 최종 권고의 근거와 수행하지 않은 검증을 명시한다.
+
+## 선택 섹션
+
+- 후속 검토 조건과 GitHub에 게시하지 않은 feedback 초안을 추가할 수 있다.
+
+## 검증 또는 승인 기준
+
+- review 문서와 같은 snapshot/diff identity를 사용하고 cleanup 또는 explicit abandonment 결과까지 기록해야 한다.
+- archive commit은 별도 same-thread 승인이 필요하며 이 보고서 자체는 GitHub mutation 승인이 아니다.
+
+## 결과 요약
+
+- PR / 검토 round / 권고: #{번호} / {양의 정수} / {merge / 수정 요청 / 닫기}
 - 핵심 근거: {한 줄 요약}
+- GitHub mutation: 수행하지 않음
 
-## 승인 Snapshot
+## Immutable Evidence
 
-- snapshot schema version: `1`
-- base host: `github.com`
-- base repository: `{owner/repository}`
-- base repository ID: `{GitHub repository numeric ID}`
-- approved snapshot SHA-256: `{64자 소문자 16진수 digest}`
-- number: {PR 번호}
-- state: {OPEN/MERGED/CLOSED}
-- baseRefName: `{base branch}`
-- baseRefOid: `{승인받은 base commit SHA}`
-- headRepository.nameWithOwner: `{owner/repository}`
-- headRefName: `{head branch}`
-- headRefOid: `{승인받은 commit SHA}`
-- mergeable / mergeStateStatus: `{MERGEABLE 등}` / `{CLEAN 등}`
-- reviewDecision: `{APPROVED/CHANGES_REQUESTED/REVIEW_REQUIRED/없음}`
-- check runs / commit statuses: {pending/failed/passing/no checks와 핵심 check 요약}
-- issue comments / reviews / review comments: {승인받은 기존 검토 상태 요약}
-- reviewThreads: {승인받은 resolved/unresolved/outdated 상태와 답글 요약}
-- 전체 diff 줄 수: {N}
-- 검토 범위: `{첫 줄}-{마지막 줄}` / `{전체 N줄}`
-- current snapshot SHA-256: `{side effect 직전 재캡처한 digest}`
-- side effect 직전 digest 재검증: {OK/MISS — 재검증 시각과 approved/current digest 일치}
-- 승인받은 단일 side effect: {comment/review/request changes 중 하나 — approve/merge/close 제외}
-- approved payload SHA-256: `{승인받은 payload 원문의 digest}`
-- approved action manifest SHA-256: `{repository/PR/snapshot/head/action/payload를 결박한 digest}`
-- current action manifest SHA-256: `{side effect 직전 재생성한 digest}`
-- validation fetch commit: `{승인받은 headRefOid와 동일한 FETCH_HEAD / 로컬 정적 검토 없음}`
-- validation worktree: {detached HEAD 확인 OK/MISS/해당 없음}
-- validation cleanup: {worktree 등록 해제와 임시 디렉터리 삭제 OK/MISS/해당 없음}
+- snapshot: `review snapshot schema v2`, SHA-256 `{digest}`
+- repository: `github.com/jinzer0/GPUWatch`, ID `1256824919`
+- fork/base/diff-base/head identity와 exact fetch OID compare: {값과 OK/MISS}
+- title/body/author/state/draft/labels, `requestedReviewers`: {canonical snapshot 값}
+- issue comments, reviews, review comments-replies, review threads, check runs, commit statuses: complete pagination {OK/MISS}
+- check-run `total_count` equality: {OK/MISS}
+- immutable diff SHA-256 / bytes / lines / full read range: `{digest}` / `{N}` / `{N}` / `0-{N-1}`
+- before/after equality와 canonical origin: {OK/MISS}
+- temporary root/ref cleanup 또는 explicit abandonment: {결과}
 
-## 검증 결과
-
-- contributor-controlled code 실행 위치: {조건을 만족하는 GitHub-hosted `pull_request` CI / 미수행}
-- CI 안전 조건 확인: {OK/MISS/해당 CI 없음}
-
-실행 명령:
-
-```bash
-{검증 명령}
-```
-
-결과:
-
-- {OK/MISS와 핵심 출력 요약}
-
-## 주요 발견 사항
+## Findings와 검증
 
 | 분류 | 내용 | 처리 |
 |---|---|---|
-| {bug/risk/doc/note} | {내용} | {merge 전 수정/후속/참고} |
+| {bug/risk/doc/note} | {내용} | {권고 또는 후속} |
 
-## 최종 권고
+- contributor-controlled code 실행: 수행하지 않음
+- 안전한 GitHub-hosted CI 결과 또는 미수행 사유: {결과}
 
-{merge / 수정 요청 / 닫기 중 하나를 명확히 적고 이유를 설명한다.}
+## 권고와 선택적 Feedback
 
-## GitHub PR 코멘트 본문
-
-```md
-{GitHub PR에 남길 코멘트 또는 리뷰 본문}
-```
-
-## 작업지시자 승인 요청
-
-- 다음 exact tuple과 단일 side effect를 승인한다고 명시해야 한다: `base host`, `base repository`와 ID, PR 번호, approved snapshot SHA-256, base/head OID, action, payload SHA-256, action manifest SHA-256.
-- 위 tuple과 GitHub PR payload 원문이 모두 일치할 때만 승인된 action 하나를 등록한다. approve, merge, close는 본 자동 gate 승인 대상이 아니다.
+- 최종 권고: {merge / 수정 요청 / 닫기와 근거}
+- 제안 feedback text: {검토자가 제안만 하는 본문 또는 없음}
+- GitHub review/comment/request-changes/approve/merge/close는 이 Skill 밖의 별도 명시 절차다.

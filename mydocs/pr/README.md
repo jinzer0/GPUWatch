@@ -2,47 +2,43 @@
 
 ## 목적
 
-외부 기여자 PR 검토를 내부 task 흐름과 분리해 기록한다.
+외부 기여 PR의 read-only 검토 기록을 내부 task와 분리한다.
 
 ## 답하는 질문
 
-"이 외부 PR을 merge, 수정 요청, close 중 무엇으로 판단할 것인가?"
+"외부 PR을 어떤 immutable evidence로 검토했고 어떤 권고를 내렸는가?"
 
 ## 작성 시점
 
-외부 PR 메타데이터와 diff 확인 후, 추가 검증 전후, 최종 GitHub 코멘트 등록 전.
+외부 기여 PR의 snapshot 수집, 정적 diff 검토, 최종 권고 또는 재검토 기록이 필요할 때 작성한다.
 
-## 허용 파일명
+## 허용 파일명과 archive
 
-- `pr_{번호}_review.md`
-- `pr_{번호}_review_impl.md`
-- `pr_{번호}_report.md`
-
-처리 중인 최신 round는 위 이름을 사용한다. 처리 완료 문서는 기존 basename과 문서 간 상대 링크를 유지한 채 `pr/archives/pr_{번호}_round{양의 정수}/`로 이동한다. 같은 PR을 다시 검토하면 다음 빈 round 번호를 사용한다.
+- `pr_{번호}_review.md`, 필요 시 `pr_{번호}_review_impl.md`, `pr_{번호}_report.md`
+- 완료 기록은 `archives/pr_{번호}_round{양의 정수}/`로 옮긴다. archive는 clean index에서 시작하고 exact staged path만 허용하며 partial move는 rollback한다.
 
 ## 사용 템플릿
 
 - `mydocs/_templates/external_pr_review.md`
-- `mydocs/_templates/external_pr_review_impl.md`
+- 필요 시 `mydocs/_templates/external_pr_review_impl.md`
 - `mydocs/_templates/external_pr_report.md`
+
+## 고정 검토 계약
+
+- 대상은 `github.com/jinzer0/GPUWatch`, ID `1256824919`의 `OPEN`, non-draft, `devel` 대상 direct external fork뿐이다.
+- 증거 형식은 `review snapshot schema v2`다. repository/fork/base/diff-base/head identity, title/body/author/state/draft/labels, `requestedReviewers`, complete paginated comments/reviews/replies/threads/checks/statuses, check-run `total_count` equality, immutable diff SHA-256/bytes/lines/full read range, before/after equality를 기록한다.
+- GitHub review, request-changes, comment, approve, merge, close는 이 폴더와 external-pr-review Skill의 범위 밖이다.
 
 ## 반드시 포함할 내용
 
-- PR 정보
-- 변경 요약
-- 영향 범위
-- 코드/문서 점검 결과
-- 검증 계획 또는 결과
-- canonical review snapshot의 repository/base/head identity와 captured/approved SHA-256
-- 승인받은 단일 action, payload SHA-256, action manifest SHA-256
-- 권고
-- 작업지시자 승인 요청
+- findings, 검증 한계, 권고, 선택적 제안 feedback text, physical temp root/ref cleanup 또는 abandonment 결과를 남긴다.
 
 ## 두면 안 되는 내용
 
-- 내부 task의 `_stage{N}.md`, `_report.md` 형식 강제 적용
-- 승인 없는 merge 또는 close 결정
+- 내부 Issue 기반 task의 계획서, 단계 보고서, 최종 보고서
+- contributor-controlled code 실행 결과를 안전한 검증으로 표현한 기록
+- GitHub review/comment/request-changes/approve/merge/close를 승인하거나 수행하는 명령
 
 ## 다음 세션 AI가 복원해야 할 맥락
 
-외부 PR에 대한 현재 판단, 남은 검증, GitHub에 남길 코멘트 또는 리뷰 본문.
+검토한 exact repository/PR/OID, snapshot schema와 digest, 전체 diff 읽기 결과, findings, 검증 한계, 최종 권고, archive round를 복원해야 한다.
