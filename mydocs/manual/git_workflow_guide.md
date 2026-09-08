@@ -105,7 +105,7 @@ gh pr create --repo jinzer0/GPUWatch --base devel --head {contributor}:feature/m
 
 ### `devel`에 rebase가 필요해 보일 때
 
-기본 흐름은 `devel`을 `git pull --ff-only`로 최신화하고, 새 `local/taskN` 브랜치를 최신 `origin/devel`에서 만드는 것이다. 진행 중인 작업 브랜치를 임의로 rebase하지 않는다. PR 충돌이나 오래된 기준 브랜치 문제가 생기면 먼저 `git fetch origin`과 충돌 파일 목록을 확인하고, rebase/merge 중 어떤 방식으로 회복할지 작업지시자 승인 후 진행한다.
+기본 흐름은 `git fetch origin` 후 새 `local/taskN` 브랜치를 정확한 최신 `origin/devel`에서 만드는 것이다. local `devel`의 unpublished commit은 새 task에 포함하거나 임의로 reset/rebase하지 않는다. PR 충돌이나 오래된 기준 브랜치 문제가 생기면 충돌 파일과 local/remote branch 관계를 확인하고, rebase/merge 중 어떤 방식으로 회복할지 작업지시자 승인 후 진행한다.
 
 ### 잘못된 브랜치를 원격에 push했을 때
 
@@ -117,7 +117,7 @@ PR 생성 명령, `--body-file`, SHA 고정 GitHub blob URL, 작업 문서 링�
 
 ### merge 후에도 로컬 브랜치가 남아 있을 때
 
-PR이 `MERGED` 상태이고 base/head가 대상 task와 일치하는지 먼저 확인한다. 분리 task worktree에서 cleanup을 시작했다면 `git worktree list --porcelain`로 기본 worktree를 확인하고 그 경로로 이동한 뒤 `devel`을 최신화한다. 별도 task worktree는 기본 worktree에서 non-force로 제거하고, 원격 `publish/taskN`과 로컬 `local/taskN`을 정리한 뒤 마지막에 이슈를 close한다. 상세 명령과 중단 조건은 [`pr-merge-cleanup`](../skills/pr-merge-cleanup/SKILL.md)을 따른다.
+PR이 `MERGED` 상태이고 base/head가 대상 task와 일치하는지 먼저 확인한다. 분리 task worktree에서 cleanup을 시작했다면 `git worktree list --porcelain`로 기본 worktree를 확인하고 그 경로로 이동한 뒤 `devel`로 복귀한다. local `devel`이 안전하게 fast-forward 가능할 때만 `origin/devel`로 갱신하고, unpublished commit 때문에 앞서거나 갈라졌으면 이력을 보존해 결과에 기록한다. 별도 task worktree는 기본 worktree에서 non-force로 제거하고, 원격 `publish/taskN`과 로컬 `local/taskN`을 정리한 뒤 마지막에 이슈를 close한다. 상세 명령과 중단 조건은 [`pr-merge-cleanup`](../skills/pr-merge-cleanup/SKILL.md)을 따른다.
 
 ## 관련 매뉴얼
 

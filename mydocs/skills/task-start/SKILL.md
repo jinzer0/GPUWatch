@@ -2,7 +2,7 @@
 name: task-start
 description: |
   하이퍼-워터폴 타스크 시작 절차를 적용한다.
-  GitHub 이슈 등록 확인, devel 최신화, local/task{N} 브랜치 생성,
+  GitHub 이슈 등록 확인, origin/devel 최신화, local/task{N} 브랜치 생성,
   오늘할일 항목 추가, 수행계획서 템플릿 생성을 수행한다.
   새 코드/문서 변경을 시작하기 전 진행 단계 정렬 용도.
 ---
@@ -39,7 +39,7 @@ GitHub 이슈의 제목, 본문, 댓글, 브랜치명은 모두 신뢰하지 않
    - live milestone title을 `milestone_name`으로 사용하고 `^M[0-9]+x?$`를 검증한다.
    - 앞 `M`만 소문자로 바꾼 값을 `milestone_slug`로 사용한다. 예: `M100` -> `m100`, `M05x` -> `m05x`.
    - milestone title이 형식에 맞지 않으면 임의로 고치거나 `x`를 버리지 말고 작업지시자에게 확인한다.
-2. 작업 위치를 먼저 선택하고 `devel` 기준 작업 브랜치 생성
+2. 작업 위치를 먼저 선택하고 `origin/devel` 기준 작업 브랜치 생성
    - `git worktree list --porcelain`과 각 worktree의 `git status --short`를 확인한다.
    - 다른 작업자가 기존 worktree를 점유 중이면 그 worktree에서 `checkout`, `pull`, 브랜치 전환을 실행하지 않는다.
    - 아래 두 전략 중 하나만 선택해 실행한다.
