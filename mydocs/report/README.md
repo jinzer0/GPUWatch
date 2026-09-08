@@ -16,7 +16,7 @@ task 전체의 계획-실행-검증 사이클을 닫고 장기 보관한다.
 
 ## 허용 파일명
 
-`task_{milestone}_{이슈번호}_report.md`
+`task_{milestone_slug}_{이슈번호}_report.md`
 
 ## 사용 템플릿
 

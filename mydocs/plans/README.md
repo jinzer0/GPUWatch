@@ -16,8 +16,8 @@
 
 ## 허용 파일명
 
-- `task_{milestone}_{이슈번호}.md`
-- `task_{milestone}_{이슈번호}_impl.md`
+- `task_{milestone_slug}_{이슈번호}.md`
+- `task_{milestone_slug}_{이슈번호}_impl.md`
 
 완료된 계획서 보관이 필요하면 `plans/archives/`를 사용한다.
 

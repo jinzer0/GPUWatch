@@ -16,7 +16,7 @@
 
 ## 허용 파일명
 
-`task_{milestone}_{이슈번호}_stage{N}.md`
+`task_{milestone_slug}_{이슈번호}_stage{N}.md`
 
 ## 사용 템플릿
 
