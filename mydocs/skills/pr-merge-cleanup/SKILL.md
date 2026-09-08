@@ -118,7 +118,8 @@ description: |
      *) printf 'Primary worktree is on an unrelated branch\n' >&2; exit 1 ;;
    esac
 
-   git fetch origin --prune
+   git fetch --prune origin "refs/heads/devel:refs/remotes/origin/devel"
+   git merge-base --is-ancestor "$PR_HEAD_OID" origin/devel
    if test "$PRIMARY_BRANCH" != "devel"; then
      git checkout devel
    fi
@@ -128,6 +129,7 @@ description: |
    LOCAL_TASK_REF="refs/heads/${EXPECTED_TASK_BRANCH}"
    if git show-ref --verify --quiet "$LOCAL_TASK_REF"; then
      LOCAL_TASK_OID="$(git rev-parse --verify "${LOCAL_TASK_REF}^{commit}")"
+     test "$LOCAL_TASK_OID" = "$PR_HEAD_OID"
      git merge-base --is-ancestor "$LOCAL_TASK_OID" devel
    fi
    REMOTE_PUBLISH_REF="$(git ls-remote --heads origin "refs/heads/${EXPECTED_HEAD_REF}")"
@@ -151,7 +153,8 @@ description: |
    fi
 
    if test -n "$REMOTE_PUBLISH_REF"; then
-     git push origin --delete "$EXPECTED_HEAD_REF"
+     git push --force-with-lease="refs/heads/${EXPECTED_HEAD_REF}:${PR_HEAD_OID}" \
+       origin ":refs/heads/${EXPECTED_HEAD_REF}"
    fi
    if git show-ref --verify --quiet "refs/heads/${EXPECTED_TASK_BRANCH}"; then
      git branch -d "$EXPECTED_TASK_BRANCH"
