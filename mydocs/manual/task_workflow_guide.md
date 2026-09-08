@@ -20,19 +20,20 @@ PR 본문의 `검증` 섹션은 `.github/pull_request_template.md`의 `자동 �
 
 ## 프레임워크 lifecycle 작업
 
-Hyper-Waterfall 방법론 자체를 새 저장소에 설치하거나 기존 적용 저장소를 새 version으로 업데이트하는 작업은 먼저 framework lifecycle 판단을 거친다. 판단 기준과 일반 task 전환 규칙은 [`framework_lifecycle_guide.md`](framework_lifecycle_guide.md)를 따른다.
+Hyper-Waterfall 방법론 자체를 새 저장소에 설치하거나 기존 적용 저장소를 새 version으로 업데이트하는 작업은 먼저 framework lifecycle 판단을 거친다. GPUWatch app release와 upstream Hyper-Waterfall framework release는 분리한다. 판단 기준과 일반 task 전환 규칙은 [`framework_lifecycle_guide.md`](framework_lifecycle_guide.md)를 따른다.
 
-- 신규 적용 판단: `docs/agent-entrypoint.md`, `docs/lifecycle/adoption.md`, `templates/manifest.json`
-- 기존 업데이트 판단: `docs/agent-entrypoint.md`, `docs/lifecycle/update.md`, `.hyper-waterfall/version.json`, 목표 GitHub Release/tag의 manifest, `docs/migrations/`
-- 업데이트 PR 전환: `docs/lifecycle/update_pr.md`
+- 신규 적용 판단: upstream [`docs/agent-entrypoint.md`](https://github.com/postmelee/hyper-waterfall/blob/83836828a4da24385d0410515d35ee43946b981f/docs/agent-entrypoint.md)와 [`docs/lifecycle/adoption.md`](https://github.com/postmelee/hyper-waterfall/blob/83836828a4da24385d0410515d35ee43946b981f/docs/lifecycle/adoption.md)
+- 기존 업데이트 판단: `.hyper-waterfall/version.json`, 목표 upstream release artifact, 적용 저장소 사용자 수정 diff
+- 업데이트 PR 전환: 목표 upstream release artifact와 적용 저장소 `.github/pull_request_template.md` 설치본
 - release/tag와 update protocol: [`release_update_protocol.md`](release_update_protocol.md)
 
-Lifecycle 판단 결과가 승인되어 실제 파일 변경으로 넘어가면, 그때부터 이 매뉴얼의 일반 타스크 절차를 적용한다. 승인 전에는 manifest diff에 포함된 파일을 대상 저장소에 적용하지 않는다.
+Lifecycle 판단 결과가 승인되어 실제 파일 변경으로 넘어가면, 그때부터 이 매뉴얼의 일반 타스크 절차를 적용한다. 승인 전에는 목표 upstream artifact와 설치본 diff에 포함된 파일을 대상 저장소에 적용하지 않는다.
 
 ## 타스크 번호 관리
 
 - **GitHub Issues**를 타스크 번호로 사용한다. 자동 채번으로 중복 방지.
-- **마일스톤 표기**: `M{버전}` (예: M100=v1.0.0, M05x=v0.5.x)
+- **milestone_name**: GitHub milestone title 그대로 사용하며 `^M[0-9]+x?$`에 맞아야 한다. 예: `M100`, `M05x`
+- **milestone_slug**: `milestone_name`의 앞 `M`만 소문자로 바꾸고 숫자와 선택적 `x`는 보존한다. 예: `M100` -> `m100`, `M05x` -> `m05x`
 - 새 타스크 등록: 이슈가 없는 작업은 [`task-register`](../skills/task-register/SKILL.md) Skill로 중복 이슈, milestone, label을 확인하고 생성 전 승인을 받은 뒤 GitHub Issue를 만든다.
 - 타스크 시작: 이미 생성된 이슈 번호가 있으면 [`task-start`](../skills/task-start/SKILL.md) Skill로 브랜치, 오늘할일, 수행계획서를 만든다.
 - 브랜치명: `local/task{issue번호}` (예: `local/task1`)
@@ -56,12 +57,12 @@ Lifecycle 판단 결과가 승인되어 실제 파일 변경으로 넘어가면,
 7. **단계별 완료보고서(`_stage{N}.md`)는 해당 단계 소스 커밋과 함께 타스크 브랜치에서 커밋한다.**
 8. 승인 후 다음 단계 진행
 9. 모든 단계 완료 시 최종 결과 보고서 작성 → 승인 요청
-10. **최종 결과보고서(`_report.md`)와 오늘할일(`orders/`) 갱신도 타스크 브랜치에서 커밋한다. PR 생성 전 반드시 `git status`로 미커밋 파일이 없는지 확인한다.**
-11. `publish/task{issue번호}`로 원격 push 후 `devel` 대상 Open PR 생성
-12. 승인 요청 시 작업지시자가 피드백 문서를 `mydocs/feedback/`에 등록
-13. 모든 테스트 통과 시 피드백 없음
-14. PR merge 확인 후 이슈 close 및 오늘할일 상태 최종 정리
-15. merge 완료된 `publish/task{issue번호}` 원격 브랜치와 재생성 가능한 로컬 부산물을 정리
+10. **최종 결과보고서(`_report.md`)와 오늘할일(`orders/`) 갱신도 타스크 브랜치에서 커밋한다.**
+11. 최종 보고서와 오늘할일 커밋 후 즉시 멈추고, 같은 스레드에서 최종 보고서와 수용 기준 검증 근거 승인 요청. 이전 단계 승인이나 task-final-report 호출 지시는 이 승인으로 대체되지 않는다.
+12. 새 승인을 받은 뒤 `publish/task{issue번호}`로 원격 push 후 `devel` 대상 Open PR 생성. PR 생성 전 반드시 `git status`로 미커밋 파일이 없는지 확인한다.
+13. 승인 요청 시 작업지시자가 피드백 문서를 `mydocs/feedback/`에 등록
+14. 모든 테스트 통과 시 피드백 없음
+15. PR merge 확인 후 이슈 close와 오늘할일 상태를 최종 정리하고, merge 완료된 `publish/task{issue번호}` 원격 브랜치와 재생성 가능한 로컬 부산물을 정리
 
 ## 작업 규칙
 
@@ -107,7 +108,11 @@ README의 "핵심 SKILL 상세" 표는 각 Skill의 사용자-facing 요약이�
 
 `task-final-report`는 최종 보고서뿐 아니라 위 PR 본문 검증 구조까지 맞춰 Open PR을 게시하는 절차다.
 
+최종 보고서와 오늘할일 커밋 뒤에는 반드시 멈춘다. 작업지시자가 같은 스레드에서 최종 보고서와 수용 기준 검증 근거를 승인한 뒤에만 원격 push와 PR 생성을 시작한다.
+
 설치·업데이트 lifecycle 판단 자체는 별도 하이퍼-워터폴 절차 호출 표시 대상이 아니다. 다만 그 결과로 GitHub Issue를 등록하거나 타스크를 시작하면 `task-register`, `task-start` 등 실제로 적용하는 core Skill의 호출 표시 원칙을 따른다.
+
+GPUWatch app release, hotfix, README 보정처럼 `main`에만 변경이 생기면 별도 승인된 동기화 단계에서 `main` -> `devel` 반영을 수행한다. 이 동기화도 review/approval gate를 보존한다.
 
 ## 관련 매뉴얼
 
