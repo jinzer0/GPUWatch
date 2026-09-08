@@ -3,7 +3,7 @@ name: task-final-report
 description: |
   하이퍼-워터폴 타스크의 최종 보고와 PR 게시 절차를 적용한다.
   최종 결과 보고서(`_report.md`) 작성, 오늘할일 완료 처리, 최종 커밋,
-  publish/task{N} 원격 push, devel 대상 Open PR 생성을 수행한다.
+  같은 스레드의 추가 승인 후 publish/task{N} 원격 push와 devel 대상 Open PR 생성을 수행한다.
   모든 단계 완료 후 PR 직전에만 호출.
 ---
 
@@ -23,7 +23,7 @@ description: |
 ## 절차
 
 1. 통합 검증: 구현 계획서의 "수용 기준" 또는 마지막 단계 "검증" 섹션 명령 실행
-2. 최종 보고서 작성: `mydocs/report/task_m{milestone}_{N}_report.md`
+2. 최종 보고서 작성: `mydocs/report/task_{milestone_slug}_{N}_report.md`
    - 중앙 템플릿 `mydocs/_templates/final_report.md`를 기준으로 작성한다.
    - 템플릿을 읽을 수 없는 경우에만 다음 최소 섹션을 fallback으로 사용한다:
      - 작업 요약 (이슈 링크, 마일스톤, 단계 수)
@@ -43,16 +43,23 @@ description: |
    ```
 5. 최종 커밋 (Stage 마지막 + 최종 보고서를 묶을 수도, 보고서만 단일 커밋도 가능)
    ```bash
-   git add mydocs/report/task_m{milestone}_{N}_report.md mydocs/orders/{yyyymmdd}.md
-   git commit -m "Task #{N} Stage {마지막} + 최종 보고서: {요약}"
+   git add mydocs/report/task_{milestone_slug}_{N}_report.md mydocs/orders/{yyyymmdd}.md
+   git commit -m "Task #{N} Stage {마지막} + 최종 보고서: {요약}" \
+     -m "Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)" \
+     -m "Co-authored-by: Sisyphus <clio-agent@sisyphuslabs.ai>"
    # 또는
-   git commit -m "Task #{N}: 최종 보고서 작성과 오늘할일 완료 처리"
+   git commit -m "Task #{N}: 최종 보고서 작성과 오늘할일 완료 처리" \
+     -m "Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)" \
+     -m "Co-authored-by: Sisyphus <clio-agent@sisyphuslabs.ai>"
    ```
-6. 원격 게시 브랜치 push
+6. 여기서 즉시 멈추고 작업지시자에게 최종 보고서와 수용 기준 검증 근거 승인 요청
+   - 같은 스레드에서 새 승인을 받아야 한다.
+   - 이전 단계 승인, 최종 보고서 작성 지시, 본 Skill 호출 지시는 PR 게시 승인으로 간주하지 않는다.
+7. 승인 후 원격 게시 브랜치 push
    ```bash
    git push origin local/task{N}:publish/task{N}
    ```
-7. devel 대상 Open PR 생성
+8. 승인 후 devel 대상 Open PR 생성
    ```bash
    HEAD_SHA=$(git rev-parse HEAD)
    PR_BODY=/tmp/task{N}-pr-body.md
@@ -75,7 +82,7 @@ description: |
    - 긴 로그는 PR 본문에 붙이지 말고 최종 보고서나 단계 보고서 링크로 넘긴다.
    - 시각적 변경사항이 있을 때만 `스크린샷` Before/After 표를 유지
    - `관련 이슈`에는 대상 타스크가 아니라 선행, 후속, Epic, upstream, 참고 PR/issue만 작성
-8. 작업지시자에게 PR URL 전달과 리뷰·merge 승인 요청
+9. 작업지시자에게 PR URL 전달과 리뷰·merge 승인 요청
 
 ## 검증
 
@@ -89,6 +96,7 @@ description: |
 - PR 본문 `검증` 섹션이 `자동 검증`, `수동/시나리오 검증`, `CI/원격 검증`, `검증 한계` 구조를 따름
 - PR 본문에 실행하지 않은 검증 체크리스트가 남아 있지 않고, 미수행 항목은 `검증 한계` 또는 `남은 리스크`로 분리됨
 - 오늘할일 #{N} 상태 `완료` + `완료: HH:mm`
+- 최종 보고서/오늘할일 커밋 뒤 같은 스레드에서 별도 PR 게시 승인을 받았음
 
 ## 절대 하지 말 것
 
@@ -96,6 +104,7 @@ description: |
 - `local/task{N}` 브랜치를 원격에 직접 push (반드시 `publish/task{N}`로 명명)
 - squash merge 강제 옵션 사용 (단계 커밋 의미 보존)
 - 작업지시자 명시 지시 없이 Draft PR로 생성하거나 self-merge
+- 최종 보고서/오늘할일 커밋 뒤 같은 스레드의 별도 승인 없이 원격 push 또는 PR 생성
 
 ## 호출 방법
 
