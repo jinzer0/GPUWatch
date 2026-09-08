@@ -142,7 +142,7 @@ manual에서 특정 사건 문서를 참조해야 할 때는 사건 내용을 �
 - 산출물 폴더 내부에는 템플릿 파일을 두지 않는다.
 - `orders/`, `plans/`, `working/`, `report/`, `feedback/`, `tech/`, `troubleshootings/`, `pr/`에는 실제 산출물만 둔다.
 - 템플릿 파일은 실제 산출물로 오해되지 않도록 첫 제목에 `템플릿`을 포함한다.
-- 템플릿이 바뀌면 관련 Skill의 템플릿 참조와 README의 문서 구조 설명을 함께 확인한다.
+- 템플릿이 바뀌면 관련 Skill의 템플릿 참조와 `mydocs` 하위 README/매뉴얼의 문서 구조 설명을 함께 확인한다. 루트 README가 제품 전용이면 수정 대상으로 가정하지 않는다.
 
 ## GitHub 플랫폼 템플릿 정책
 
@@ -164,7 +164,7 @@ GitHub Issue와 Pull Request는 `mydocs/` 산출물이 아니라 GitHub 플랫�
 
 - GitHub Issue Form을 `mydocs/_templates/`에 넣지 않는다.
 - `task-register`는 이슈 본문을 만들 때 `.github/ISSUE_TEMPLATE/task.yml`을 우선 참조하고, 파일을 읽을 수 없을 때만 Skill 본문의 fallback 섹션을 사용한다.
-- `.github/ISSUE_TEMPLATE/task.yml`이 바뀌면 `task-register` Skill, README의 프롬프트 가이드 설명, 본 매뉴얼의 역할 구분을 함께 확인한다.
+- `.github/ISSUE_TEMPLATE/task.yml`이 바뀌면 `task-register` Skill과 본 매뉴얼의 역할 구분을 함께 확인한다. 루트 README 프롬프트 안내는 별도 승인된 task로 존재할 때만 함께 확인한다.
 
 ## 배포 manifest와 버전 기록 정책
 
@@ -213,7 +213,7 @@ Lifecycle 판단 결과는 적용 전 보고 형식이지 `mydocs/`에 장기 �
 - upstream release manifest가 바뀌면 `.hyper-waterfall/version.json`과 적용 저장소의 설치 사본 차이를 함께 확인한다.
 - `.hyper-waterfall/version.json`은 실제 적용 저장소에 남는 상태 파일이며, 본 프레임워크 저장소의 문서 산출물 템플릿과 섞지 않는다.
 - 사용자 수정 가능성이 높은 파일은 manifest에서 무조건 `overwrite`로 두지 않는다.
-- 설치·업데이트 설명이 바뀌면 `.hyper-waterfall/version.json`, immutable upstream artifact, `framework_lifecycle_guide.md`, `release_update_protocol.md` 설명을 함께 확인한다.
+- 설치·업데이트 설명이 바뀌면 `.hyper-waterfall/version.json`, immutable upstream artifact, `framework_lifecycle_guide.md`, `release_update_protocol.md` 설명을 함께 확인한다. 루트 README의 제품 설명은 별도 승인 없이 수정하지 않는다.
 
 ## 폴더별 상세 규칙
 
@@ -277,7 +277,7 @@ GitHub Issue Form이나 PR 본문 템플릿도 `mydocs/_templates/`에 넣지 �
 
 ### 템플릿과 Skill 설명이 다를 때
 
-중앙 템플릿과 Skill 중 하나만 고치지 않는다. Skill은 절차와 검증을 정의하고, 템플릿은 출력 형식을 정의한다. 둘이 어긋나면 같은 PR에서 함께 수정하고 README의 문서 구조 설명도 확인한다.
+중앙 템플릿과 Skill 중 하나만 고치지 않는다. Skill은 절차와 검증을 정의하고, 템플릿은 출력 형식을 정의한다. 둘이 어긋나면 같은 PR에서 함께 수정하고 `mydocs` 하위 README/매뉴얼의 문서 구조 설명도 확인한다.
 
 ## 관련 매뉴얼
 

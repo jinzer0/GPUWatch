@@ -68,7 +68,7 @@ Hyper-Waterfall 버전 업데이트 PR은 일반 task PR과 같은 승인 게이
 
 ## README와 CLI 경계
 
-README는 신규 적용 프롬프트와 확정된 업데이트 프롬프트 또는 CLI 명령처럼 사용자가 복사할 짧은 진입 안내만 둔다. 상세 lifecycle 판단 기준은 `.hyper-waterfall/version.json`과 목표 upstream release artifact를 우선한다.
+루트 README의 lifecycle 진입 안내는 선택 사항이며, 제품 전용 README에 Hyper-Waterfall 섹션을 추가하거나 수정해야 한다면 별도 승인된 task로 처리한다. 상세 lifecycle 판단 기준은 루트 README가 아니라 `.hyper-waterfall/version.json`과 목표 upstream release artifact를 우선한다.
 
 CLI가 `init`, `update`, `doctor` 결과를 만들더라도 이 결과는 파일 변경 전 판단 보고다. CLI 출력은 선택 locale, `.hyper-waterfall/version.json`의 `locale` 기록 계획, 현재 version, 현재 locale, 요청 locale 또는 locale 전환 요청, 목표 release/tag, 목표 release locale 지원, 목표 upstream artifact와 설치본 diff, locale 관련 artifact diff, 자동 적용 가능, 수동 확인 필요, conflict, 보류, 검증, 승인 요청을 포함해야 하며, 승인 전에는 파일을 실제 대상 저장소에 적용하지 않는다.
 
