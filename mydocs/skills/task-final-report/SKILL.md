@@ -23,6 +23,7 @@ description: |
 ## 절차
 
 1. 통합 검증: 구현 계획서의 "수용 기준" 또는 마지막 단계 "검증" 섹션 명령 실행
+   - 구현계획서 승인 commit이 해당 `_impl.md`만 포함하고 Stage 1 commit의 ancestor인지 `task-stage-report`의 선행 관계 검증과 동일한 방식으로 재확인한다.
 2. 최종 보고서 작성과 검증: `mydocs/report/task_{milestone_slug}_{N}_report.md`
    - 중앙 템플릿 `mydocs/_templates/final_report.md`를 기준으로 작성한다.
    - 템플릿을 읽을 수 없는 경우에만 다음 최소 섹션을 fallback으로 사용한다:
@@ -87,6 +88,7 @@ description: |
 ## 검증
 
 - 모든 단계 보고서 + 최종 보고서 존재
+- 구현계획서 승인 commit이 독립 commit이며 Stage 1 commit보다 먼저 존재
 - 최종 보고서가 `mydocs/_templates/final_report.md`의 필수 섹션을 채움
 - `git status --short` 결과 빈 출력
 - `gh pr view` 결과에 draft가 아닌 PR이 정확한 base/head로 등록
