@@ -51,14 +51,17 @@ Lifecycle 판단 결과가 승인되어 실제 파일 변경으로 넘어가면,
 1. 이슈가 없는 작업은 `task-register`로 GitHub Issue 등록. 기존 이슈가 있으면 해당 번호 사용
 2. 작업지시자가 지정한 이슈를 `task-start`로 시작하고 `local/task{issue번호}` 브랜치 생성 후 진행
 3. 수행 전 수행계획서 작성 → 승인 요청
-4. 구현 계획서 작성 (최소 3단계, 최대 6단계) → 승인 요청. 승인 후 Stage 1 시작 전에 승인본을 독립 커밋으로 기록
+4. 구현 계획서 작성 (최소 3단계, 최대 6단계) → 내용 승인 요청. 승인 후 Stage 1 시작 전에 승인본을 독립 커밋으로 기록
    ```bash
    git add "mydocs/plans/task_{milestone_slug}_{issue번호}_impl.md"
    git commit -m "Task #{issue번호}: 승인된 구현 계획서 확정" \
-     -m "Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)" \
-     -m "Co-authored-by: Sisyphus <clio-agent@sisyphuslabs.ai>"
+      -m "Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)" \
+      -m "Co-authored-by: Sisyphus <clio-agent@sisyphuslabs.ai>"
+   git rev-parse HEAD
    ```
-   - 구현계획서 승인은 승인본 커밋과 Stage 1 진입만 허용한다. 이후 단계 진입, 최종 게시, merge 승인을 대신하지 않는다.
+   - 출력된 exact commit SHA를 작업지시자에게 보고하고 같은 스레드에서 SHA 확인을 받은 뒤 Stage 1에 진입한다. 이후 검증에서 commit message 검색으로 승인 commit을 다시 추론하지 않는다.
+   - 구현계획서 내용 승인과 exact SHA 확인은 승인본 커밋과 Stage 1 진입만 허용한다. 이후 단계 진입, 최종 게시, merge 승인을 대신하지 않는다.
+   - Stage 1 이후 계획서를 변경해야 하면 현재 단계를 멈추고 변경본 내용을 다시 승인받아 `_impl.md`만 새 독립 commit으로 기록한다. 새 exact SHA까지 확인받은 뒤 이후 단계에서 그 SHA와 현재 plan blob의 일치를 검증한다.
 5. 단계별 진행 시작
 6. 각 단계 완료 후 단계별 완료보고서 작성 → 승인 요청
 7. **단계별 완료보고서(`_stage{N}.md`)는 해당 단계 소스 커밋과 함께 타스크 브랜치에서 커밋한다.**

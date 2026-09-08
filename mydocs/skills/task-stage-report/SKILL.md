@@ -15,7 +15,7 @@ description: |
 
 ## 사전 조건
 
-- 구현 계획서(`task_{milestone_slug}_{N}_impl.md`)가 존재하고 작업지시자 승인 후 `local/task{N}`에 독립 커밋됨
+- 구현 계획서(`task_{milestone_slug}_{N}_impl.md`)가 존재하고 작업지시자 내용 승인 후 `local/task{N}`에 독립 커밋되며 exact SHA까지 같은 스레드에서 확인됨
 - Stage 1 시작 시 구현계획서에 미커밋 변경이 없었음
 - 현재 단계의 작업 항목이 모두 코드/문서에 반영됨
 - 작업 브랜치는 `local/task{N}`
@@ -24,22 +24,29 @@ description: |
 
 1. 단계별 검증 명령 실행 (구현 계획서의 해당 단계 "검증" 섹션 그대로)
    - 결과를 보고서에 인용할 수 있도록 출력 보존
-   - 구현계획서 승인본의 독립 commit과 Stage 1 선행 관계를 먼저 확인한다.
-     ```bash
-     IMPL_PLAN="mydocs/plans/task_{milestone_slug}_{N}_impl.md"
-     IMPL_PLAN_COMMIT="$(git log -1 --format='%H' --fixed-strings --grep='Task #{N}: 승인된 구현 계획서 확정' -- "$IMPL_PLAN")"
-     test -n "$IMPL_PLAN_COMMIT"
-     test "$(git diff-tree --root --no-commit-id --name-only -r "$IMPL_PLAN_COMMIT" | wc -l | tr -d ' ')" -eq 1
-     test "$(git diff-tree --root --no-commit-id --name-only -r "$IMPL_PLAN_COMMIT")" = "$IMPL_PLAN"
-     test "$(git rev-parse "$IMPL_PLAN_COMMIT:$IMPL_PLAN")" = "$(git rev-parse "HEAD:$IMPL_PLAN")"
-     if test "{S}" = "1"; then
-       test "$(git rev-parse HEAD)" = "$IMPL_PLAN_COMMIT"
-     else
-       STAGE1_COMMIT="$(git log -1 --format='%H' --fixed-strings --grep='Task #{N} Stage 1:')"
-       test -n "$STAGE1_COMMIT"
-       git merge-base --is-ancestor "$IMPL_PLAN_COMMIT" "$STAGE1_COMMIT"
-     fi
-     ```
+   - 작업지시자가 같은 스레드에서 확인한 최신 구현계획서 commit의 exact SHA를 `APPROVED_IMPL_PLAN_COMMIT_FILE`에 파일 쓰기 도구로 기록한다. commit message 검색으로 승인 SHA를 다시 추론하지 않는다.
+   - 승인 commit의 내용, 현재 계획서 blob, 현재 단계와의 선행 관계를 먼저 확인한다.
+      ```bash
+      IMPL_PLAN="mydocs/plans/task_{milestone_slug}_{N}_impl.md"
+      APPROVED_IMPL_PLAN_COMMIT_FILE="$(mktemp)"
+      trap 'rm -f "$APPROVED_IMPL_PLAN_COMMIT_FILE"' EXIT
+      # 파일 쓰기 도구로 작업지시자가 같은 스레드에서 확인한 exact commit SHA를 기록한다.
+      IFS= read -r APPROVED_IMPL_PLAN_COMMIT < "$APPROVED_IMPL_PLAN_COMMIT_FILE"
+      case "$APPROVED_IMPL_PLAN_COMMIT" in
+        ""|*[!0-9a-f]*) printf 'APPROVED_IMPL_PLAN_COMMIT must be lowercase hexadecimal\n' >&2; exit 1 ;;
+      esac
+      test "${#APPROVED_IMPL_PLAN_COMMIT}" -eq 40
+      readonly APPROVED_IMPL_PLAN_COMMIT
+      git cat-file -e "$APPROVED_IMPL_PLAN_COMMIT^{commit}"
+      test "$(git diff-tree --root --no-commit-id --name-only -r "$APPROVED_IMPL_PLAN_COMMIT" | wc -l | tr -d ' ')" -eq 1
+      test "$(git diff-tree --root --no-commit-id --name-only -r "$APPROVED_IMPL_PLAN_COMMIT")" = "$IMPL_PLAN"
+      test "$(git rev-parse "$APPROVED_IMPL_PLAN_COMMIT:$IMPL_PLAN")" = "$(git rev-parse "HEAD:$IMPL_PLAN")"
+      if test "{S}" = "1"; then
+        test "$(git rev-parse HEAD)" = "$APPROVED_IMPL_PLAN_COMMIT"
+      else
+        git merge-base --is-ancestor "$APPROVED_IMPL_PLAN_COMMIT" HEAD
+      fi
+      ```
 2. 단계 보고서 작성: `mydocs/working/task_{milestone_slug}_{N}_stage{S}.md`
    - 중앙 템플릿 `mydocs/_templates/stage_report.md`를 기준으로 작성한다.
    - 템플릿을 읽을 수 없는 경우에만 다음 최소 섹션을 fallback으로 사용한다:
@@ -71,9 +78,11 @@ description: |
 - `git ls-files --error-unmatch mydocs/plans/task_{milestone_slug}_{N}_impl.md` 통과
 - `git diff --quiet HEAD -- mydocs/plans/task_{milestone_slug}_{N}_impl.md` 통과
 - `git log -1 --format='%H' -- mydocs/plans/task_{milestone_slug}_{N}_impl.md`가 commit SHA를 출력
-- 구현계획서 승인 commit의 변경 파일이 해당 `_impl.md` 하나뿐임
+- 작업지시자가 같은 스레드에서 확인한 exact SHA를 사용하며 commit message 검색으로 대체하지 않음
+- 최신 구현계획서 승인 commit의 변경 파일이 해당 `_impl.md` 하나뿐임
 - 현재 구현계획서 blob이 승인 commit의 구현계획서 blob과 동일함
-- Stage 1이면 구현계획서 승인 commit이 현재 HEAD이고, 이후 Stage면 해당 commit이 Stage 1 commit의 ancestor임
+- Stage 1이면 최초 구현계획서 승인 commit이 현재 HEAD임
+- 이후 Stage면 최신 구현계획서 승인 commit이 현재 HEAD의 ancestor이며, 완료된 Stage 1 보고서가 최초 승인 SHA 검증 결과를 포함함
 - `git log --oneline -1`이 단계 커밋 메시지 표준 형식 충족
 - `mydocs/working/task_{milestone_slug}_{N}_stage{S}.md` 존재
 - 단계 보고서가 `mydocs/_templates/stage_report.md`의 필수 섹션을 채움
@@ -85,7 +94,7 @@ description: |
 - 단계 산출물과 보고서를 분리해 별도 커밋 (한 단계는 한 커밋 원칙)
 - 작업지시자 승인 없이 다음 단계 진입
 - 승인된 구현계획서를 독립 커밋하기 전에 Stage 1 진입
-- 작업지시자의 재승인과 새 독립 commit 없이 승인된 구현계획서 변경
+- 작업지시자의 재승인과 새 독립 commit 없이 승인된 구현계획서 변경. Stage 1 이후 재승인했다면 새 exact SHA를 이후 단계 검증에 사용
 
 ## 호출 방법
 

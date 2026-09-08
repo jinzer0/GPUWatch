@@ -16,15 +16,31 @@ description: |
 
 ## 사전 조건
 
-- 승인된 구현 계획서의 독립 커밋이 Stage 1보다 먼저 존재하고, 모든 단계 종료와 각 단계 보고서 커밋이 완료됨
+- 승인된 구현 계획서의 독립 커밋과 작업지시자가 확인한 exact SHA가 Stage 1보다 먼저 존재하고, 모든 단계 종료와 각 단계 보고서 커밋이 완료됨
 - 통합 검증(전체 수용 기준) 통과 확인
 - `local/task{N}`에 commit 안 된 변경 없음 또는 본 절차에서 함께 커밋할 것만 남아 있음
 
 ## 절차
 
-1. 통합 검증: 구현 계획서의 "수용 기준" 또는 마지막 단계 "검증" 섹션 명령 실행
-   - 구현계획서 승인 commit이 해당 `_impl.md`만 포함하고 Stage 1 commit의 ancestor인지 `task-stage-report`의 선행 관계 검증과 동일한 방식으로 재확인한다.
-   - 현재 `_impl.md` blob이 승인 commit의 blob과 동일한지도 재확인한다. 다르면 작업지시자의 재승인과 새 독립 commit 전에는 최종 보고를 진행하지 않는다.
+1. 타스크 번호와 통합 검증 입력 고정
+   ```bash
+   ISSUE_NUMBER_FILE="$(mktemp)"
+   trap 'rm -f "$ISSUE_NUMBER_FILE"' EXIT
+   # 파일 쓰기 도구로 작업지시자가 지정한 이슈 번호를 한 줄로 기록한다.
+   IFS= read -r ISSUE_NUMBER < "$ISSUE_NUMBER_FILE"
+   rm -f "$ISSUE_NUMBER_FILE"
+   trap - EXIT
+   case "$ISSUE_NUMBER" in
+     ""|*[!0-9]*) printf 'ISSUE_NUMBER must be decimal digits\n' >&2; exit 1 ;;
+   esac
+   TASK_BRANCH="local/task${ISSUE_NUMBER}"
+   PUBLISH_BRANCH="publish/task${ISSUE_NUMBER}"
+   readonly ISSUE_NUMBER TASK_BRANCH PUBLISH_BRANCH
+   ```
+   - 구현 계획서의 "수용 기준" 또는 마지막 단계 "검증" 섹션 명령을 실행한다.
+   - 작업지시자가 같은 스레드에서 확인한 최신 구현계획서 commit의 exact SHA를 파일 쓰기 도구로 전달하며 commit message 검색으로 다시 추론하지 않는다.
+   - 해당 commit이 `_impl.md`만 포함하고 현재 HEAD의 ancestor인지, 현재 `_impl.md` blob이 승인 commit의 blob과 동일한지 `task-stage-report`와 같은 방식으로 재확인한다.
+   - Stage 1 이후 계획서를 변경했다면 작업지시자의 재승인과 새 독립 commit이 있어야 하며 그 새 exact SHA를 사용한다.
 2. 최종 보고서 작성과 검증: `mydocs/report/task_{milestone_slug}_{N}_report.md`
    - 중앙 템플릿 `mydocs/_templates/final_report.md`를 기준으로 작성한다.
    - 템플릿을 읽을 수 없는 경우에만 다음 최소 섹션을 fallback으로 사용한다:
@@ -41,7 +57,7 @@ description: |
    ```bash
    git status --short
    git diff --check
-   git log --oneline devel..local/task{N}
+   git log --oneline "devel..${TASK_BRANCH}"
    ```
 5. 최종 커밋 (Stage 마지막 + 최종 보고서를 묶을 수도, 보고서만 단일 커밋도 가능)
    ```bash
@@ -59,15 +75,19 @@ description: |
    - 이전 단계 승인, 최종 보고서 작성 지시, 본 Skill 호출 지시는 PR 게시 승인으로 간주하지 않는다.
 7. 승인 후 원격 게시 브랜치 push
    ```bash
-   git push origin local/task{N}:publish/task{N}
+   git push origin "${TASK_BRANCH}:${PUBLISH_BRANCH}"
    ```
 8. 승인 후 devel 대상 Open PR 생성
    ```bash
-   HEAD_SHA=$(git rev-parse HEAD)
-   PR_BODY=/tmp/task{N}-pr-body.md
-   # .github/pull_request_template.md를 출발점으로 삼아 최종 보고서와 단계 보고서 기준으로 "$PR_BODY" 작성
-   gh pr create --base devel --head publish/task{N} \
-     --title "Task #{N}: {제목}" \
+   HEAD_SHA="$(git rev-parse HEAD)"
+   PR_TITLE_FILE="$(mktemp)"
+   PR_BODY="$(mktemp)"
+   trap 'rm -f "$PR_TITLE_FILE" "$PR_BODY"' EXIT
+   # 파일 쓰기 도구로 승인된 PR 제목을 "$PR_TITLE_FILE"에 한 줄로 기록한다.
+   # .github/pull_request_template.md를 출발점으로 삼아 최종 보고서와 단계 보고서 기준으로 "$PR_BODY"를 작성한다.
+   IFS= read -r PR_TITLE < "$PR_TITLE_FILE"
+   gh pr create --base devel --head "$PUBLISH_BRANCH" \
+     --title "$PR_TITLE" \
      --body-file "$PR_BODY"
    ```
    - PR 본문은 `.github/pull_request_template.md`를 기준으로 작성한다.
@@ -90,7 +110,8 @@ description: |
 
 - 모든 단계 보고서 + 최종 보고서 존재
 - 구현계획서 승인 commit이 독립 commit이며 Stage 1 commit보다 먼저 존재
-- 현재 구현계획서 blob이 승인 commit의 구현계획서 blob과 동일
+- 작업지시자가 같은 스레드에서 확인한 최신 exact SHA를 사용하며 해당 commit이 현재 HEAD의 ancestor
+- 현재 구현계획서 blob이 최신 승인 commit의 구현계획서 blob과 동일
 - 최종 보고서가 `mydocs/_templates/final_report.md`의 필수 섹션을 채움
 - `git status --short` 결과 빈 출력
 - `gh pr view` 결과에 draft가 아닌 PR이 정확한 base/head로 등록
@@ -106,9 +127,11 @@ description: |
 
 - 통합 검증 실패 상태에서 PR 생성
 - `local/task{N}` 브랜치를 원격에 직접 push (반드시 `publish/task{N}`로 명명)
+- decimal 검증 전 이슈 번호를 refspec, 브랜치명, 경로에 사용
 - squash merge 강제 옵션 사용 (단계 커밋 의미 보존)
 - 작업지시자 명시 지시 없이 Draft PR로 생성하거나 self-merge
 - 최종 보고서/오늘할일 커밋 뒤 같은 스레드의 별도 승인 없이 원격 push 또는 PR 생성
+- 승인된 PR 제목을 shell literal이나 command substitution으로 명령에 보간
 
 ## 호출 방법
 
