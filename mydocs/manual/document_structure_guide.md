@@ -7,38 +7,40 @@
 ## 핵심 용어
 
 - **문서 진실 원천**: 같은 정보를 여러 곳에 복제하지 않고, 최신 기준으로 삼는 단일 문서 또는 폴더.
-- **문서 템플릿 진실 원천**: 산출물별 출력 형식을 정의하는 `mydocs/_templates/` 폴더. 본 프레임워크 저장소에서는 `templates/mydocs/_templates/`가 실제 진실 원천이고, dogfooding용 `mydocs/_templates`는 그 위치를 가리킨다.
+- **문서 템플릿 설치본**: 산출물별 출력 형식을 정의하는 `mydocs/_templates/` 폴더. GPUWatch 저장소 안의 `mydocs/_templates`는 upstream `postmelee/hyper-waterfall`에서 설치된 일반 파일 사본이며 심볼릭 링크가 아니다.
 - **GitHub 플랫폼 템플릿**: GitHub Issue나 Pull Request처럼 GitHub UI/CLI가 만드는 플랫폼 산출물의 입력 또는 본문 형식을 정의하는 `.github/ISSUE_TEMPLATE/`와 `.github/pull_request_template.md`.
 - **공식 문서 루트**: 대상 프로젝트가 사용자, 기여자, 외부 통합자, 배포 채널을 위해 공식적으로 채택한 제품 문서 위치. 예: `docs/`, `specs/`, `site/`, `website/`, `adr/`, `book/`, GitHub Wiki. Hyper-Waterfall은 이 이름을 고정하지 않는다.
-- **배포 manifest**: Hyper-Waterfall release에 포함되는 파일, 적용 대상 경로, 업데이트 정책, checksum 상태를 정의하는 `templates/manifest.json`.
-- **적용 version/locale 기록**: Hyper-Waterfall이 적용된 대상 저장소가 현재 사용하는 프레임워크 버전과 선택 locale을 기록하는 `.hyper-waterfall/version.json`.
+- **Upstream framework source**: Hyper-Waterfall 방법론의 원본 저장소인 `postmelee/hyper-waterfall`. GPUWatch에 설치된 기준은 v0.3.0 release(`https://github.com/postmelee/hyper-waterfall/releases/tag/v0.3.0`)와 immutable commit `83836828a4da24385d0410515d35ee43946b981f`(`https://github.com/postmelee/hyper-waterfall/tree/83836828a4da24385d0410515d35ee43946b981f`)이다.
+- **적용 version/locale 기록**: GPUWatch 같은 적용 저장소가 현재 사용하는 프레임워크 버전과 locale을 기록하는 `.hyper-waterfall/version.json`. GPUWatch 안에 upstream `templates/manifest.json` 원본이 있다고 가정하지 않는다.
 - **실제 산출물 문서**: 특정 날짜, 이슈, PR, 조사 주제에 대해 작성된 문서. 예: `orders/20260506.md`, `plans/task_m010_3.md`.
 - **내부 타스크**: GitHub Issue를 기준으로 수행계획서, 구현계획서, 단계 보고서, 최종 보고서를 남기는 저장소 내부 작업.
 - **외부 기여 PR**: 외부 기여자가 제출한 Pull Request를 검토하는 작업. 내부 타스크와 다른 폴더와 절차를 사용한다.
-- **마일스톤 포함 문서명**: `task_m010_49.md`처럼 마일스톤과 이슈 번호를 함께 넣은 신규 문서명.
+- **milestone_name**: GitHub milestone title 그대로 사용하며 `^M[0-9]+x?$`에 맞아야 한다. 예: `M100`, `M05x`
+- **milestone_slug**: `milestone_name`의 앞 `M`만 소문자로 바꾸고 숫자와 선택적 `x`는 보존한다. 예: `M100` -> `m100`, `M05x` -> `m05x`
+- **마일스톤 포함 문서명**: `task_m100_49.md`처럼 `milestone_slug`와 이슈 번호를 함께 넣은 신규 문서명.
 - **Agent Skills 진실 원천**: Codex와 Claude Code가 함께 읽는 `mydocs/skills/{skill-name}/SKILL.md`.
 
 ## 문서 파일명 규칙
 
 신규 내부 타스크 문서의 표준 형식은 GitHub Issue 번호와 마일스톤을 함께 사용한다.
 
-- 수행 계획서: `task_{milestone}_{이슈번호}.md` (예: `task_m100_7.md`)
-- 구현 계획서: `task_{milestone}_{이슈번호}_impl.md` (예: `task_m100_7_impl.md`)
-- 단계별 완료 보고서: `task_{milestone}_{이슈번호}_stage{N}.md` (예: `task_m100_7_stage1.md`)
-- 최종 보고서: `task_{milestone}_{이슈번호}_report.md` (예: `task_m100_7_report.md`)
+- 수행 계획서: `task_{milestone_slug}_{이슈번호}.md` (예: `task_m100_7.md`, `task_m05x_7.md`)
+- 구현 계획서: `task_{milestone_slug}_{이슈번호}_impl.md` (예: `task_m100_7_impl.md`)
+- 단계별 완료 보고서: `task_{milestone_slug}_{이슈번호}_stage{N}.md` (예: `task_m100_7_stage1.md`)
+- 최종 보고서: `task_{milestone_slug}_{이슈번호}_report.md` (예: `task_m100_7_report.md`)
 
 지원 문서는 주제와 날짜를 함께 알 수 있게 작성한다.
 
 - 오늘할일: `{yyyymmdd}.md` (예: `20260506.md`)
-- 피드백: `{yyyymmdd}_{topic}.md` 또는 `task_{milestone}_{이슈번호}_feedback.md`
-- 기술 조사: `{yyyymmdd}_{topic}.md` 또는 `task_{milestone}_{이슈번호}_{topic}.md`
-- 트러블슈팅: `{yyyymmdd}_{topic}.md` 또는 `task_{milestone}_{이슈번호}_{topic}.md`
+- 피드백: `{yyyymmdd}_{topic}.md` 또는 `task_{milestone_slug}_{이슈번호}_feedback.md`
+- 기술 조사: `{yyyymmdd}_{topic}.md` 또는 `task_{milestone_slug}_{이슈번호}_{topic}.md`
+- 트러블슈팅: `{yyyymmdd}_{topic}.md` 또는 `task_{milestone_slug}_{이슈번호}_{topic}.md`
 - 외부 PR 검토 문서: `pr_{번호}_review.md`, `pr_{번호}_review_impl.md`, `pr_{번호}_report.md`
 
 강제 규칙:
 
-- 신규 내부 타스크 문서는 반드시 `task_{milestone}_{이슈번호}` 형식을 사용한다.
-- 마일스톤은 항상 `m{숫자}` 형식으로 적는다. 예: `m100`, `m200`
+- 신규 내부 타스크 문서는 반드시 `task_{milestone_slug}_{이슈번호}` 형식을 사용한다.
+- 문서 파일 경로에는 `milestone_slug`를 사용한다. 표시용 문맥과 오늘할일 표기에는 `milestone_name`을 사용한다.
 - 마일스톤 없이 `task_{이슈번호}` 형식으로 신규 내부 타스크 문서를 만들지 않는다.
 - 기존 레거시 문서명은 유지할 수 있으나, 신규 이슈부터는 마일스톤 포함 형식을 고정한다.
 - 실제 산출물 폴더 내부에는 템플릿 파일을 두지 않는다. 템플릿은 중앙 템플릿 폴더인 `mydocs/_templates/`에만 둔다.
@@ -115,8 +117,8 @@ manual 본문에서 분리해야 하는 내용:
 | 내부 task의 최종 결과와 장기 보관 보고 | `mydocs/report/` |
 | 재사용 가능한 기술 조사와 설계 판단 | `mydocs/tech/` |
 | 실패 증상, 원인, 해결, 재발 방지 기록 | `mydocs/troubleshootings/` |
-| 본 프레임워크 저장소의 Hyper-Waterfall release 준비와 배포 검증 기록 | `docs/releases/` |
-| 본 프레임워크 저장소의 기존 적용 저장소 migration/update 판단 기준 | `docs/migrations/` |
+| upstream `postmelee/hyper-waterfall`의 Hyper-Waterfall release 준비와 배포 검증 기록 | upstream release/tag의 고정 URL |
+| GPUWatch에 설치된 Hyper-Waterfall 버전과 locale 기록 | `.hyper-waterfall/version.json` |
 
 manual에서 특정 사건 문서를 참조해야 할 때는 사건 내용을 복제하지 않는다. 본문에는 일반화한 판단 기준과 짧은 링크만 두고, 상세 맥락은 해당 산출물 문서에 남긴다.
 
@@ -124,9 +126,9 @@ manual에서 특정 사건 문서를 참조해야 할 때는 사건 내용을 �
 
 문서 출력 형식은 `mydocs/_templates/`에서 관리한다. 각 Skill은 가능한 한 중앙 템플릿을 먼저 참조하고, 템플릿을 읽을 수 없는 상황에서만 Skill 본문에 남은 최소 섹션 요약을 fallback으로 사용한다.
 
-- 프레임워크 진실 원천: `templates/mydocs/_templates/`
-- 적용 저장소 위치: `mydocs/_templates/`
-- 본 저장소 dogfooding 위치: `mydocs/_templates -> ../templates/mydocs/_templates`
+- Upstream framework source: `postmelee/hyper-waterfall` v0.3.0 release와 commit `83836828a4da24385d0410515d35ee43946b981f`
+- GPUWatch 적용 저장소 위치: `mydocs/_templates/`
+- GPUWatch의 `mydocs/_templates/` 파일은 regular installed copy다. 이 경로가 upstream source나 symlink라고 가정하지 않는다.
 
 중앙 템플릿의 역할:
 
@@ -146,11 +148,11 @@ manual에서 특정 사건 문서를 참조해야 할 때는 사건 내용을 �
 
 GitHub Issue와 Pull Request는 `mydocs/` 산출물이 아니라 GitHub 플랫폼 산출물이다. 따라서 해당 형식은 `mydocs/_templates/`에 두지 않고 `.github/` 경로에서 관리한다.
 
-- Issue Form 진실 원천: `templates/.github/ISSUE_TEMPLATE/task.yml`
-- 적용 저장소 위치: `.github/ISSUE_TEMPLATE/task.yml`
-- 본 저장소 dogfooding 위치: `.github/ISSUE_TEMPLATE/task.yml`
-- PR 본문 템플릿 진실 원천: `templates/.github/pull_request_template.md`
+- Issue Form upstream 기준: [`templates/locales/ko/.github/ISSUE_TEMPLATE/task.yml`](https://github.com/postmelee/hyper-waterfall/blob/83836828a4da24385d0410515d35ee43946b981f/templates/locales/ko/.github/ISSUE_TEMPLATE/task.yml)
+- GPUWatch 적용 저장소 위치: `.github/ISSUE_TEMPLATE/task.yml`
+- PR 본문 템플릿 upstream 기준: [`templates/locales/ko/.github/pull_request_template.md`](https://github.com/postmelee/hyper-waterfall/blob/83836828a4da24385d0410515d35ee43946b981f/templates/locales/ko/.github/pull_request_template.md)
 - PR 본문 적용 저장소 위치: `.github/pull_request_template.md`
+- GPUWatch의 `.github/` 파일은 regular installed copy다. 이 경로가 upstream source나 symlink라고 가정하지 않는다.
 
 역할 구분:
 
@@ -166,22 +168,24 @@ GitHub Issue와 Pull Request는 `mydocs/` 산출물이 아니라 GitHub 플랫�
 
 ## 배포 manifest와 버전 기록 정책
 
-Hyper-Waterfall의 canonical 배포 단위는 GitHub Release/tag다. 프롬프트는 설치나 업데이트를 시작하는 사용자 인터페이스일 뿐이며, 실제 파일 적용 기준은 release에 포함된 `templates/manifest.json`, version 기록, migration guide다.
+Hyper-Waterfall의 canonical 배포 단위는 upstream `postmelee/hyper-waterfall`의 GitHub Release/tag다. GPUWatch 저장소 안의 파일은 설치된 사본이며, 프롬프트는 설치나 업데이트를 시작하는 사용자 인터페이스일 뿐이다. GPUWatch의 현재 적용 기준은 `.hyper-waterfall/version.json`과 immutable upstream artifact다.
 
-- manifest 진실 원천: `templates/manifest.json`
+- 현재 설치 기록: `.hyper-waterfall/version.json`
+- 기준 release: `https://github.com/postmelee/hyper-waterfall/releases/tag/v0.3.0`
+- 기준 commit: `https://github.com/postmelee/hyper-waterfall/tree/83836828a4da24385d0410515d35ee43946b981f`
 - 적용 저장소 version/locale 기록 위치: `.hyper-waterfall/version.json`
-- migration guide 위치: `docs/migrations/`
+- 업데이트 판단 입력: 목표 release의 immutable artifact와 적용 저장소의 사용자 수정 diff
 
 세부 lifecycle 판단은 이 문서가 아니라 다음 문서를 따른다.
 
 | 주제 | 진실 원천 |
 |---|---|
-| 신규 적용 절차와 판단 결과 형식 | `docs/lifecycle/adoption.md` |
-| 기존 적용 저장소 업데이트 판단 | `docs/lifecycle/update.md` |
-| Hyper-Waterfall 버전 업데이트 PR 전환 | `docs/lifecycle/update_pr.md` |
+| 신규 적용 절차와 판단 결과 형식 | upstream [`docs/lifecycle/adoption.md`](https://github.com/postmelee/hyper-waterfall/blob/83836828a4da24385d0410515d35ee43946b981f/docs/lifecycle/adoption.md) |
+| 기존 적용 저장소 업데이트 판단 | upstream [`docs/lifecycle/update.md`](https://github.com/postmelee/hyper-waterfall/blob/83836828a4da24385d0410515d35ee43946b981f/docs/lifecycle/update.md) |
+| Hyper-Waterfall 버전 업데이트 PR 전환 | upstream [`docs/lifecycle/update_pr.md`](https://github.com/postmelee/hyper-waterfall/blob/83836828a4da24385d0410515d35ee43946b981f/docs/lifecycle/update_pr.md) |
 | release/tag와 update protocol | [`release_update_protocol.md`](release_update_protocol.md) |
 
-`templates/manifest.json`의 역할:
+Upstream release manifest의 역할:
 
 - release에 포함되는 프레임워크 파일과 적용 대상 경로를 나열한다.
 - `AGENTS.md`, `CLAUDE.md`, `.github/`, `mydocs/_templates/`, `mydocs/manual/`, `mydocs/skills/`처럼 업데이트 대상이 되는 영역을 명시한다.
@@ -192,24 +196,24 @@ Hyper-Waterfall의 canonical 배포 단위는 GitHub Release/tag다. 프롬프�
 
 - `overwrite`: 이전 manifest checksum과 대상 파일이 일치할 때만 자동 교체할 수 있다. 사용자 수정이 감지되면 충돌로 처리한다.
 - `merge`: 사용자에게 보이는 규칙·템플릿 파일처럼 수정 가능성이 높은 파일에 사용한다. 자동 덮어쓰기보다 patch와 리뷰를 우선한다.
-- `manual`: migration guide를 보고 유지보수자가 직접 판단해야 하는 항목에 사용한다.
+- `manual`: upstream artifact와 적용 저장소 diff를 보고 유지보수자가 직접 판단해야 하는 항목에 사용한다.
 - `preserve`: 없으면 만들 수 있지만, 한 번 생성된 뒤에는 명시 승인 없이 바꾸지 않는다.
 - `symlink`: `.agents/skills -> ../mydocs/skills`, `.claude/skills -> ../mydocs/skills`처럼 링크 목표를 검증한다.
 
-`.hyper-waterfall/version.json`은 작업 문서 산출물이 아니다. 따라서 `mydocs/` 아래에 두지 않는다. 이 파일은 대상 저장소가 어떤 Hyper-Waterfall release와 locale을 기준으로 설치되었는지와 마지막 업데이트 시점을 기록하기 위한 상태 파일이다. Framework lifecycle 판단은 이 파일을 읽어 현재 version, 현재 locale, 목표 release의 manifest 차이, 관련 migration guide를 비교한다.
+`.hyper-waterfall/version.json`은 작업 문서 산출물이 아니다. 따라서 `mydocs/` 아래에 두지 않는다. 이 파일은 대상 저장소가 어떤 Hyper-Waterfall release와 locale을 기준으로 설치되었는지와 마지막 업데이트 시점을 기록하기 위한 상태 파일이다. Framework lifecycle 판단은 이 파일을 읽어 현재 version, 현재 locale, 목표 upstream artifact와 설치본 차이를 비교한다.
 
 신규 적용은 strict manifest 기준으로 수행한다. 허용 대상은 manifest `files[]`의 target, `.hyper-waterfall/version.json`, manifest가 정의한 symlink이며, manifest 밖 파일이나 디렉터리는 생성하거나 수정하지 않는다. 제품 코드, 제품 문서, 아키텍처 문서, 로드맵, API 계약, 예제, 스키마 같은 대상 프로젝트 고유 산출물은 신규 적용 중 만들지 않는다. 필요성이 보이면 적용 판단 결과의 보류 항목 또는 별도 task 후보로 기록한다.
 
-Hyper-Waterfall 버전 업데이트 PR도 GitHub 플랫폼 산출물이므로 별도 문서 템플릿을 `mydocs/_templates/`에 만들지 않는다. PR 본문은 `.github/pull_request_template.md`를 사용하고, manifest diff와 migration guide 근거는 `요약`, `변경 내역`, `검증`, `검증 한계`, `남은 리스크` 섹션에 반영한다.
+Hyper-Waterfall 버전 업데이트 PR도 GitHub 플랫폼 산출물이므로 별도 문서 템플릿을 `mydocs/_templates/`에 만들지 않는다. PR 본문은 `.github/pull_request_template.md`를 사용하고, upstream artifact와 설치본 diff 근거는 `요약`, `변경 내역`, `검증`, `검증 한계`, `남은 리스크` 섹션에 반영한다.
 
 Lifecycle 판단 결과는 적용 전 보고 형식이지 `mydocs/`에 장기 보관하는 산출물 템플릿이 아니다. 판단 결과가 승인되어 실제 변경이 시작되면 그때부터 GitHub Issue, 수행계획서, 구현계획서, 단계 보고서, 최종 보고서, PR 본문 템플릿으로 추적한다.
 
 강제 규칙:
 
-- `templates/manifest.json`이 바뀌면 README의 배포·업데이트 설명과 migration guide를 함께 확인한다.
+- upstream release manifest가 바뀌면 `.hyper-waterfall/version.json`과 적용 저장소의 설치 사본 차이를 함께 확인한다.
 - `.hyper-waterfall/version.json`은 실제 적용 저장소에 남는 상태 파일이며, 본 프레임워크 저장소의 문서 산출물 템플릿과 섞지 않는다.
 - 사용자 수정 가능성이 높은 파일은 manifest에서 무조건 `overwrite`로 두지 않는다.
-- README나 `docs/agent-entrypoint.md`의 설치·업데이트 설명이 바뀌면 manifest, migration guide, `framework_lifecycle_guide.md`, `release_update_protocol.md` 설명을 함께 확인한다.
+- 설치·업데이트 설명이 바뀌면 `.hyper-waterfall/version.json`, immutable upstream artifact, `framework_lifecycle_guide.md`, `release_update_protocol.md` 설명을 함께 확인한다.
 
 ## 폴더별 상세 규칙
 
@@ -251,6 +255,7 @@ Lifecycle 판단 결과는 적용 전 보고 형식이지 `mydocs/`에 장기 �
 - Codex 인식 경로: `.agents/skills/` (저장소 루트 심볼릭 링크 -> `mydocs/skills`)
 - Claude Code 인식 경로: `.claude/skills/` (저장소 루트 심볼릭 링크 -> `mydocs/skills`)
 - 두 심볼릭 링크는 git에 mode `120000`으로 커밋된다.
+- GPUWatch의 설치본 중 심볼릭 링크는 `.agents/skills`와 `.claude/skills`뿐이다. `mydocs/_templates`와 `.github` 파일은 regular installed copy로 다룬다.
 - skill 본문은 도구 비종속(`gh`, `git`, 파일 생성)으로 작성하고, 도구별 호출 차이는 SKILL.md 말미 "호출 방법" 섹션에만 둔다.
 - Skill이 계획서, 보고서, 리뷰 문서를 작성할 때는 먼저 `mydocs/_templates/`의 해당 템플릿을 참조한다.
 
@@ -279,4 +284,4 @@ GitHub Issue Form이나 PR 본문 템플릿도 `mydocs/_templates/`에 넣지 �
 - [`task_workflow_guide.md`](task_workflow_guide.md): 내부 타스크의 수행계획서, 구현계획서, 단계 보고서, 최종 보고서 진행 순서.
 - [`git_workflow_guide.md`](git_workflow_guide.md): `local/taskN`, `publish/taskN`, `devel` 브랜치 운용과 PR 게시.
 - [`pr_process_guide.md`](pr_process_guide.md): 외부 기여자 PR 검토 절차.
-- `docs/migrations/README.md`: Hyper-Waterfall release 간 migration guide 작성 규칙.
+- upstream `postmelee/hyper-waterfall` release artifact: Hyper-Waterfall release 간 update 판단 기준.
