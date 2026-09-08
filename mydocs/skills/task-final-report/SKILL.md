@@ -61,6 +61,7 @@ description: |
    test "$(git ls-files -s -- "$IMPL_PLAN" | cut -d' ' -f1)" = "100644" || exit 1
    APPROVED_IMPL_PLAN_BLOB="$(git rev-parse "$APPROVED_IMPL_PLAN_COMMIT:$IMPL_PLAN")" || exit 1
    test "$APPROVED_IMPL_PLAN_BLOB" = "$(git rev-parse "HEAD:$IMPL_PLAN")" || exit 1
+   test "$APPROVED_IMPL_PLAN_BLOB" = "$(git rev-parse ":$IMPL_PLAN")" || exit 1
    test "$APPROVED_IMPL_PLAN_BLOB" = "$(git hash-object -- "$IMPL_PLAN")" || exit 1
    git merge-base --is-ancestor "$APPROVED_IMPL_PLAN_COMMIT" HEAD || exit 1
    ```
@@ -135,7 +136,7 @@ description: |
 - 모든 단계 보고서 + 최종 보고서 존재
 - 최초 구현계획서 승인 commit과 확인된 initial exact SHA가 Stage 1 commit보다 먼저 존재
 - 작업지시자가 같은 스레드에서 확인한 최신 exact SHA를 사용하며 해당 commit이 현재 HEAD의 ancestor
-- 승인 commit, HEAD, index의 구현계획서 mode가 모두 `100644`이고 working tree가 symlink가 아니며 HEAD와 working tree의 blob이 모두 최신 승인 commit의 구현계획서 blob과 동일
+- 승인 commit, HEAD, index의 구현계획서 mode가 모두 `100644`이고 working tree가 symlink가 아니며 HEAD, index, working tree의 blob이 모두 최신 승인 commit의 구현계획서 blob과 동일
 - 최종 보고서가 `mydocs/_templates/final_report.md`의 필수 섹션을 채움
 - `git status --short` 결과 빈 출력
 - `gh pr view` 결과에 draft가 아닌 PR이 정확한 base/head로 등록

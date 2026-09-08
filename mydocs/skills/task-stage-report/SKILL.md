@@ -45,6 +45,7 @@ description: |
       test "$(git ls-files -s -- "$IMPL_PLAN" | cut -d' ' -f1)" = "100644" || exit 1
       APPROVED_IMPL_PLAN_BLOB="$(git rev-parse "$APPROVED_IMPL_PLAN_COMMIT:$IMPL_PLAN")" || exit 1
       test "$APPROVED_IMPL_PLAN_BLOB" = "$(git rev-parse "HEAD:$IMPL_PLAN")" || exit 1
+      test "$APPROVED_IMPL_PLAN_BLOB" = "$(git rev-parse ":$IMPL_PLAN")" || exit 1
       test "$APPROVED_IMPL_PLAN_BLOB" = "$(git hash-object -- "$IMPL_PLAN")" || exit 1
       if test "{S}" = "1"; then
         test "$(git rev-parse HEAD)" = "$APPROVED_IMPL_PLAN_COMMIT" || exit 1
@@ -87,7 +88,7 @@ description: |
 - `git log -1 --format='%H' -- mydocs/plans/task_{milestone_slug}_{N}_impl.md`가 commit SHA를 출력
 - 작업지시자가 같은 스레드에서 확인한 exact SHA를 사용하며 commit message 검색으로 대체하지 않음
 - 최신 구현계획서 승인 commit의 변경 파일이 해당 `_impl.md` 하나뿐임
-- 승인 commit, HEAD, index의 구현계획서 mode가 모두 `100644`이고 working tree가 symlink가 아니며 HEAD와 working tree의 blob이 모두 승인 commit의 구현계획서 blob과 동일함
+- 승인 commit, HEAD, index의 구현계획서 mode가 모두 `100644`이고 working tree가 symlink가 아니며 HEAD, index, working tree의 blob이 모두 승인 commit의 구현계획서 blob과 동일함
 - Stage 1이면 최초 구현계획서 승인 commit이 현재 HEAD임
 - 이후 Stage면 최신 구현계획서 승인 commit이 현재 HEAD의 ancestor이며, 완료된 Stage 1 보고서가 최초 승인 SHA 검증 결과를 포함함
 - `git log --oneline -1`이 단계 커밋 메시지 표준 형식 충족
