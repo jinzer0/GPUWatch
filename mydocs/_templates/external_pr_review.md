@@ -21,6 +21,9 @@
 
 ## 검토 Snapshot
 
+- snapshot schema version: `1`
+- base repository: `{owner/repository}`
+- approved snapshot SHA-256: `{64자 소문자 16진수 digest}`
 - number: {PR 번호}
 - state: {OPEN/MERGED/CLOSED}
 - baseRefName: `{base branch}`
@@ -29,11 +32,11 @@
 - headRefOid: `{완전히 검토한 commit SHA}`
 - mergeable / mergeStateStatus: `{MERGEABLE 등}` / `{CLEAN 등}`
 - reviewDecision: `{APPROVED/CHANGES_REQUESTED/REVIEW_REQUIRED/없음}`
-- statusCheckRollup: {pending/failed/passing/no checks와 핵심 check 요약}
-- comments / reviews / latestReviews: {기존 검토 피드백과 답변 요약}
+- check runs / commit statuses: {pending/failed/passing/no checks와 핵심 check 요약}
+- issue comments / reviews / review comments: {기존 검토 피드백과 답변 요약}
 - reviewThreads: {resolved/unresolved/outdated 상태와 답글 검토 결과}
-- 캡처 전·후 metadata 일치: {OK/MISS}
-- 캡처 전·후 reviewThreads 일치: {OK/MISS}
+- complete pagination: {issue comments/reviews/review comments/review threads/check runs/commit statuses OK/MISS}
+- 캡처 전·후 canonical snapshot과 SHA-256 일치: {OK/MISS}
 - 전체 diff 줄 수: {N}
 - 검토 범위: `{첫 줄}-{마지막 줄}` / `{전체 N줄}`
 

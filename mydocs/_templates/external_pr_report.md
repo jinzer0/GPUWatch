@@ -17,6 +17,9 @@
 
 ## 승인 Snapshot
 
+- snapshot schema version: `1`
+- base repository: `{owner/repository}`
+- approved snapshot SHA-256: `{64자 소문자 16진수 digest}`
 - number: {PR 번호}
 - state: {OPEN/MERGED/CLOSED}
 - baseRefName: `{base branch}`
@@ -25,12 +28,14 @@
 - headRefOid: `{승인받은 commit SHA}`
 - mergeable / mergeStateStatus: `{MERGEABLE 등}` / `{CLEAN 등}`
 - reviewDecision: `{APPROVED/CHANGES_REQUESTED/REVIEW_REQUIRED/없음}`
-- statusCheckRollup: {pending/failed/passing/no checks와 핵심 check 요약}
-- comments / reviews / latestReviews: {승인받은 기존 검토 상태 요약}
+- check runs / commit statuses: {pending/failed/passing/no checks와 핵심 check 요약}
+- issue comments / reviews / review comments: {승인받은 기존 검토 상태 요약}
 - reviewThreads: {승인받은 resolved/unresolved/outdated 상태와 답글 요약}
 - 전체 diff 줄 수: {N}
 - 검토 범위: `{첫 줄}-{마지막 줄}` / `{전체 N줄}`
-- side effect 직전 재검증: {OK/MISS — 재검증 시각과 동일 identity/headRefOid/merge·CI/review·comment·thread 상태}
+- current snapshot SHA-256: `{side effect 직전 재캡처한 digest}`
+- side effect 직전 digest 재검증: {OK/MISS — 재검증 시각과 approved/current digest 일치}
+- 승인받은 단일 side effect: {comment/review/approve/request changes/merge/close 중 하나}
 - validation fetch commit: `{승인받은 headRefOid와 동일한 FETCH_HEAD / 로컬 정적 검토 없음}`
 - validation worktree: {detached HEAD 확인 OK/MISS/해당 없음}
 - validation cleanup: {worktree 등록 해제와 임시 디렉터리 삭제 OK/MISS/해당 없음}
