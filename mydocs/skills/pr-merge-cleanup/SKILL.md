@@ -136,6 +136,7 @@ description: |
    printf 'devel_relation=%s\n' "$DEVEL_RELATION"
 
    LOCAL_TASK_REF="refs/heads/${EXPECTED_TASK_BRANCH}"
+   LOCAL_TASK_OID=""
    if git show-ref --verify --quiet "$LOCAL_TASK_REF"; then
      LOCAL_TASK_OID="$(git rev-parse --verify "${LOCAL_TASK_REF}^{commit}")"
      test "$LOCAL_TASK_OID" = "$PR_HEAD_OID"
@@ -165,8 +166,8 @@ description: |
      git push --force-with-lease="refs/heads/${EXPECTED_HEAD_REF}:${PR_HEAD_OID}" \
        origin ":refs/heads/${EXPECTED_HEAD_REF}"
    fi
-   if git show-ref --verify --quiet "refs/heads/${EXPECTED_TASK_BRANCH}"; then
-     git branch -d "$EXPECTED_TASK_BRANCH"
+   if test -n "$LOCAL_TASK_OID"; then
+     git update-ref -d "refs/heads/${EXPECTED_TASK_BRANCH}" "$LOCAL_TASK_OID"
    fi
 
    ISSUE_STATE="$(gh issue view "$ISSUE_NUMBER" --repo "$CANONICAL_REPOSITORY" --json state --jq .state)"
