@@ -1,6 +1,6 @@
 # 최종 보고서 템플릿
 
-이 파일은 `mydocs/report/task_{milestone_slug}_{issue}_report.md` 작성용 중앙 템플릿이다. 최종 보고서는 모든 Stage의 결과, 수용 기준 검증, 남은 위험을 장기 보관용으로 정리하고 PR 게시 전 승인을 받기 위한 문서다.
+이 파일은 `mydocs/report/task_{milestone_slug}_{issue}_report.md` 작성용 중앙 템플릿이다. 최종 보고서는 모든 Stage의 결과, 수용 기준 검증, 남은 위험을 장기 보관용으로 정리하고, 보고서와 오늘할일 갱신 커밋 뒤 같은 스레드의 PR 게시 승인을 받기 위한 문서다.
 
 GitHub Issue: [#{issue}](https://github.com/jinzer0/GPUWatch/issues/{issue})
 마일스톤: {milestone_name}
@@ -56,6 +56,6 @@ GitHub Issue: [#{issue}](https://github.com/jinzer0/GPUWatch/issues/{issue})
 
 - {후속 이슈 후보. 없으면 `없음`으로 적는다.}
 
-## 작업지시자 승인 요청
+## 커밋 후 승인 요청
 
-- 최종 보고서와 수용 기준 검증 결과를 승인하면, 보고서/오늘할일 커밋 후 다시 멈추고 같은 스레드에서 PR 게시 승인 요청을 한다.
+- 이 보고서와 오늘할일 갱신을 커밋한 뒤 즉시 멈추고, 커밋된 최종 보고서와 수용 기준 검증 근거에 대한 새 같은 스레드 승인을 요청한다.

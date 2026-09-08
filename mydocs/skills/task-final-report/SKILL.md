@@ -2,7 +2,7 @@
 name: task-final-report
 description: |
   하이퍼-워터폴 타스크의 최종 보고와 PR 게시 절차를 적용한다.
-  최종 결과 보고서(`_report.md`) 작성, 오늘할일 완료 처리, 최종 커밋,
+  최종 결과 보고서(`_report.md`) 작성·검증, 오늘할일 완료 처리, 최종 커밋,
   같은 스레드의 추가 승인 후 publish/task{N} 원격 push와 devel 대상 Open PR 생성을 수행한다.
   모든 단계 완료 후 PR 직전에만 호출.
 ---
@@ -23,7 +23,7 @@ description: |
 ## 절차
 
 1. 통합 검증: 구현 계획서의 "수용 기준" 또는 마지막 단계 "검증" 섹션 명령 실행
-2. 최종 보고서 작성: `mydocs/report/task_{milestone_slug}_{N}_report.md`
+2. 최종 보고서 작성과 검증: `mydocs/report/task_{milestone_slug}_{N}_report.md`
    - 중앙 템플릿 `mydocs/_templates/final_report.md`를 기준으로 작성한다.
    - 템플릿을 읽을 수 없는 경우에만 다음 최소 섹션을 fallback으로 사용한다:
      - 작업 요약 (이슈 링크, 마일스톤, 단계 수)
@@ -52,7 +52,7 @@ description: |
      -m "Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)" \
      -m "Co-authored-by: Sisyphus <clio-agent@sisyphuslabs.ai>"
    ```
-6. 여기서 즉시 멈추고 작업지시자에게 최종 보고서와 수용 기준 검증 근거 승인 요청
+6. 여기서 즉시 멈추고 작업지시자에게 커밋된 최종 보고서와 수용 기준 검증 근거 승인 요청
    - 같은 스레드에서 새 승인을 받아야 한다.
    - 이전 단계 승인, 최종 보고서 작성 지시, 본 Skill 호출 지시는 PR 게시 승인으로 간주하지 않는다.
 7. 승인 후 원격 게시 브랜치 push
