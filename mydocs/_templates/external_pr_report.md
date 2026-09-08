@@ -11,6 +11,7 @@
 ## 검토 결과 요약
 
 - PR: #{번호}
+- 검토 round: {양의 정수}
 - 최종 권고: {merge / 수정 요청 / 닫기}
 - 핵심 근거: {한 줄 요약}
 
@@ -22,6 +23,7 @@
 - headRepository.nameWithOwner: `{owner/repository}`
 - headRefName: `{head branch}`
 - headRefOid: `{승인받은 commit SHA}`
+- statusCheckRollup: {pending/failed/passing/no checks와 핵심 check 요약}
 - 전체 diff 줄 수: {N}
 - 검토 범위: `{첫 줄}-{마지막 줄}` / `{전체 N줄}`
 - side effect 직전 재검증: {OK/MISS — 재검증 시각과 동일 headRefOid}

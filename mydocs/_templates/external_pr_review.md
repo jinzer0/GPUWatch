@@ -11,6 +11,7 @@
 ## PR 정보
 
 - PR: #{번호}
+- 검토 round: {양의 정수}
 - 제목: {PR 제목}
 - 작성자: {작성자}
 - base/head: `{base}` ← `{head}`
@@ -26,6 +27,7 @@
 - headRepository.nameWithOwner: `{owner/repository}`
 - headRefName: `{head branch}`
 - headRefOid: `{완전히 검토한 commit SHA}`
+- statusCheckRollup: {pending/failed/passing/no checks와 핵심 check 요약}
 - 캡처 전·후 metadata 일치: {OK/MISS}
 - 전체 diff 줄 수: {N}
 - 검토 범위: `{첫 줄}-{마지막 줄}` / `{전체 N줄}`
