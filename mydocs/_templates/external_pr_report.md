@@ -27,9 +27,9 @@
 - 전체 diff 줄 수: {N}
 - 검토 범위: `{첫 줄}-{마지막 줄}` / `{전체 N줄}`
 - side effect 직전 재검증: {OK/MISS — 재검증 시각과 동일 headRefOid}
-- validation fetch commit: `{승인받은 headRefOid와 동일한 FETCH_HEAD}`
-- validation worktree: {detached HEAD 확인 OK/MISS}
-- validation cleanup: {worktree 등록 해제와 임시 디렉터리 삭제 OK/MISS}
+- validation fetch commit: `{승인받은 headRefOid와 동일한 FETCH_HEAD / 로컬 정적 검토 없음}`
+- validation worktree: {detached HEAD 확인 OK/MISS/해당 없음}
+- validation cleanup: {worktree 등록 해제와 임시 디렉터리 삭제 OK/MISS/해당 없음}
 
 ## 검증 결과
 
