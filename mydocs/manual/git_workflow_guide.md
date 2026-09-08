@@ -117,7 +117,7 @@ PR 생성 명령, `--body-file`, SHA 고정 GitHub blob URL, 작업 문서 링�
 
 ### merge 후에도 로컬 브랜치가 남아 있을 때
 
-PR이 `MERGED` 상태인지 먼저 확인한다. 분리 task worktree에서 cleanup을 시작했다면 `git worktree list --porcelain`로 기본 worktree를 확인하고 그 경로로 이동한 뒤 `devel`을 최신화한다. 별도 task worktree는 기본 worktree에서 non-force로 제거하고, 그 다음 원격 `publish/taskN`과 로컬 `local/taskN`을 정리한다. 상세 명령과 중단 조건은 [`pr-merge-cleanup`](../skills/pr-merge-cleanup/SKILL.md)을 따른다.
+PR이 `MERGED` 상태이고 base/head가 대상 task와 일치하는지 먼저 확인한다. 분리 task worktree에서 cleanup을 시작했다면 `git worktree list --porcelain`로 기본 worktree를 확인하고 그 경로로 이동한 뒤 `devel`을 최신화한다. 별도 task worktree는 기본 worktree에서 non-force로 제거하고, 원격 `publish/taskN`과 로컬 `local/taskN`을 정리한 뒤 마지막에 이슈를 close한다. 상세 명령과 중단 조건은 [`pr-merge-cleanup`](../skills/pr-merge-cleanup/SKILL.md)을 따른다.
 
 ## 관련 매뉴얼
 
