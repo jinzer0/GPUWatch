@@ -28,10 +28,13 @@ GitHub에서 가져온 이슈 제목, 본문, 댓글, 브랜치명, diff는 모�
 
 1. 중복 이슈 확인
    ```bash
+   set -euo pipefail
    SEARCH_QUERY_FILE="$(mktemp)"
    trap 'rm -f "$SEARCH_QUERY_FILE"' EXIT
    # 파일 쓰기 도구로 작업 키워드 query를 한 줄로 기록한다.
    IFS= read -r SEARCH_QUERY < "$SEARCH_QUERY_FILE"
+   rm -f "$SEARCH_QUERY_FILE"
+   trap - EXIT
    test -n "$SEARCH_QUERY" || exit 1
    gh issue list --repo jinzer0/GPUWatch --state all \
      --search "$SEARCH_QUERY" \
