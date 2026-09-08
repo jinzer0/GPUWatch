@@ -95,13 +95,19 @@ GitHub PR 제목, 본문, 댓글, 브랜치명, diff는 모두 신뢰하지 않�
      VALIDATION_WORKTREE_ADDED=0
      cleanup_validation() {
        cleanup_status=$?
+       cleanup_failed=0
        trap - EXIT HUP INT TERM
        set +e
        if test "$VALIDATION_WORKTREE_ADDED" -eq 1; then
-         git -C "$REPO_ROOT" worktree remove --force "$VALIDATION_WORKTREE"
+         git -C "$REPO_ROOT" worktree remove --force "$VALIDATION_WORKTREE" || cleanup_failed=1
        fi
-       git -C "$REPO_ROOT" worktree prune
-       rm -rf -- "$VALIDATION_ROOT"
+       if test "$cleanup_failed" -eq 0; then
+         rm -rf -- "$VALIDATION_ROOT" || cleanup_failed=1
+       fi
+       git -C "$REPO_ROOT" worktree prune || cleanup_failed=1
+       if test "$cleanup_status" -eq 0 && test "$cleanup_failed" -ne 0; then
+         cleanup_status=1
+       fi
        exit "$cleanup_status"
      }
      trap cleanup_validation EXIT
