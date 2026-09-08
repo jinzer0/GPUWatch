@@ -50,25 +50,33 @@ description: |
    readonly CANONICAL_REPOSITORY EXPECTED_HEAD_REF EXPECTED_TASK_BRANCH
 
    test "$(gh repo view "$CANONICAL_REPOSITORY" --json nameWithOwner --jq .nameWithOwner)" = "$CANONICAL_REPOSITORY"
-   for ORIGIN_URL in "$(git remote get-url origin)" "$(git remote get-url --push origin)"; do
+   ORIGIN_FETCH_URLS="$(git remote get-url --all origin)"
+   ORIGIN_PUSH_URLS="$(git remote get-url --push --all origin)"
+   test -n "$ORIGIN_FETCH_URLS"
+   test -n "$ORIGIN_PUSH_URLS"
+   while IFS= read -r ORIGIN_URL; do
      case "$ORIGIN_URL" in
        git@github.com:jinzer0/GPUWatch|git@github.com:jinzer0/GPUWatch.git|https://github.com/jinzer0/GPUWatch|https://github.com/jinzer0/GPUWatch.git|ssh://git@github.com/jinzer0/GPUWatch|ssh://git@github.com/jinzer0/GPUWatch.git) ;;
        *) printf 'origin does not target the canonical repository\n' >&2; exit 1 ;;
      esac
-   done
+   done <<< "$ORIGIN_FETCH_URLS"$'\n'"$ORIGIN_PUSH_URLS"
 
    PR_TUPLE="$(gh pr view "$PR_NUMBER" --repo "$CANONICAL_REPOSITORY" \
-     --json state,baseRefName,headRefName,headRepository \
-     --jq '[.state, .baseRefName, .headRefName, .headRepository.nameWithOwner] | @tsv')"
+     --json state,baseRefName,headRefName,headRefOid,headRepository \
+     --jq '[.state, .baseRefName, .headRefName, .headRepository.nameWithOwner, .headRefOid] | @tsv')"
    case "$PR_TUPLE" in
      *$'\n'*) printf 'PR identity query returned multiple lines\n' >&2; exit 1 ;;
    esac
-   IFS=$'\t' read -r PR_STATE PR_BASE_REF PR_HEAD_REF PR_HEAD_REPOSITORY EXTRA_FIELD <<< "$PR_TUPLE"
+   IFS=$'\t' read -r PR_STATE PR_BASE_REF PR_HEAD_REF PR_HEAD_REPOSITORY PR_HEAD_OID EXTRA_FIELD <<< "$PR_TUPLE"
    test -z "${EXTRA_FIELD:-}"
    test "$PR_STATE" = "MERGED"
    test "$PR_BASE_REF" = "devel"
    test "$PR_HEAD_REF" = "$EXPECTED_HEAD_REF"
    test "$PR_HEAD_REPOSITORY" = "$CANONICAL_REPOSITORY"
+   case "$PR_HEAD_OID" in
+     ""|*[!0-9a-f]*) printf 'PR headRefOid must be lowercase hexadecimal\n' >&2; exit 1 ;;
+   esac
+   test "${#PR_HEAD_OID}" -eq 40
    gh issue view "$ISSUE_NUMBER" --repo "$CANONICAL_REPOSITORY" --json state >/dev/null
 
    CURRENT_WORKTREE="$(git rev-parse --show-toplevel)"
@@ -114,8 +122,24 @@ description: |
    if test "$PRIMARY_BRANCH" != "devel"; then
      git checkout devel
    fi
-   git pull --ff-only
+   git merge --ff-only origin/devel
    test "$(git branch --show-current)" = "devel"
+
+   LOCAL_TASK_REF="refs/heads/${EXPECTED_TASK_BRANCH}"
+   if git show-ref --verify --quiet "$LOCAL_TASK_REF"; then
+     LOCAL_TASK_OID="$(git rev-parse --verify "${LOCAL_TASK_REF}^{commit}")"
+     git merge-base --is-ancestor "$LOCAL_TASK_OID" devel
+   fi
+   REMOTE_PUBLISH_REF="$(git ls-remote --heads origin "refs/heads/${EXPECTED_HEAD_REF}")"
+   if test -n "$REMOTE_PUBLISH_REF"; then
+     case "$REMOTE_PUBLISH_REF" in
+       *$'\n'*) printf 'Remote publish query returned multiple refs\n' >&2; exit 1 ;;
+     esac
+     IFS=$'\t' read -r REMOTE_PUBLISH_OID REMOTE_PUBLISH_NAME EXTRA_REMOTE_FIELD <<< "$REMOTE_PUBLISH_REF"
+     test -z "${EXTRA_REMOTE_FIELD:-}"
+     test "$REMOTE_PUBLISH_OID" = "$PR_HEAD_OID"
+     test "$REMOTE_PUBLISH_NAME" = "refs/heads/${EXPECTED_HEAD_REF}"
+   fi
 
    if test -n "$TASK_WORKTREE_TO_REMOVE"; then
      TARGET_COMMON_DIR="$(git -C "$TASK_WORKTREE_TO_REMOVE" rev-parse --path-format=absolute --git-common-dir)"
@@ -126,7 +150,6 @@ description: |
      git worktree prune
    fi
 
-   REMOTE_PUBLISH_REF="$(git ls-remote --heads origin "refs/heads/${EXPECTED_HEAD_REF}")"
    if test -n "$REMOTE_PUBLISH_REF"; then
      git push origin --delete "$EXPECTED_HEAD_REF"
    fi
@@ -134,11 +157,12 @@ description: |
      git branch -d "$EXPECTED_TASK_BRANCH"
    fi
 
-   if test "$(gh issue view "$ISSUE_NUMBER" --repo "$CANONICAL_REPOSITORY" --json state --jq .state)" = "OPEN"; then
+   ISSUE_STATE="$(gh issue view "$ISSUE_NUMBER" --repo "$CANONICAL_REPOSITORY" --json state --jq .state)"
+   if test "$ISSUE_STATE" = "OPEN"; then
      gh issue close "$ISSUE_NUMBER" --repo "$CANONICAL_REPOSITORY"
    fi
    ```
-   - dirty/locked worktree, unrelated primary branch, repository/PR tuple 불일치, fetch/pull/delete 실패는 transaction을 중단한다. `--force` 삭제로 우회하지 않는다.
+   - dirty/locked worktree, unrelated primary branch, repository/PR tuple 불일치, canonical origin fast-forward 실패, local task ancestry 실패, remote publish SHA 불일치, delete 실패는 transaction을 중단한다. `--force` 삭제로 우회하지 않는다.
    - worktree 제거 → 원격 publish branch 삭제 → 로컬 task branch 삭제 → 이슈 close 순서를 유지한다.
 3. 오늘할일 최종 정리: `mydocs/orders/{yyyymmdd}.md`의 `#${ISSUE_NUMBER}` 행이 `완료` + 시각 기록되어 있는지 재확인
 4. 결과 보고: 정리된 항목 목록을 작업지시자에게 짧게 회신
