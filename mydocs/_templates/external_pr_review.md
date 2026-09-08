@@ -27,8 +27,13 @@
 - headRepository.nameWithOwner: `{owner/repository}`
 - headRefName: `{head branch}`
 - headRefOid: `{완전히 검토한 commit SHA}`
+- mergeable / mergeStateStatus: `{MERGEABLE 등}` / `{CLEAN 등}`
+- reviewDecision: `{APPROVED/CHANGES_REQUESTED/REVIEW_REQUIRED/없음}`
 - statusCheckRollup: {pending/failed/passing/no checks와 핵심 check 요약}
+- comments / reviews / latestReviews: {기존 검토 피드백과 답변 요약}
+- reviewThreads: {resolved/unresolved/outdated 상태와 답글 검토 결과}
 - 캡처 전·후 metadata 일치: {OK/MISS}
+- 캡처 전·후 reviewThreads 일치: {OK/MISS}
 - 전체 diff 줄 수: {N}
 - 검토 범위: `{첫 줄}-{마지막 줄}` / `{전체 N줄}`
 

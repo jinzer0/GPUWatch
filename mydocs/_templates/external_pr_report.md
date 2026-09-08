@@ -23,10 +23,14 @@
 - headRepository.nameWithOwner: `{owner/repository}`
 - headRefName: `{head branch}`
 - headRefOid: `{승인받은 commit SHA}`
+- mergeable / mergeStateStatus: `{MERGEABLE 등}` / `{CLEAN 등}`
+- reviewDecision: `{APPROVED/CHANGES_REQUESTED/REVIEW_REQUIRED/없음}`
 - statusCheckRollup: {pending/failed/passing/no checks와 핵심 check 요약}
+- comments / reviews / latestReviews: {승인받은 기존 검토 상태 요약}
+- reviewThreads: {승인받은 resolved/unresolved/outdated 상태와 답글 요약}
 - 전체 diff 줄 수: {N}
 - 검토 범위: `{첫 줄}-{마지막 줄}` / `{전체 N줄}`
-- side effect 직전 재검증: {OK/MISS — 재검증 시각과 동일 headRefOid}
+- side effect 직전 재검증: {OK/MISS — 재검증 시각과 동일 identity/headRefOid/merge·CI/review·comment·thread 상태}
 - validation fetch commit: `{승인받은 headRefOid와 동일한 FETCH_HEAD / 로컬 정적 검토 없음}`
 - validation worktree: {detached HEAD 확인 OK/MISS/해당 없음}
 - validation cleanup: {worktree 등록 해제와 임시 디렉터리 삭제 OK/MISS/해당 없음}
