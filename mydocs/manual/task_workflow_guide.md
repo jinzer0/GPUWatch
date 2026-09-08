@@ -44,7 +44,7 @@ Lifecycle 판단 결과가 승인되어 실제 파일 변경으로 넘어가면,
   - 세부 하위 단계 허용: `Task #{issue번호} [Stage {N.M}]: 내용`
   - 최종 보고서 커밋: `Task #{issue번호}: 최종 보고서 작성과 오늘할일 완료 처리`
 - `mydocs/orders/`에서 `M100 #1` 형식으로 마일스톤+이슈 참조
-- 타스크 완료 시: `gh issue close {번호}` 또는 커밋 메시지에 `closes #번호`
+- 타스크 완료 시: PR merge 후 `pr-merge-cleanup`의 read-only preflight가 출력한 host, repository, repository ID, PR 번호, 이슈 번호, merged head OID, base/head refs, action `close-issue:completed` exact tuple을 같은 스레드에서 승인한 뒤 `gh issue close {번호} --reason completed` 실행. 이미 `CLOSED`인 이슈는 검증된 no-op으로 처리
 
 ## 타스크 진행 절차
 
@@ -76,7 +76,7 @@ Lifecycle 판단 결과가 승인되어 실제 파일 변경으로 넘어가면,
 12. 새 승인을 받은 뒤 `publish/task{issue번호}`로 원격 push 후 `devel` 대상 Open PR 생성. PR 생성 전 반드시 `git status`로 미커밋 파일이 없는지 확인한다.
 13. 승인 요청 시 작업지시자가 피드백 문서를 `mydocs/feedback/`에 등록
 14. 모든 테스트 통과 시 피드백 없음
-15. PR merge 확인 후 이슈 close와 오늘할일 상태를 최종 정리하고, merge 완료된 `publish/task{issue번호}` 원격 브랜치와 재생성 가능한 로컬 부산물을 정리
+15. PR merge 확인 후 `pr-merge-cleanup`으로 read-only preflight를 실행한다. 이슈가 `OPEN`이면 host, repository, repository ID, PR 번호, 이슈 번호, merged head OID, base/head refs, action `close-issue:completed` exact tuple을 같은 스레드에서 승인받은 뒤 cleanup 실행 fence에 해당 scalar 값을 입력한다. cleanup은 mutation 전과 close 직전에 tuple을 재검증하고, merge 완료된 `publish/task{issue번호}` 원격 브랜치와 재생성 가능한 로컬 부산물을 정리한 다음 마지막에 `gh issue close {번호} --reason completed`를 실행해 `CLOSED`를 확인한다. 이미 `CLOSED`인 이슈는 승인 없이 검증된 no-op으로 처리한다.
 
 ## 작업 규칙
 
