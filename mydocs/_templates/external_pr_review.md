@@ -48,6 +48,10 @@
 
 ## 검증 계획
 
+- 로컬 detached worktree: {contributor-controlled code를 실행하지 않는 정적 검토 또는 없음}
+- GitHub-hosted `pull_request` CI: {maintainer-controlled safe check 또는 없음}
+- 실행 검증 한계: {안전한 CI가 없으면 미수행 사유}
+
 ```bash
 {필요한 검증 명령}
 ```

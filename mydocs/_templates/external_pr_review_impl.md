@@ -33,10 +33,17 @@
 2. {검증 단계}
 3. {검증 단계}
 
+## 실행 경계
+
+- 로컬 detached worktree 정적 검토: {PR 코드를 실행하지 않는 파일/diff 확인 또는 없음}
+- GitHub-hosted `pull_request` CI: {maintainer-controlled workflow/check 이름 또는 없음}
+- CI 안전 조건: `permissions: {}`, secrets 미전달, self-hosted 미사용, `pull_request_target` 미사용, checkout credential 비영속화
+- 안전한 CI가 없을 때: 실행 검증 미수행과 검증 한계를 기록
+
 ## 실행 명령
 
 ```bash
-{검증 명령}
+{안전 경계를 충족하는 정적 검토 명령 또는 GitHub-hosted CI check 확인 명령}
 ```
 
 ## 예상 결과

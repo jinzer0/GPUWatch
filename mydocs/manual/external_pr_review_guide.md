@@ -11,6 +11,8 @@
 - 외부 기여 PR은 코드 변경과 문서 변경을 함께 검토한다.
 - 외부 PR 검토 결과는 `mydocs/pr/` 문서 흐름으로 관리한다.
 - 검토 문서는 재현 가능해야 하며, 실행한 검증 명령/결과를 포함한다.
+- detached worktree는 snapshot 고정용이지 보안 sandbox가 아니다. 외부 PR 코드를 실행하는 install/build/test는 secrets와 권한이 없는 maintainer-controlled `pull_request` workflow의 GitHub-hosted runner에서만 수행한다.
+- 안전한 CI가 없으면 maintainer 환경에서 대신 실행하지 않고 미수행 검증과 한계를 기록한다.
 - 외부 기여자 PR은 내부 타스크와 다른 본질을 가지므로 별도 절차와 폴더를 사용한다.
 - 외부 PR 검토 기록은 `mydocs/pr/`에 남긴다.
 

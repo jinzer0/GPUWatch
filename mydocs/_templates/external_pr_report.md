@@ -33,6 +33,9 @@
 
 ## 검증 결과
 
+- contributor-controlled code 실행 위치: {조건을 만족하는 GitHub-hosted `pull_request` CI / 미수행}
+- CI 안전 조건 확인: {OK/MISS/해당 CI 없음}
+
 실행 명령:
 
 ```bash
