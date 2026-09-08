@@ -37,7 +37,7 @@
   - 향후 Issue 기반 작업의 기본형: `Task #{번호}: 내용`
   - 단계: `Task #{번호} Stage {N}: 내용`
   - 하위 단계: `Task #{번호} [Stage {N.M}]: 내용`
-  - 보고서 묶음: `Task #{번호} Stage {N} + 최종 보고서: 내용`
+  - 최종 보고서: `Task #{번호}: 최종 보고서 작성과 오늘할일 완료 처리`
 - 문서 파일명: `task_{milestone_slug}_{이슈번호}{_impl|_stage{N}|_report}?.md`. 신규 문서는 마일스톤 포함 형식 강제. 상세: [`document_structure_guide.md`](mydocs/manual/document_structure_guide.md)
 - 모든 문서는 이 저장소에 선택된 Hyper-Waterfall locale로 작성한다.
 
