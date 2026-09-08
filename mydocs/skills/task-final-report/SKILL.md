@@ -113,7 +113,7 @@ description: |
    # 파일 쓰기 도구로 승인된 PR 제목을 "$PR_TITLE_FILE"에 한 줄로 기록한다.
    # .github/pull_request_template.md를 출발점으로 삼아 최종 보고서와 단계 보고서 기준으로 "$PR_BODY"를 작성한다.
    IFS= read -r PR_TITLE < "$PR_TITLE_FILE"
-   gh pr create --base devel --head "$PUBLISH_BRANCH" \
+   GH_HOST=github.com gh pr create --repo jinzer0/GPUWatch --base devel --head "$PUBLISH_BRANCH" \
      --title "$PR_TITLE" \
      --body-file "$PR_BODY"
    ```
@@ -143,7 +143,7 @@ description: |
 - 최종 보고서가 `mydocs/_templates/final_report.md`의 필수 섹션을 채움
 - `git status --short` 결과 빈 출력
 - 최종 commit 직후와 원격 push 직전에 `git status --porcelain` 결과가 빈 출력
-- `gh pr view` 결과에 draft가 아닌 PR이 정확한 base/head로 등록
+- `GH_HOST=github.com gh pr view --repo jinzer0/GPUWatch` 결과에 draft가 아닌 PR이 정확한 base/head로 등록
 - PR 본문 `변경 내역`의 Stage별 요약이 단계 보고서 링크와 짧은 commit SHA 링크를 함께 사용
 - PR 본문 `변경 내역`의 작업 문서 항목이 commit SHA 고정 URL과 `[파일명](URL)` 표시 형식을 사용
 - PR 본문 작업 문서 항목에 raw GitHub blob URL, 상대 링크, `blob/publish/task{N}` 링크 없음
