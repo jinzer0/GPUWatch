@@ -106,6 +106,8 @@ Task #{issue} Stage 3: {핵심 내용 요약}
 
 ## 커밋
 
+- 본 문서가 승인되면 Stage 1 시작 전에 `Task #{issue}: 승인된 구현 계획서 확정` 독립 커밋으로 기록한다.
+- 승인된 구현계획서 커밋에는 저장소가 요구하는 Sisyphus attribution 두 줄을 포함한다.
 - 단계 커밋은 단계 산출물과 `mydocs/working/task_{milestone_slug}_{issue}_stage{N}.md`를 함께 묶는다.
 - 커밋 메시지는 `Task #{issue} Stage {N}: {핵심 내용 요약}` 형식을 따른다.
 
@@ -121,3 +123,4 @@ Task #{issue} Stage 3: {핵심 내용 요약}
 ## 승인 요청 사항
 
 - {Stage 분할, 산출물, 검증 명령, 커밋 메시지에 대한 승인 요청}
+- 승인 후 본 구현계획서를 독립 커밋하고 Stage 1에 진입하는 것에 대한 승인 요청

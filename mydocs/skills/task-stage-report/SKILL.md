@@ -15,7 +15,8 @@ description: |
 
 ## 사전 조건
 
-- 구현 계획서(`task_{milestone_slug}_{N}_impl.md`)가 존재하고 작업지시자 승인됨
+- 구현 계획서(`task_{milestone_slug}_{N}_impl.md`)가 존재하고 작업지시자 승인 후 `local/task{N}`에 독립 커밋됨
+- Stage 1 시작 시 구현계획서에 미커밋 변경이 없었음
 - 현재 단계의 작업 항목이 모두 코드/문서에 반영됨
 - 작업 브랜치는 `local/task{N}`
 
@@ -51,6 +52,9 @@ description: |
 
 ## 검증
 
+- `git ls-files --error-unmatch mydocs/plans/task_{milestone_slug}_{N}_impl.md` 통과
+- `git diff --quiet HEAD -- mydocs/plans/task_{milestone_slug}_{N}_impl.md` 통과
+- `git log -1 --format='%H' -- mydocs/plans/task_{milestone_slug}_{N}_impl.md`가 commit SHA를 출력
 - `git log --oneline -1`이 단계 커밋 메시지 표준 형식 충족
 - `mydocs/working/task_{milestone_slug}_{N}_stage{S}.md` 존재
 - 단계 보고서가 `mydocs/_templates/stage_report.md`의 필수 섹션을 채움
@@ -61,6 +65,7 @@ description: |
 - 검증 실패 상태로 보고서 작성·커밋
 - 단계 산출물과 보고서를 분리해 별도 커밋 (한 단계는 한 커밋 원칙)
 - 작업지시자 승인 없이 다음 단계 진입
+- 승인된 구현계획서를 독립 커밋하기 전에 Stage 1 진입
 
 ## 호출 방법
 

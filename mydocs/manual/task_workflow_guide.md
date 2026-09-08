@@ -51,7 +51,14 @@ Lifecycle 판단 결과가 승인되어 실제 파일 변경으로 넘어가면,
 1. 이슈가 없는 작업은 `task-register`로 GitHub Issue 등록. 기존 이슈가 있으면 해당 번호 사용
 2. 작업지시자가 지정한 이슈를 `task-start`로 시작하고 `local/task{issue번호}` 브랜치 생성 후 진행
 3. 수행 전 수행계획서 작성 → 승인 요청
-4. 구현 계획서 작성 (최소 3단계, 최대 6단계) → 승인 요청
+4. 구현 계획서 작성 (최소 3단계, 최대 6단계) → 승인 요청. 승인 후 Stage 1 시작 전에 승인본을 독립 커밋으로 기록
+   ```bash
+   git add "mydocs/plans/task_{milestone_slug}_{issue번호}_impl.md"
+   git commit -m "Task #{issue번호}: 승인된 구현 계획서 확정" \
+     -m "Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)" \
+     -m "Co-authored-by: Sisyphus <clio-agent@sisyphuslabs.ai>"
+   ```
+   - 구현계획서 승인은 승인본 커밋과 Stage 1 진입만 허용한다. 이후 단계 진입, 최종 게시, merge 승인을 대신하지 않는다.
 5. 단계별 진행 시작
 6. 각 단계 완료 후 단계별 완료보고서 작성 → 승인 요청
 7. **단계별 완료보고서(`_stage{N}.md`)는 해당 단계 소스 커밋과 함께 타스크 브랜치에서 커밋한다.**
@@ -85,6 +92,10 @@ Lifecycle 판단 결과가 승인되어 실제 파일 변경으로 넘어가면,
 ### 단계 승인 없이 다음 단계 작업을 시작했을 때
 
 즉시 멈추고 현재 변경 범위를 확인한다. 아직 커밋 전이면 변경을 분리해 현재 승인된 단계에 속하는 것만 남긴다. 이미 커밋했다면 작업지시자에게 상황을 보고하고 보정 커밋 또는 계획서 갱신 방향을 확인한다.
+
+### 승인된 구현계획서를 커밋하지 않고 Stage 1을 시작했을 때
+
+즉시 Stage 작업을 멈추고 구현계획서 승인본과 working tree 상태를 확인한다. Stage 산출물과 섞지 말고 승인된 `_impl.md`만 독립 커밋한 뒤 Stage 1을 다시 시작한다.
 
 ## SKILL 호출 표시 안내
 
