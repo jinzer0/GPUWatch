@@ -4,7 +4,7 @@
 
 ## 사용 위치
 
-- 실제 파일: `mydocs/feedback/{yyyymmdd}_{topic}.md` 또는 `mydocs/feedback/task_{milestone}_{issue}_feedback.md`
+- 실제 파일: `mydocs/feedback/{yyyymmdd}_{topic}.md` 또는 `mydocs/feedback/task_{milestone_slug}_{issue}_feedback.md`
 - 작성 시점: 단계 승인 보류, PR 리뷰, 작업지시자 재작업 요청, 설계 방향 수정 요청 시점
 - 작성 언어: 이 저장소에 선택된 Hyper-Waterfall locale을 따른다.
 

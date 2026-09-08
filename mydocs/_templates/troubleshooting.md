@@ -4,7 +4,7 @@
 
 ## 사용 위치
 
-- 실제 파일: `mydocs/troubleshootings/{yyyymmdd}_{topic}.md` 또는 `mydocs/troubleshootings/task_{milestone}_{issue}_{topic}.md`
+- 실제 파일: `mydocs/troubleshootings/{yyyymmdd}_{topic}.md` 또는 `mydocs/troubleshootings/task_{milestone_slug}_{issue}_{topic}.md`
 - 작성 시점: 같은 오류가 반복될 가능성이 있거나, 해결 과정 자체가 이후 작업의 중요한 맥락일 때
 - 작성 언어: 이 저장소에 선택된 Hyper-Waterfall locale을 따른다.
 

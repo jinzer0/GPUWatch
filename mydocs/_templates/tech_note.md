@@ -4,7 +4,7 @@
 
 ## 사용 위치
 
-- 실제 파일: `mydocs/tech/{yyyymmdd}_{topic}.md` 또는 `mydocs/tech/task_{milestone}_{issue}_{topic}.md`
+- 실제 파일: `mydocs/tech/{yyyymmdd}_{topic}.md` 또는 `mydocs/tech/task_{milestone_slug}_{issue}_{topic}.md`
 - 작성 시점: 구현 전 조사, 설계 대안 비교, 외부 문서/스펙 검토, 구조 분석 시점
 - 작성 언어: 이 저장소에 선택된 Hyper-Waterfall locale을 따른다.
 
