@@ -38,7 +38,7 @@
 - 검토 범위: `{첫 줄}-{마지막 줄}` / `{전체 N줄}`
 - current snapshot SHA-256: `{side effect 직전 재캡처한 digest}`
 - side effect 직전 digest 재검증: {OK/MISS — 재검증 시각과 approved/current digest 일치}
-- 승인받은 단일 side effect: {comment/review/approve/request changes/merge/close 중 하나}
+- 승인받은 단일 side effect: {comment/review/request changes 중 하나 — approve/merge/close 제외}
 - approved payload SHA-256: `{승인받은 payload 원문의 digest}`
 - approved action manifest SHA-256: `{repository/PR/snapshot/head/action/payload를 결박한 digest}`
 - current action manifest SHA-256: `{side effect 직전 재생성한 digest}`
@@ -79,4 +79,5 @@
 
 ## 작업지시자 승인 요청
 
-- 위 최종 권고와 GitHub PR 코멘트 본문을 승인하면 PR에 등록한다.
+- 다음 exact tuple과 단일 side effect를 승인한다고 명시해야 한다: `base host`, `base repository`와 ID, PR 번호, approved snapshot SHA-256, base/head OID, action, payload SHA-256, action manifest SHA-256.
+- 위 tuple과 GitHub PR payload 원문이 모두 일치할 때만 승인된 action 하나를 등록한다. approve, merge, close는 본 자동 gate 승인 대상이 아니다.

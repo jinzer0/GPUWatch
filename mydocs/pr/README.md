@@ -33,6 +33,8 @@
 - 영향 범위
 - 코드/문서 점검 결과
 - 검증 계획 또는 결과
+- canonical review snapshot의 repository/base/head identity와 captured/approved SHA-256
+- 승인받은 단일 action, payload SHA-256, action manifest SHA-256
 - 권고
 - 작업지시자 승인 요청
 
