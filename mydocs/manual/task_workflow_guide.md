@@ -63,6 +63,10 @@ Lifecycle 판단 결과가 승인되어 실제 파일 변경으로 넘어가면,
    - 구현계획서 내용 승인과 exact SHA 확인은 승인본 커밋과 Stage 1 진입만 허용한다. 이후 단계 진입, 최종 게시, merge 승인을 대신하지 않는다.
    - Stage 1 이후 계획서를 변경해야 하면 현재 단계를 멈추고 변경본 내용을 다시 승인받아 `_impl.md`만 새 독립 commit으로 기록한다. 새 exact SHA까지 확인받은 뒤 이후 단계에서 그 SHA와 현재 plan blob의 일치를 검증한다.
 5. 단계별 진행 시작
+   - 각 Stage와 최종 통합 검증 명령을 실행하기 전에 작업지시자가 확인한 최신 구현계획서 exact SHA를 입력으로 사용한다.
+   - 승인 commit이 `_impl.md` 하나만 변경하고 현재 HEAD의 ancestor인지 확인한다.
+   - 승인 commit, HEAD, index의 `_impl.md` mode가 모두 `100644`인지, working tree의 `_impl.md`가 symlink가 아닌지 확인한다.
+   - 승인 commit의 plan blob이 HEAD와 실제 working-tree file hash 모두와 동일한지 확인한다. 하나라도 실패하면 계획서의 검증 명령을 실행하지 않는다.
 6. 각 단계 완료 후 단계별 완료보고서 작성 → 승인 요청
 7. **단계별 완료보고서(`_stage{N}.md`)는 해당 단계 소스 커밋과 함께 타스크 브랜치에서 커밋한다.**
 8. 승인 후 다음 단계 진행

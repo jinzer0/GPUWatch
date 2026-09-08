@@ -18,7 +18,7 @@ description: |
 
 - 최초 승인된 구현 계획서의 독립 커밋과 작업지시자가 확인한 initial exact SHA가 Stage 1보다 먼저 존재하고, 모든 단계 종료와 각 단계 보고서 커밋이 완료됨
 - Stage 1 이후 계획서를 재승인했다면 작업지시자가 확인한 latest exact SHA가 현재 HEAD의 ancestor임
-- 통합 검증(전체 수용 기준) 통과 확인
+- 통합 검증 명령과 전체 수용 기준이 구현계획서에 정리되어 본 절차에서 실행 가능
 - `local/task{N}`에 commit 안 된 변경 없음 또는 본 절차에서 함께 커밋할 것만 남아 있음
 
 ## 절차
@@ -56,6 +56,9 @@ description: |
    test "$(git diff-tree --root --no-commit-id --name-only -r "$APPROVED_IMPL_PLAN_COMMIT" | wc -l | tr -d ' ')" -eq 1 || exit 1
    test "$(git diff-tree --root --no-commit-id --name-only -r "$APPROVED_IMPL_PLAN_COMMIT")" = "$IMPL_PLAN" || exit 1
    test ! -L "$IMPL_PLAN" || exit 1
+   test "$(git ls-tree "$APPROVED_IMPL_PLAN_COMMIT" -- "$IMPL_PLAN" | cut -d' ' -f1)" = "100644" || exit 1
+   test "$(git ls-tree HEAD -- "$IMPL_PLAN" | cut -d' ' -f1)" = "100644" || exit 1
+   test "$(git ls-files -s -- "$IMPL_PLAN" | cut -d' ' -f1)" = "100644" || exit 1
    APPROVED_IMPL_PLAN_BLOB="$(git rev-parse "$APPROVED_IMPL_PLAN_COMMIT:$IMPL_PLAN")" || exit 1
    test "$APPROVED_IMPL_PLAN_BLOB" = "$(git rev-parse "HEAD:$IMPL_PLAN")" || exit 1
    test "$APPROVED_IMPL_PLAN_BLOB" = "$(git hash-object -- "$IMPL_PLAN")" || exit 1
@@ -132,7 +135,7 @@ description: |
 - 모든 단계 보고서 + 최종 보고서 존재
 - 최초 구현계획서 승인 commit과 확인된 initial exact SHA가 Stage 1 commit보다 먼저 존재
 - 작업지시자가 같은 스레드에서 확인한 최신 exact SHA를 사용하며 해당 commit이 현재 HEAD의 ancestor
-- 현재 구현계획서가 symlink가 아니며 HEAD와 working tree의 blob이 모두 최신 승인 commit의 구현계획서 blob과 동일
+- 승인 commit, HEAD, index의 구현계획서 mode가 모두 `100644`이고 working tree가 symlink가 아니며 HEAD와 working tree의 blob이 모두 최신 승인 commit의 구현계획서 blob과 동일
 - 최종 보고서가 `mydocs/_templates/final_report.md`의 필수 섹션을 채움
 - `git status --short` 결과 빈 출력
 - `gh pr view` 결과에 draft가 아닌 PR이 정확한 base/head로 등록
