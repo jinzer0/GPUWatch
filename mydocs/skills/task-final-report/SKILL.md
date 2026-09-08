@@ -16,7 +16,8 @@ description: |
 
 ## 사전 조건
 
-- 최초 승인된 구현 계획서의 독립 커밋과 작업지시자가 확인한 initial exact SHA가 Stage 1보다 먼저 존재하고, 모든 단계 종료와 각 단계 보고서 커밋이 완료됨
+- 최초 승인된 구현 계획서의 독립 커밋과 작업지시자가 확인한 initial exact SHA가 Stage 1보다 먼저 존재함
+- 모든 Stage가 종료되고 마지막 Stage를 포함한 각 단계 보고서가 독립 commit으로 기록되며 작업지시자 승인을 받음
 - Stage 1 이후 계획서를 재승인했다면 작업지시자가 확인한 latest exact SHA가 현재 HEAD의 ancestor임
 - 통합 검증 명령과 전체 수용 기준이 구현계획서에 정리되어 본 절차에서 실행 가능
 - `local/task{N}`에 commit 안 된 변경 없음 또는 본 절차에서 함께 커밋할 것만 남아 있음
@@ -84,13 +85,9 @@ description: |
    git diff --check
    git log --oneline "devel..${TASK_BRANCH}"
    ```
-5. 최종 커밋 (Stage 마지막 + 최종 보고서를 묶을 수도, 보고서만 단일 커밋도 가능)
+5. 최종 보고서와 오늘할일 단일 커밋
    ```bash
    git add mydocs/report/task_{milestone_slug}_{N}_report.md mydocs/orders/{yyyymmdd}.md
-   git commit -m "Task #{N} Stage {마지막} + 최종 보고서: {요약}" \
-     -m "Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)" \
-     -m "Co-authored-by: Sisyphus <clio-agent@sisyphuslabs.ai>"
-   # 또는
    git commit -m "Task #{N}: 최종 보고서 작성과 오늘할일 완료 처리" \
      -m "Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)" \
      -m "Co-authored-by: Sisyphus <clio-agent@sisyphuslabs.ai>"
@@ -134,6 +131,7 @@ description: |
 ## 검증
 
 - 모든 단계 보고서 + 최종 보고서 존재
+- 마지막 Stage를 포함한 모든 단계 보고서 commit이 작업지시자 승인 완료
 - 최초 구현계획서 승인 commit과 확인된 initial exact SHA가 Stage 1 commit보다 먼저 존재
 - 작업지시자가 같은 스레드에서 확인한 최신 exact SHA를 사용하며 해당 commit이 현재 HEAD의 ancestor
 - 승인 commit, HEAD, index의 구현계획서 mode가 모두 `100644`이고 working tree가 symlink가 아니며 HEAD, index, working tree의 blob이 모두 최신 승인 commit의 구현계획서 blob과 동일
@@ -158,6 +156,7 @@ description: |
 - 최종 보고서/오늘할일 커밋 뒤 같은 스레드의 별도 승인 없이 원격 push 또는 PR 생성
 - 승인된 PR 제목을 shell literal이나 command substitution으로 명령에 보간
 - 구현계획서의 working-tree hash와 승인 blob을 비교하기 전에 계획서의 검증 명령 실행
+- 마지막 Stage 보고서 승인 전에 본 Skill 진입 또는 마지막 Stage 산출물/보고서를 최종 보고서 commit에 결합
 
 ## 호출 방법
 

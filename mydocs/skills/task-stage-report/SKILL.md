@@ -78,8 +78,8 @@ description: |
      -m "Co-authored-by: Sisyphus <clio-agent@sisyphuslabs.ai>"
    ```
    - 하위 단계: `Task #{N} [Stage {S.M}]: 내용`
-   - 최종 단계 + 최종 보고서 묶음: `Task #{N} Stage {S} + 최종 보고서: 내용` (이 경우 별도 SKILL `task-final-report`로 처리 권장)
 5. 작업지시자에게 단계 보고서 검토와 다음 단계 진입 승인 요청
+   - 마지막 Stage도 예외 없이 본 단계 보고서 commit을 먼저 승인받는다. 승인 후 별도 `task-final-report` 절차로 진입하며 마지막 Stage와 최종 보고서를 한 commit으로 합치지 않는다.
 
 ## 검증
 
@@ -101,6 +101,7 @@ description: |
 - 검증 실패 상태로 보고서 작성·커밋
 - 단계 산출물과 보고서를 분리해 별도 커밋 (한 단계는 한 커밋 원칙)
 - 작업지시자 승인 없이 다음 단계 진입
+- 마지막 Stage 보고서 승인 없이 `task-final-report` 진입 또는 마지막 Stage와 최종 보고서 결합
 - 승인된 구현계획서를 독립 커밋하기 전에 Stage 1 진입
 - 작업지시자의 재승인과 새 독립 commit 없이 승인된 구현계획서 변경. Stage 1 이후 재승인했다면 새 exact SHA를 이후 단계 검증에 사용
 - 구현계획서의 working-tree hash와 승인 blob을 비교하기 전에 계획서의 검증 명령 실행
