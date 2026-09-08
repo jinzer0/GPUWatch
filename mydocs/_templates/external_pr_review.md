@@ -22,11 +22,14 @@
 ## 검토 Snapshot
 
 - snapshot schema version: `1`
+- base host: `github.com`
 - base repository: `{owner/repository}`
-- approved snapshot SHA-256: `{64자 소문자 16진수 digest}`
+- base repository ID: `{GitHub repository numeric ID}`
+- captured snapshot SHA-256: `{승인 전 캡처한 64자 소문자 16진수 digest}`
 - number: {PR 번호}
 - state: {OPEN/MERGED/CLOSED}
 - baseRefName: `{base branch}`
+- baseRefOid: `{완전히 검토한 base commit SHA}`
 - headRepository.nameWithOwner: `{owner/repository}`
 - headRefName: `{head branch}`
 - headRefOid: `{완전히 검토한 commit SHA}`
@@ -76,4 +79,4 @@
 
 ## 작업지시자 승인 요청
 
-- 위 검토 방향과 권고에 동의하면 검증 또는 GitHub PR 코멘트 작성 단계로 진행한다.
+- 위 검토 방향, `captured snapshot SHA-256`, 권고에 동의하면 해당 exact digest를 승인한다고 명시한다.

@@ -18,11 +18,14 @@
 ## 승인 Snapshot
 
 - snapshot schema version: `1`
+- base host: `github.com`
 - base repository: `{owner/repository}`
+- base repository ID: `{GitHub repository numeric ID}`
 - approved snapshot SHA-256: `{64자 소문자 16진수 digest}`
 - number: {PR 번호}
 - state: {OPEN/MERGED/CLOSED}
 - baseRefName: `{base branch}`
+- baseRefOid: `{승인받은 base commit SHA}`
 - headRepository.nameWithOwner: `{owner/repository}`
 - headRefName: `{head branch}`
 - headRefOid: `{승인받은 commit SHA}`
@@ -36,6 +39,9 @@
 - current snapshot SHA-256: `{side effect 직전 재캡처한 digest}`
 - side effect 직전 digest 재검증: {OK/MISS — 재검증 시각과 approved/current digest 일치}
 - 승인받은 단일 side effect: {comment/review/approve/request changes/merge/close 중 하나}
+- approved payload SHA-256: `{승인받은 payload 원문의 digest}`
+- approved action manifest SHA-256: `{repository/PR/snapshot/head/action/payload를 결박한 digest}`
+- current action manifest SHA-256: `{side effect 직전 재생성한 digest}`
 - validation fetch commit: `{승인받은 headRefOid와 동일한 FETCH_HEAD / 로컬 정적 검토 없음}`
 - validation worktree: {detached HEAD 확인 OK/MISS/해당 없음}
 - validation cleanup: {worktree 등록 해제와 임시 디렉터리 삭제 OK/MISS/해당 없음}
