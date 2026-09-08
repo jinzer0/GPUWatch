@@ -31,6 +31,7 @@ description: |
      test -n "$IMPL_PLAN_COMMIT"
      test "$(git diff-tree --root --no-commit-id --name-only -r "$IMPL_PLAN_COMMIT" | wc -l | tr -d ' ')" -eq 1
      test "$(git diff-tree --root --no-commit-id --name-only -r "$IMPL_PLAN_COMMIT")" = "$IMPL_PLAN"
+     test "$(git rev-parse "$IMPL_PLAN_COMMIT:$IMPL_PLAN")" = "$(git rev-parse "HEAD:$IMPL_PLAN")"
      if test "{S}" = "1"; then
        test "$(git rev-parse HEAD)" = "$IMPL_PLAN_COMMIT"
      else
@@ -71,6 +72,7 @@ description: |
 - `git diff --quiet HEAD -- mydocs/plans/task_{milestone_slug}_{N}_impl.md` 통과
 - `git log -1 --format='%H' -- mydocs/plans/task_{milestone_slug}_{N}_impl.md`가 commit SHA를 출력
 - 구현계획서 승인 commit의 변경 파일이 해당 `_impl.md` 하나뿐임
+- 현재 구현계획서 blob이 승인 commit의 구현계획서 blob과 동일함
 - Stage 1이면 구현계획서 승인 commit이 현재 HEAD이고, 이후 Stage면 해당 commit이 Stage 1 commit의 ancestor임
 - `git log --oneline -1`이 단계 커밋 메시지 표준 형식 충족
 - `mydocs/working/task_{milestone_slug}_{N}_stage{S}.md` 존재
@@ -83,6 +85,7 @@ description: |
 - 단계 산출물과 보고서를 분리해 별도 커밋 (한 단계는 한 커밋 원칙)
 - 작업지시자 승인 없이 다음 단계 진입
 - 승인된 구현계획서를 독립 커밋하기 전에 Stage 1 진입
+- 작업지시자의 재승인과 새 독립 commit 없이 승인된 구현계획서 변경
 
 ## 호출 방법
 
