@@ -24,9 +24,9 @@ description: |
 
 1. 대상과 실행 위치 사전 확인 (read-only)
    ```bash
-   gh pr view "$PR_NUMBER" --repo jinzer0/GPUWatch \
+   GH_HOST=github.com gh pr view "$PR_NUMBER" --repo jinzer0/GPUWatch \
      --json state,baseRefName,headRefName,headRepository,mergedAt,mergeCommit
-   gh issue view "$ISSUE_NUMBER" --repo jinzer0/GPUWatch --json state
+   GH_HOST=github.com gh issue view "$ISSUE_NUMBER" --repo jinzer0/GPUWatch --json state
    git remote get-url origin
    git remote get-url --push origin
    git worktree list --porcelain
@@ -44,12 +44,15 @@ description: |
    esac
    readonly PR_NUMBER ISSUE_NUMBER
 
+   CANONICAL_HOST="github.com"
    CANONICAL_REPOSITORY="jinzer0/GPUWatch"
+   CANONICAL_REPOSITORY_ID="1256824919"
    EXPECTED_HEAD_REF="publish/task${ISSUE_NUMBER}"
    EXPECTED_TASK_BRANCH="local/task${ISSUE_NUMBER}"
-   readonly CANONICAL_REPOSITORY EXPECTED_HEAD_REF EXPECTED_TASK_BRANCH
+   readonly CANONICAL_HOST CANONICAL_REPOSITORY CANONICAL_REPOSITORY_ID EXPECTED_HEAD_REF EXPECTED_TASK_BRANCH
 
-   test "$(gh repo view "$CANONICAL_REPOSITORY" --json nameWithOwner --jq .nameWithOwner)" = "$CANONICAL_REPOSITORY"
+   test "$(gh api --hostname "$CANONICAL_HOST" "repos/$CANONICAL_REPOSITORY" --jq .id)" = "$CANONICAL_REPOSITORY_ID"
+   test "$(GH_HOST="$CANONICAL_HOST" gh repo view "$CANONICAL_REPOSITORY" --json nameWithOwner --jq .nameWithOwner)" = "$CANONICAL_REPOSITORY"
    ORIGIN_FETCH_URLS="$(git remote get-url --all origin)"
    ORIGIN_PUSH_URLS="$(git remote get-url --push --all origin)"
    test -n "$ORIGIN_FETCH_URLS"
@@ -61,7 +64,7 @@ description: |
      esac
    done <<< "$ORIGIN_FETCH_URLS"$'\n'"$ORIGIN_PUSH_URLS"
 
-   PR_TUPLE="$(gh pr view "$PR_NUMBER" --repo "$CANONICAL_REPOSITORY" \
+   PR_TUPLE="$(GH_HOST="$CANONICAL_HOST" gh pr view "$PR_NUMBER" --repo "$CANONICAL_REPOSITORY" \
      --json state,baseRefName,headRefName,headRefOid,headRepository \
      --jq '[.state, .baseRefName, .headRefName, .headRepository.nameWithOwner, .headRefOid] | @tsv')"
    case "$PR_TUPLE" in
@@ -77,7 +80,7 @@ description: |
      ""|*[!0-9a-f]*) printf 'PR headRefOid must be lowercase hexadecimal\n' >&2; exit 1 ;;
    esac
    test "${#PR_HEAD_OID}" -eq 40
-   gh issue view "$ISSUE_NUMBER" --repo "$CANONICAL_REPOSITORY" --json state >/dev/null
+   GH_HOST="$CANONICAL_HOST" gh issue view "$ISSUE_NUMBER" --repo "$CANONICAL_REPOSITORY" --json state >/dev/null
 
    CURRENT_WORKTREE="$(git rev-parse --show-toplevel)"
    COMMON_DIR="$(git rev-parse --path-format=absolute --git-common-dir)"
@@ -170,9 +173,9 @@ description: |
      git update-ref -d "refs/heads/${EXPECTED_TASK_BRANCH}" "$LOCAL_TASK_OID"
    fi
 
-   ISSUE_STATE="$(gh issue view "$ISSUE_NUMBER" --repo "$CANONICAL_REPOSITORY" --json state --jq .state)"
+   ISSUE_STATE="$(GH_HOST="$CANONICAL_HOST" gh issue view "$ISSUE_NUMBER" --repo "$CANONICAL_REPOSITORY" --json state --jq .state)"
    if test "$ISSUE_STATE" = "OPEN"; then
-     gh issue close "$ISSUE_NUMBER" --repo "$CANONICAL_REPOSITORY"
+     GH_HOST="$CANONICAL_HOST" gh issue close "$ISSUE_NUMBER" --repo "$CANONICAL_REPOSITORY"
    fi
    ```
    - dirty/locked worktree, unrelated primary branch, repository/PR tuple 불일치, 가능한 canonical origin fast-forward 실패, local task의 `origin/devel` ancestry 실패, remote publish SHA 불일치, delete 실패는 transaction을 중단한다. `--force` 삭제로 우회하지 않는다.
@@ -183,8 +186,8 @@ description: |
 
 ## 검증
 
-- `gh pr view "$PR_NUMBER" --repo jinzer0/GPUWatch`가 `MERGED`, base `devel`, head `publish/task${ISSUE_NUMBER}`, head repository `jinzer0/GPUWatch`임을 확인
-- `git branch -vv | grep "local/task${ISSUE_NUMBER}"` 출력 없음 (삭제된 경우)
+- `GH_HOST=github.com gh pr view "$PR_NUMBER" --repo jinzer0/GPUWatch`가 `MERGED`, base `devel`, head `publish/task${ISSUE_NUMBER}`, head repository `jinzer0/GPUWatch`임을 확인
+- `git show-ref --verify --quiet "refs/heads/local/task${ISSUE_NUMBER}"`가 nonzero 종료 (삭제된 경우)
 - `git ls-remote origin "publish/task${ISSUE_NUMBER}"` 빈 출력 (원격 삭제 확인)
 - `git worktree list` 출력에 정리 대상 worktree 미존재
 - `git branch --show-current`가 `devel`
@@ -201,6 +204,7 @@ description: |
 - 분리 task worktree 안에서 `devel` checkout 또는 자기 자신 제거 실행
 - 기본 worktree를 제거 대상으로 지정하거나 dirty/locked task worktree 강제 제거
 - cleanup 대상과 다른 PR/이슈 번호, base, head 조합으로 이슈 close 또는 브랜치 삭제
+- ambient `GH_HOST` 또는 canonical repository ID 검증 없이 GitHub 조회·이슈 close 수행
 - cleanup과 branch 삭제가 끝나기 전에 이슈 close
 - cleanup transaction의 일부 command만 분리 실행하거나 target 변수를 중간에 다시 주입
 
