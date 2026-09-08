@@ -58,28 +58,12 @@ Hyper-Waterfall 최초 bootstrap을 `main`에 반영하는 PR은 app release가 
 
 ## 메인테이너 워크플로우
 
-```bash
-# 1. local/taskN → publish/taskN push + devel 대상 Open PR
-git checkout local/task17
-git push origin local/task17:publish/task17
-gh pr create --base devel --head publish/task17 --title "Task #17: 제목" --body-file /tmp/task17-pr-body.md
+이 절의 목적은 브랜치 흐름을 설명하는 것이며, GitHub 변경 명령을 복사해 실행하는 위치가 아니다. host, repository, remote ref, PR head는 승인 대기 중에도 변할 수 있으므로 ambient repository 또는 현재 `HEAD`를 기준으로 `gh` 명령을 실행하지 않는다.
 
-# 2. devel 대상 PR 리뷰 + merge
-# 현재 턴의 작업지시자 승인과 base/head/PR 번호를 다시 확인한 뒤 실행
-gh pr view {PR_NUMBER} --json number,baseRefName,headRefName,mergeable,mergeStateStatus
-gh pr review {PR_NUMBER} --approve
-gh pr merge {PR_NUMBER} --merge --delete-branch
-
-# 3. devel → main PR (릴리즈 시)
-gh pr create --base main --head devel --title "Release: 제목"
-# 현재 턴의 작업지시자 승인과 base/head/PR 번호를 다시 확인한 뒤 실행
-gh pr view {PR_NUMBER} --json number,baseRefName,headRefName,mergeable,mergeStateStatus
-gh pr review {PR_NUMBER} --approve
-gh pr merge {PR_NUMBER} --merge --delete-branch=false
-
-# 4. main-only 변경 발생 시 devel 동기화 PR 또는 승인된 merge로 되돌려 반영
-gh pr create --base devel --head main --title "Sync: main release changes back to devel"
-```
+1. task PR의 publish와 Open PR 생성은 [`task-final-report`](../skills/task-final-report/SKILL.md)만 사용한다. 이 절차는 승인된 exact publication tuple, `github.com`, `jinzer0/GPUWatch`, repository ID `1256824919`, 모든 origin URL, `origin/devel` OID, final/publish OID를 검증한다.
+2. 리뷰 및 merge는 [`pr_process_guide.md`](pr_process_guide.md)의 승인 절차를 따른다. 이 매뉴얼에 `gh pr review`나 `gh pr merge`의 축약 예시를 두지 않는다. 직접 실행이 불가피한 자동화는 승인된 PR 번호, canonical repository, base/head tuple, head OID를 REST로 다시 읽고, merge REST 요청의 `sha`에 확인한 head OID를 넣어야 한다. 확인값이 하나라도 달라지면 review/merge하지 않는다.
+3. merged PR의 branch·worktree·issue 정리는 [`pr-merge-cleanup`](../skills/pr-merge-cleanup/SKILL.md)만 사용한다. 이 절차는 merged PR tuple과 head OID를 확인한 뒤 정리 순서를 고정한다.
+4. `devel -> main` release PR과 `main -> devel` 동기화 PR도 별도 작업지시자 승인과 위와 같은 canonical repository/PR tuple/head OID/REST `sha` precondition을 갖춘 절차로 수행한다. task PR의 승인이나 이전 release 승인을 재사용하지 않는다.
 
 ## 컨트리뷰터 워크플로우 (Fork 기반)
 
@@ -92,7 +76,11 @@ git checkout -b feature/my-task
 git push origin feature/my-task
 
 # 3. 원본 저장소의 devel로 PR 생성
-gh pr create --repo jinzer0/GPUWatch --base devel --head {contributor}:feature/my-task --title "제목"
+CANONICAL_REPOSITORY="jinzer0/GPUWatch"
+CANONICAL_REPOSITORY_ID="1256824919"
+test "$(GH_HOST=github.com gh api --hostname github.com "repos/$CANONICAL_REPOSITORY" --jq .id)" = "$CANONICAL_REPOSITORY_ID" || exit 1
+test "$(GH_HOST=github.com gh api --hostname github.com "repos/$CANONICAL_REPOSITORY" --jq .full_name)" = "$CANONICAL_REPOSITORY" || exit 1
+GH_HOST=github.com gh pr create --repo "$CANONICAL_REPOSITORY" --base devel --head {contributor}:feature/my-task --title "제목"
 
 # 4. 메인테이너가 리뷰 + merge
 ```
@@ -113,7 +101,7 @@ gh pr create --repo jinzer0/GPUWatch --base devel --head {contributor}:feature/m
 
 ### PR 본문에 문서 링크를 넣을 때
 
-PR 생성 명령, `--body-file`, SHA 고정 GitHub blob URL, 작업 문서 링크 형식은 [`pr_command_guide.md`](pr_command_guide.md)를 따른다. 이 Git 문서에는 브랜치 흐름과 PR 유형만 둔다.
+내부 task PR의 게시 절차는 [`task-final-report`](../skills/task-final-report/SKILL.md), SHA 고정 문서 링크 형식은 [`pr_command_guide.md`](pr_command_guide.md)를 따른다.
 
 ### merge 후에도 로컬 브랜치가 남아 있을 때
 
