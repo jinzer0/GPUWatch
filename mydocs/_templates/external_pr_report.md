@@ -14,6 +14,18 @@
 - 최종 권고: {merge / 수정 요청 / 닫기}
 - 핵심 근거: {한 줄 요약}
 
+## 승인 Snapshot
+
+- number: {PR 번호}
+- state: {OPEN/MERGED/CLOSED}
+- baseRefName: `{base branch}`
+- headRepository.nameWithOwner: `{owner/repository}`
+- headRefName: `{head branch}`
+- headRefOid: `{승인받은 commit SHA}`
+- 전체 diff 줄 수: {N}
+- 검토 범위: `{첫 줄}-{마지막 줄}` / `{전체 N줄}`
+- side effect 직전 재검증: {OK/MISS — 재검증 시각과 동일 headRefOid}
+
 ## 검증 결과
 
 실행 명령:

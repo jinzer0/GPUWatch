@@ -18,6 +18,18 @@
 - 상태: {OPEN/MERGED/CLOSED}
 - 연결 이슈: {있으면 링크, 없으면 없음}
 
+## 검토 Snapshot
+
+- number: {PR 번호}
+- state: {OPEN/MERGED/CLOSED}
+- baseRefName: `{base branch}`
+- headRepository.nameWithOwner: `{owner/repository}`
+- headRefName: `{head branch}`
+- headRefOid: `{완전히 검토한 commit SHA}`
+- 캡처 전·후 metadata 일치: {OK/MISS}
+- 전체 diff 줄 수: {N}
+- 검토 범위: `{첫 줄}-{마지막 줄}` / `{전체 N줄}`
+
 ## 변경 요약
 
 - {PR이 바꾸는 핵심 내용}
