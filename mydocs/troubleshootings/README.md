@@ -17,7 +17,7 @@
 ## 허용 파일명
 
 - `{yyyymmdd}_{topic}.md`
-- `task_{milestone}_{이슈번호}_{topic}.md`
+- `task_{milestone_slug}_{이슈번호}_{topic}.md`
 
 ## 사용 템플릿
 
