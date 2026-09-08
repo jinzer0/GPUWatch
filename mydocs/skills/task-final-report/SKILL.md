@@ -91,14 +91,16 @@ description: |
    git commit -m "Task #{N}: 최종 보고서 작성과 오늘할일 완료 처리" \
       -m "Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)" \
       -m "Co-authored-by: Sisyphus <clio-agent@sisyphuslabs.ai>"
-   test -z "$(git status --porcelain)" || exit 1
+   POST_COMMIT_STATUS="$(git status --porcelain)" || exit 1
+   test -z "$POST_COMMIT_STATUS" || exit 1
    ```
 6. 여기서 즉시 멈추고 작업지시자에게 커밋된 최종 보고서와 수용 기준 검증 근거 승인 요청
    - 같은 스레드에서 새 승인을 받아야 한다.
    - 이전 단계 승인, 최종 보고서 작성 지시, 본 Skill 호출 지시는 PR 게시 승인으로 간주하지 않는다.
 7. 승인 후 원격 게시 브랜치 push
    ```bash
-   test -z "$(git status --porcelain)" || exit 1
+   PRE_PUSH_STATUS="$(git status --porcelain)" || exit 1
+   test -z "$PRE_PUSH_STATUS" || exit 1
    git push origin "${TASK_BRANCH}:${PUBLISH_BRANCH}"
    ```
 8. 승인 후 devel 대상 Open PR 생성
