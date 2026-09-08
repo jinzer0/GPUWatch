@@ -39,7 +39,7 @@ description: |
    readonly ISSUE_NUMBER TASK_BRANCH PUBLISH_BRANCH
    ```
    - 작업지시자가 같은 스레드에서 확인한 최신 구현계획서 commit의 exact SHA를 파일 쓰기 도구로 전달하며 commit message 검색으로 다시 추론하지 않는다.
-   - 검증 명령을 실행하기 전에 해당 commit이 `_impl.md`만 포함하고 현재 HEAD의 ancestor인지, 현재 `_impl.md`가 symlink가 아니며 HEAD와 working tree의 blob이 모두 승인 commit의 blob과 동일한지 재확인한다.
+   - 검증 명령을 실행하기 전에 해당 commit이 `_impl.md`만 포함하고 현재 HEAD의 ancestor인지, 현재 `_impl.md`가 symlink가 아니며 HEAD, index, working tree의 blob이 모두 승인 commit의 blob과 동일한지 재확인한다.
    - Stage 1 이후 계획서를 변경했다면 작업지시자의 재승인과 새 독립 commit이 있어야 하며 그 새 exact SHA를 사용한다.
    ```bash
    IMPL_PLAN="mydocs/plans/task_{milestone_slug}_${ISSUE_NUMBER}_impl.md"
