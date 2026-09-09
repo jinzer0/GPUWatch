@@ -1,6 +1,6 @@
 # 최종 보고서 템플릿
 
-이 파일은 `mydocs/report/task_{milestone_slug}_{issue}_report.md` 작성용 중앙 템플릿이다. 최종 보고서는 모든 Stage의 결과, 수용 기준 검증, 남은 위험을 장기 보관용으로 정리하고, 보고서와 오늘할일 갱신 커밋 뒤 같은 스레드의 PR 게시 승인을 받기 위한 문서다.
+이 파일은 `mydocs/report/task_{milestone_slug}_{issue}_report.md` 작성용 중앙 템플릿이다. 최종 보고서는 모든 Stage의 결과, 수용 기준 검증, 남은 위험을 장기 보관용으로 정리하고, 보고서와 오늘할일 갱신 커밋 뒤 같은 스레드의 final report/evidence 승인을 받기 위한 문서다. 이 첫 승인은 private publication input 준비만 허용하며 원격 게시를 허용하지 않는다.
 
 GitHub Issue: [#{issue}](https://github.com/jinzer0/GPUWatch/issues/{issue})
 마일스톤: {milestone_name}
@@ -58,4 +58,6 @@ GitHub Issue: [#{issue}](https://github.com/jinzer0/GPUWatch/issues/{issue})
 
 ## 커밋 후 승인 요청
 
-- 이 보고서와 오늘할일 갱신을 커밋한 뒤 즉시 멈추고, 커밋된 최종 보고서와 수용 기준 검증 근거에 대한 새 같은 스레드 승인을 요청한다.
+- 이 보고서와 오늘할일 갱신은 regular, non-symlink, single-link, working-tree mode `0644`, index/commit mode `100644` 산출물로 검증한 뒤 정확히 두 파일만 커밋한다.
+- 커밋 뒤 즉시 멈추고, final commit OID, 두 artifact blob OID, acceptance evidence SHA-256을 묶은 새 같은 스레드 final report/evidence 승인을 요청한다.
+- 첫 승인 뒤 private title/body를 준비하고 read-only 원격 상태를 분류한 다음 다시 멈춘다. exact publication tuple에 대한 별도 두 번째 승인만 원격 mutation을 허용한다.
