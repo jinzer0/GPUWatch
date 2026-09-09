@@ -26,7 +26,9 @@ description: |
    - 작업지시자가 같은 스레드에서 확인한 최신 구현계획서 commit의 exact SHA를 `APPROVED_IMPL_PLAN_COMMIT_FILE`에 파일 쓰기 도구로 기록한다. commit message 검색으로 승인 SHA를 다시 추론하지 않는다.
    - 승인 commit의 내용, 현재 계획서 blob, 현재 단계와의 선행 관계를 먼저 확인한다.
       ```bash
-      IMPL_PLAN="mydocs/plans/task_{milestone_slug}_{N}_impl.md"
+       IMPL_PLAN="mydocs/plans/task_{milestone_slug}_{N}_impl.md"
+       export GIT_NO_REPLACE_OBJECTS=1
+       test -z "$(git for-each-ref --format='%(refname)' refs/replace/)" || exit 1
       APPROVED_IMPL_PLAN_COMMIT_FILE="$(mktemp)"
       trap 'rm -f "$APPROVED_IMPL_PLAN_COMMIT_FILE"' EXIT
       # 파일 쓰기 도구로 작업지시자가 같은 스레드에서 확인한 exact commit SHA를 기록한다.
@@ -72,8 +74,10 @@ description: |
    ```
 4. 단계 소스 + 보고서 묶음 커밋
    ```bash
+   export GIT_NO_REPLACE_OBJECTS=1
+   test -z "$(git for-each-ref --format='%(refname)' refs/replace/)" || exit 1
    git add {단계 산출 파일들} mydocs/working/task_{milestone_slug}_{N}_stage{S}.md
-   git commit -m "Task #{N} Stage {S}: {핵심 내용 요약}" \
+   git -c core.hooksPath=/dev/null commit -m "Task #{N} Stage {S}: {핵심 내용 요약}" \
      -m "Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)" \
      -m "Co-authored-by: Sisyphus <clio-agent@sisyphuslabs.ai>"
    ```
