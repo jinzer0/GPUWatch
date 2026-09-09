@@ -1,12 +1,30 @@
 # 외부 PR 검토 구현계획서 템플릿
 
-이 파일은 `mydocs/pr/pr_{번호}_review_impl.md` 작성용 중앙 템플릿이다. 외부 PR 검토 중 본 저장소에서 추가 검증, 보조 패치, 재현 절차 정리가 필요할 때 사용한다. 내부 task의 `task_{milestone_slug}_{issue}_impl.md` 형식을 외부 PR에 강제하지 않는다.
+이 파일은 `mydocs/pr/pr_{번호}_review_impl.md` 작성용 중앙 템플릿이다. 외부 PR 검토 중 본 저장소에서 추가 검증, 보조 패치, 재현 절차 정리가 필요할 때 사용한다. 내부 task의 `task_{milestone_slug}_{issue}_impl.md` 형식을 외부 PR에 강제하지 않는다. 작성된 경우 archive tuple은 이 파일의 존재, path, tracked/untracked state, SHA-256, byte length를 함께 bind한다.
 
 ## 사용 위치
 
 - 실제 파일: `mydocs/pr/pr_{번호}_review_impl.md`
 - 작성 시점: 외부 PR 검토 문서 승인 후 추가 검증이나 보조 작업이 필요할 때
 - 작성 언어: 이 저장소에 선택된 Hyper-Waterfall locale을 따른다.
+
+## 문서 Identity
+
+```text
+snapshot_schema=review snapshot schema v2
+repository_host=github.com
+repository_name=jinzer0/GPUWatch
+repository_id=1256824919
+pr_number={PR_NUMBER}
+review_round={REVIEW_ROUND}
+base_oid={BASE_OID}
+diff_base_oid={DIFF_BASE_OID}
+head_oid={HEAD_OID}
+snapshot_sha256={SNAPSHOT_SHA256}
+diff_sha256={DIFF_SHA256}
+diff_bytes={DIFF_BYTES}
+diff_lines={DIFF_LINES}
+```
 
 ## 목적
 
@@ -16,6 +34,7 @@
 
 - PR: #{번호}
 - 검토 문서: [`pr_{번호}_review.md`](pr_{번호}_review.md)
+- snapshot: `review snapshot schema v2`, 위 `문서 Identity`와 review/report의 exact line이 일치해야 함
 
 ## 작업 범위
 
@@ -39,6 +58,7 @@
 - GitHub-hosted `pull_request` CI: {maintainer-controlled workflow/check 이름 또는 없음}
 - CI 안전 조건: `permissions: {}`, secrets 미전달, self-hosted 미사용, `pull_request_target` 미사용, checkout credential 비영속화
 - 안전한 CI가 없을 때: 실행 검증 미수행과 검증 한계를 기록
+- GitHub REST 호출은 explicit `--method GET`만 허용하고 GraphQL은 read-only `query` POST만 허용한다. GitHub mutation과 contributor-controlled code 실행은 금지한다.
 
 ## 실행 명령
 
