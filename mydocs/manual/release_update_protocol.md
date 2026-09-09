@@ -69,7 +69,7 @@ Hyper-Waterfall 버전 업데이트 PR은 일반 task PR과 같은 브랜치 흐
 - 단계 커밋: `Task #{N} Stage {S}: Hyper-Waterfall 버전 업데이트 {내용}`
 - 최종 보고 커밋: `Task #{N}: 최종 보고서 작성과 오늘할일 완료 처리`
 
-Hyper-Waterfall 버전 업데이트 PR 브랜치를 별도 prefix로 만들지 않는 이유는 작업 추적 기준을 GitHub Issue와 하이퍼-워터폴 산출물로 유지하기 위해서다. CLI나 자동화가 PR 후보를 만들더라도 먼저 판단 결과를 출력하고, 승인된 이슈 번호를 받은 뒤 `local/task{N}` -> `publish/task{N}` -> `devel` 규칙을 따른다. Publication은 `branch-absent-pr-absent`, `branch-exact-pr-absent`, `branch-exact-pr-exact` 중 하나로 분류된 exact state에서만 재시도할 수 있으며, 호환 전이 밖이면 새 publication 준비와 승인이 필요하다.
+Hyper-Waterfall 버전 업데이트 PR 브랜치를 별도 prefix로 만들지 않는 이유는 작업 추적 기준을 GitHub Issue와 하이퍼-워터폴 산출물로 유지하기 위해서다. CLI나 자동화가 PR 후보를 만들더라도 먼저 판단 결과를 출력하고, 승인된 이슈 번호를 받은 뒤 `local/task{N}` -> `publish/task{N}` -> `devel` 규칙을 따른다. Publication은 `branch-absent-pr-absent`, `branch-exact-pr-absent`, `branch-exact-pr-draft`, `branch-exact-pr-ready` 중 하나로 분류된 exact state에서만 실행한다. no-PR 상태는 draft 생성과 exact 검증 뒤 ready로 전환하고, concurrent PR, duplicate, state drift, create/ready interruption 또는 승인 state 밖의 상태는 fresh preparation과 replacement publication 승인을 요구한다.
 
 ## 관련 문서
 

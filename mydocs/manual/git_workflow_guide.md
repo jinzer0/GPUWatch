@@ -8,6 +8,7 @@
 - **`local/taskN`**: 이슈 번호 N의 로컬 작업 브랜치. 단계 커밋과 보고서 커밋은 이 브랜치에 쌓는다.
 - **`publish/taskN`**: `local/taskN`을 원격에 게시하기 위한 PR용 브랜치. PR merge 후 삭제한다.
 - **Open PR**: 검토 가능한 상태의 PR. 하이퍼-워터폴 최종 보고 후 `devel` 대상으로 만든다.
+- **Draft PR**: no-PR publication이 생성한 직후 exact identity와 내용을 검증하기 위한 중간 상태. 같은 uninterrupted publication 실행에서 검증된 PR만 ready로 전환한다.
 - **분리 worktree**: 메인 worktree가 다른 작업에 쓰이고 있을 때 별도 디렉터리에서 같은 저장소의 다른 브랜치를 작업하는 방식.
 - **GPUWatch app release**: GPUWatcher 앱 자체를 배포하기 위해 `devel`의 검증된 변경을 `main`으로 승격하고 앱 release tag를 만드는 흐름.
 - **Upstream framework release**: `postmelee/hyper-waterfall`의 GitHub Release/tag. GPUWatch의 설치본 업데이트 판단은 `.hyper-waterfall/version.json`과 immutable upstream artifact를 비교한다.
@@ -37,7 +38,7 @@ local/task{N} ── 커밋 · 커밋 · 커밋 ──→ publish/task{N} push
 병렬 task는 각각 독립적인 `local/task{N}` 브랜치로 위 흐름을 반복한다.
 
 - **타스크 브랜치**: `local/task{N}`에서 잘게 커밋. 작업 단위마다 커밋.
-- **원격 게시 브랜치**: `local/task{N}` 작업이 리뷰 가능한 상태가 되면 [`task-final-report`](../skills/task-final-report/SKILL.md)의 두 승인 절차로 `publish/task{N}` exact OID 게시와 `devel` 대상 Open PR 생성 또는 재개를 수행한다.
+- **원격 게시 브랜치**: `local/task{N}` 작업이 리뷰 가능한 상태가 되면 [`task-final-report`](../skills/task-final-report/SKILL.md)의 두 승인 절차로 `publish/task{N}` exact OID를 게시한다. no-PR 상태에서는 draft를 만들고 반환 identity를 검증한 뒤 ready로 전환하며, 기존 ready 상태는 verification-only로 처리한다.
 - **원격 push**: `local/task` 브랜치는 **로컬 유지 (원격 push 금지)**를 원칙으로 한다. 원격에는 `publish/task{N}`와 merge 결과 브랜치만 유지한다.
 - **`devel` 대상 PR**: 작업 단위 PR은 기본적으로 Open PR로 생성하고, 최종 보고와 검증 결과를 PR 본문에 반영한 상태에서 review/merge 한다.
 - **merge 전략**: `devel` 대상 PR은 merge commit 유지 또는 `--no-ff` 원칙을 기본으로 한다. squash merge는 단계별 커밋 의미가 사라질 수 있으므로 기본값으로 두지 않는다.
@@ -61,9 +62,9 @@ Hyper-Waterfall 최초 bootstrap을 `main`에 반영하는 PR은 app release가 
 이 절의 목적은 브랜치 흐름을 설명하는 것이며, GitHub 변경 명령을 복사해 실행하는 위치가 아니다. host, repository, remote ref, PR head는 승인 대기 중에도 변할 수 있으므로 ambient repository 또는 현재 `HEAD`를 기준으로 `gh` 명령을 실행하지 않는다.
 
 1. task PR의 publish와 Open PR 생성은 [`task-final-report`](../skills/task-final-report/SKILL.md)만 사용한다. 이 절차는 final report/evidence 승인과 publication 승인을 분리한다. 첫 승인이 있기 전에는 publication input을 만들지 않고, 둘째 승인이 있기 전에는 원격 mutation(`push`, `gh api --method POST`, PR 생성 또는 재개)을 하지 않는다. Publication 준비 단계의 canonical identity, issue, ref, Open PR 상태 조회는 read-only로만 수행한다.
-2. task publication은 `branch-absent-pr-absent`, `branch-exact-pr-absent`, `branch-exact-pr-exact`만 유효 상태로 분류한다. 실행 시 원격 상태를 다시 분류하고, 승인 당시 상태에서 호환되는 전진만 재시도한다. publish ref가 다른 OID이거나 PR의 base/head/repository/title/body가 다르면 새 publication 준비와 새 승인이 필요하다.
+2. task publication은 `branch-absent-pr-absent`, `branch-exact-pr-absent`, `branch-exact-pr-draft`, `branch-exact-pr-ready`만 유효 상태로 분류하고 모든 state의 matching PR을 조회한다. 실행 시작 state는 승인 state와 exact하게 같아야 하며 absent 승인은 concurrent PR을 adopt하지 않는다. no-PR 상태는 생성 직전 absence를 재검증한 뒤 draft 생성, POST 반환 number/node ID 결박, exact draft GET, 같은 node ready 전환, exact non-draft GET, closing linkage 순으로 진행한다. ready 상태는 verification-only다. duplicate, closed, mismatch, create/ready interruption 또는 state drift는 fresh preparation과 replacement publication 승인을 요구하며 manifest나 fuzzy resume를 사용하지 않는다.
 3. 리뷰 및 merge는 [`pr_process_guide.md`](pr_process_guide.md)의 승인 절차를 따른다. 이 매뉴얼에 `gh pr review`나 `gh pr merge`의 축약 예시를 두지 않는다. 직접 실행이 불가피한 자동화는 승인된 PR 번호, canonical repository, base/head tuple, head OID를 REST로 다시 읽고, merge REST 요청의 `sha`에 확인한 head OID를 넣어야 한다. 확인값이 하나라도 달라지면 review/merge하지 않는다.
-4. merged task PR의 branch, worktree, issue 정리는 [`pr-merge-cleanup`](../skills/pr-merge-cleanup/SKILL.md)만 사용한다. 이 절차는 read-only preflight에서 merged PR tuple과 issue 상태를 확인하고, 이슈가 `OPEN`이면 exact approval tuple을 요구한다. 삭제 직전과 close 직전에도 같은 PR/이슈 tuple을 다시 읽고, 그 경계에서 `OPEN`이면 같은 exact approval tuple 없이는 삭제 또는 close로 진행하지 않는다. 이전 관측에서 `CLOSED`였다는 이유만으로 현재 `OPEN` 이슈를 닫을 수 없다.
+4. merged task PR의 branch, worktree, issue 정리는 [`pr-merge-cleanup`](../skills/pr-merge-cleanup/SKILL.md)만 사용한다. merge 자체는 현재 `OPEN` 이슈 close 승인이 아니다. 이 절차는 read-only preflight에서 merged PR tuple과 issue 상태를 확인하고, 이슈가 `OPEN`이면 exact approval tuple을 요구한다. 삭제 직전과 close 직전에도 같은 PR/이슈 tuple을 다시 읽고, 그 경계에서 `OPEN`이면 같은 exact approval tuple 없이는 삭제 또는 close로 진행하지 않는다. 이전 관측에서 `CLOSED`였다는 이유만으로 현재 `OPEN` 이슈를 닫을 수 없다.
 5. `devel -> main` release PR과 `main -> devel` 동기화 PR은 승인된 release operation에 한해 별도 작업지시자 승인과 canonical repository/PR tuple/head OID/REST `sha` precondition을 갖춘 절차로 수행한다. 이 release 전용 직접 PR mechanics는 ordinary issue-based task PR의 우회로가 아니며, task PR의 승인이나 이전 release 승인을 재사용하지 않는다.
 
 ## 컨트리뷰터 워크플로우 (Fork 기반)
