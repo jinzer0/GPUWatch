@@ -27,8 +27,10 @@ description: |
 1. 대상과 실행 위치 사전 확인 (read-only)
    - 아래 block은 GitHub/로컬 상태를 조회만 한다. 이슈가 `OPEN`이면 exact approval tuple을 출력하고 중단한다.
    ```bash
-   set -euo pipefail
-   fail() { printf '%s\n' "$1" >&2; exit 1; }
+    set -euo pipefail
+    fail() { printf '%s\n' "$1" >&2; exit 1; }
+    export GIT_NO_REPLACE_OBJECTS=1
+    test -z "$(git for-each-ref --format='%(refname)' refs/replace/)" || fail 'refs/replace/* must be absent'
    validate_decimal() {
      case "$2" in
        ""|*[!0-9]*) fail "$1 must contain decimal digits only" ;;
@@ -115,8 +117,10 @@ description: |
    - 이슈가 처음에는 `CLOSED`여서 `APPROVED_*` 입력 없이 시작했더라도, 각 worktree/원격 ref/로컬 ref 삭제 직전 또는 close 직전 재검증에서 `OPEN`으로 바뀌면 complete exact tuple 검증 없이 진행할 수 없다.
    - 아래 전체 block을 한 번의 shell 호출에서 실행한다. 일부만 떼어 실행하거나 중간에 `PR_NUMBER`, `ISSUE_NUMBER`, repository, worktree path를 다시 주입하지 않는다.
    ```bash
-   set -euo pipefail
-   fail() { printf '%s\n' "$1" >&2; exit 1; }
+    set -euo pipefail
+    fail() { printf '%s\n' "$1" >&2; exit 1; }
+    export GIT_NO_REPLACE_OBJECTS=1
+    test -z "$(git for-each-ref --format='%(refname)' refs/replace/)" || fail 'refs/replace/* must be absent'
    validate_decimal() {
      case "$2" in
        ""|*[!0-9]*) fail "$1 must contain decimal digits only" ;;

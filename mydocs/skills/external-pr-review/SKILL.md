@@ -29,6 +29,8 @@ canonical origin을 확인한 뒤 정확한 `devel`과 pull ref를 fetch해 immu
 ```bash
 set -euo pipefail
 fail() { printf '%s\n' "$1" >&2; exit 1; }
+export GIT_NO_REPLACE_OBJECTS=1
+test -z "$(git for-each-ref --format='%(refname)' refs/replace/)" || fail 'refs/replace/* must be absent'
 
 BASE_HOST=github.com
 BASE_REPOSITORY=jinzer0/GPUWatch
@@ -229,12 +231,14 @@ Step 1에서 모든 capture ref는 CAS 삭제되어야 한다. Step 2의 재검�
 
 ```bash
 set -euo pipefail
+export GIT_NO_REPLACE_OBJECTS=1
 case "${PR_NUMBER:-}" in ''|*[!0-9]*) exit 1 ;; esac
 case "${REVIEW_ROUND:-}" in ''|0|*[!0-9]*) exit 1 ;; esac
 case "${NONCE:-}" in ''|*[!0-9a-f]*) exit 1 ;; esac
 test "${#NONCE}" -eq 32
 : "${SNAPSHOT_ROOT:?}"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
+test -z "$(git -C "$REPO_ROOT" for-each-ref --format='%(refname)' refs/replace/)" || exit 1
 TMP_PARENT="$(cd -P -- "${TMPDIR:-/tmp}" && pwd -P)"
 CURRENT_UID="$(id -u)"
 SNAPSHOT_ROOT="$(cd -P -- "$SNAPSHOT_ROOT" && pwd -P)"
@@ -256,6 +260,7 @@ archive는 local document 정리이며 GitHub와 무관하다. final report가 c
 ```bash
 set -euo pipefail
 fail() { printf '%s\n' "$1" >&2; exit 1; }
+export GIT_NO_REPLACE_OBJECTS=1
 case "${PR_NUMBER:-}" in ''|*[!0-9]*) fail 'PR_NUMBER must be decimal digits' ;; esac
 case "${REVIEW_ROUND:-}" in ''|0|*[!0-9]*) fail 'REVIEW_ROUND must be positive digits' ;; esac
 BASE_HOST=github.com
@@ -269,6 +274,7 @@ test "${#SNAPSHOT_SHA256}" = 64 && test "${#DIFF_SHA256}" = 64 && test "${#BASE_
 case "$DIFF_BYTES:$DIFF_LINES" in *[!0-9:]*|*::*) fail 'diff count invalid' ;; esac
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
+test -z "$(git -C "$REPO_ROOT" for-each-ref --format='%(refname)' refs/replace/)" || fail 'refs/replace/* must be absent'
 git -C "$REPO_ROOT" diff --cached --quiet || fail 'index is not clean'
 git -C "$REPO_ROOT" diff --quiet || fail 'tracked worktree is not clean'
 LOCAL_BRANCH="$(git -C "$REPO_ROOT" symbolic-ref --quiet --short HEAD)" || fail 'archive preparation requires a named local branch'
@@ -370,13 +376,15 @@ printf '%s\n' "$APPROVAL_TUPLE"
 
 ### 5. Archive 실행
 
-`APPROVAL_TUPLE`에는 Step 4에서 출력되고 같은 스레드에서 승인된 JSON byte를 변경 없이 넣는다. 이 block은 tuple schema, branch/parent/subject identity, optional-file presence, every source path/state/hash/byte count와 destination을 move 전과 commit 후 다시 검증한다. Round 1의 untracked source는 archive destination additions만 stage한다. tracked source는 source와 destination을 stage하여 exact `R100` rename만 허용한다. mixed state는 tuple의 per-file state와 정확히 일치해야 한다. staging 후 expected tree와 `100644` destination blob을 고정하고, commit hook 이후에도 exact branch/parent/subject/tree/name-status/mode/blob과 clean index/worktree를 확인한다.
+`APPROVAL_TUPLE`에는 Step 4에서 출력되고 같은 스레드에서 승인된 JSON byte를 변경 없이 넣는다. 이 block은 tuple schema, branch/parent/subject identity, optional-file presence, every source path/state/hash/byte count와 destination을 move 전과 commit 후 다시 검증한다. Round 1의 untracked source는 archive destination additions만 stage한다. tracked source는 source와 destination을 stage하여 exact `R100` rename만 허용한다. mixed state는 tuple의 per-file state와 정확히 일치해야 한다. staging 후 expected tree와 `100644` destination blob을 고정하고, hooks를 비활성화한 commit 뒤에도 exact branch/parent/subject/tree/name-status/mode/blob과 clean index/worktree를 확인한다.
 
 ```bash
 set -euo pipefail
 fail() { printf '%s\n' "$1" >&2; exit 1; }
 : "${APPROVAL_TUPLE:?}"
+export GIT_NO_REPLACE_OBJECTS=1
 REPO_ROOT="$(git rev-parse --show-toplevel)"
+test -z "$(git -C "$REPO_ROOT" for-each-ref --format='%(refname)' refs/replace/)" || fail 'refs/replace/* must be absent'
 git -C "$REPO_ROOT" diff --cached --quiet || fail 'index is not clean'
 git -C "$REPO_ROOT" diff --quiet || fail 'tracked worktree is not clean'
 
@@ -601,7 +609,7 @@ git -C "$REPO_ROOT" diff --cached --check
 test "$(git -C "$REPO_ROOT" symbolic-ref --quiet --short HEAD)" = "$LOCAL_BRANCH" || fail 'local branch changed before commit'
 test "$(git -C "$REPO_ROOT" rev-parse 'HEAD^{commit}')" = "$PARENT_OID" || fail 'archive parent changed before commit'
 EXPECTED_TREE="$(git -C "$REPO_ROOT" write-tree)"
-git -C "$REPO_ROOT" commit --only -m "$COMMIT_SUBJECT" -m "Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)" -m "Co-authored-by: Sisyphus <clio-agent@sisyphuslabs.ai>" -- "${INDEX_PATHS[@]}"
+git -C "$REPO_ROOT" -c core.hooksPath=/dev/null commit --only -m "$COMMIT_SUBJECT" -m "Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)" -m "Co-authored-by: Sisyphus <clio-agent@sisyphuslabs.ai>" -- "${INDEX_PATHS[@]}"
 COMMIT_SUCCEEDED=1
 HEAD_COMMIT="$(git -C "$REPO_ROOT" rev-parse 'HEAD^{commit}')"
 test "$(git -C "$REPO_ROOT" symbolic-ref --quiet --short HEAD)" = "$LOCAL_BRANCH" || fail 'committed branch differs from approval'
@@ -624,13 +632,13 @@ while test "$i" -lt "${#SOURCES[@]}"; do
   if test "$(tuple ".sources.$role.state")" = tracked; then ! git -C "$REPO_ROOT" cat-file -e "$HEAD_COMMIT:$source" 2>/dev/null || fail 'tracked source remains in committed tree'; fi
   i=$((i + 1))
 done
-git -C "$REPO_ROOT" diff --cached --quiet || fail 'hook left staged residue anywhere in repository'
-git -C "$REPO_ROOT" diff --quiet || fail 'hook left tracked worktree residue'
-test -z "$(git -C "$REPO_ROOT" status --porcelain=v1 --untracked-files=all)" || fail 'hook left unexpected worktree residue'
+git -C "$REPO_ROOT" diff --cached --quiet || fail 'commit left staged residue anywhere in repository'
+git -C "$REPO_ROOT" diff --quiet || fail 'commit left tracked worktree residue'
+test -z "$(git -C "$REPO_ROOT" status --porcelain=v1 --untracked-files=all)" || fail 'commit left unexpected worktree residue'
 trap - EXIT HUP INT TERM
 ```
 
-Pre-commit failure rolls back only the approved, successfully moved files, their original modes, and only the index pathspecs that this block staged. If a hook changes commit identity or leaves index/worktree residue after a successful commit, the block fails without attempting a destructive rollback of the durable commit; preserve the repository for manual recovery.
+Commit failure rolls back only the approved, successfully moved files, their original modes, and only the index pathspecs that this block staged. If the commit leaves identity or index/worktree residue after a successful commit, the block fails without attempting a destructive rollback of the durable commit; preserve the repository for manual recovery.
 
 ## 검증
 
@@ -638,14 +646,14 @@ Pre-commit failure rolls back only the approved, successfully moved files, their
 - canonical origin은 six exact HTTPS, SCP-style SSH, `ssh://` allowlist form(`.git` 유무 포함)만 허용한다. 모든 REST `gh api` 호출은 explicit `--method GET`이고 GraphQL은 read-only query POST만 사용한다.
 - canonical before/after snapshot은 fixed repository host/name/ID, direct-fork gate, paginated issue timeline, comments/reviews/threads/checks/statuses, every-page integer `total_count` equality와 flattened/unique check-run ID count, API base OID와 immutable fetched-object diff를 포함하고 byte-identical하다.
 - review draft와 full-diff/hash revalidation이 root cleanup보다 먼저, actual temporary-ref absence/root removal이 final report보다 먼저 일어난다.
-- archive approval tuple은 schema, repository host/name/ID, PR/round, base/diff-base/head OID, snapshot/diff identity/action, named local branch, parent OID, exact subject, every source path/destination/state/SHA-256/byte count, optional implementation presence를 bind한다. tuple 생성 전과 execution move 전에는 모든 present source의 identical exact identity lines, report cleanup lines, clean approved worktree를 재검증하고, execution은 staged tree와 `100644` blobs 및 post-hook branch/parent/subject/tree/name-status/index/worktree를 검증한다.
+- archive approval tuple은 schema, repository host/name/ID, PR/round, base/diff-base/head OID, snapshot/diff identity/action, named local branch, parent OID, exact subject, every source path/destination/state/SHA-256/byte count, optional implementation presence를 bind한다. tuple 생성 전과 execution move 전에는 모든 present source의 identical exact identity lines, report cleanup lines, clean approved worktree를 재검증하고, execution은 staged tree와 `100644` blobs 및 hook-disabled branch/parent/subject/tree/name-status/index/worktree를 검증한다.
 - Bash 3.2에서만 사용하는 indexed arrays, `local`, `read`-free POSIX-like control flow를 사용한다. associative arrays, `mapfile`, `readarray`, `wait -n`은 사용하지 않는다.
 
 ## 절대 하지 말 것
 
 - GitHub review, request-changes, comment, approve, merge, close, label, issue mutation, `gh api -X POST/PATCH/PUT/DELETE`, GraphQL `mutation`, mutation manifest 또는 payload executor를 만들거나 실행하지 않는다.
 - moving branch diff, incomplete pagination, check-run `total_count` 불일치, contributor-controlled code 실행, physical validation 없는 root cleanup, CAS 검증 없는 temporary ref 삭제를 허용하지 않는다.
-- approved tuple과 다른 branch/parent/subject/path/destination/state/content 또는 missing/mismatched machine-readable identity/cleanup line이 있는 문서를 archive하지 않고, dangling symlink나 다른 non-regular optional path를 absent로 취급하지 않으며, untracked source의 nonexistent path를 `git add`, `git reset`, `git commit` pathspec으로 넘기지 않는다. exact staged/committed tree, name-status, `100644` destination blob, repository-wide clean index/worktree after hooks 없이 archive를 완료로 기록하지 않는다.
+- approved tuple과 다른 branch/parent/subject/path/destination/state/content 또는 missing/mismatched machine-readable identity/cleanup line이 있는 문서를 archive하지 않고, dangling symlink나 다른 non-regular optional path를 absent로 취급하지 않으며, untracked source의 nonexistent path를 `git add`, `git reset`, `git commit` pathspec으로 넘기지 않는다. exact staged/committed tree, name-status, `100644` destination blob, repository-wide clean index/worktree without hooks 없이 archive를 완료로 기록하지 않는다.
 
 ## 호출 방법
 
