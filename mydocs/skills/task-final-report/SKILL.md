@@ -33,8 +33,10 @@ description: |
 1. 이슈와 구현 계획서 승인 상태를 검증하고 수용 기준을 실행한다.
    ```bash
    set -euo pipefail
-   LC_ALL=C
-   export LC_ALL
+    LC_ALL=C
+    export LC_ALL
+    export GIT_NO_REPLACE_OBJECTS=1
+    test -z "$(git for-each-ref --format='%(refname)' refs/replace/)" || exit 1
 
    validate_oid() { case "$1" in ""|*[!0-9a-f]*) exit 1 ;; esac; test "${#1}" -eq 40; }
    sha256_text() { printf '%s' "$1" | shasum -a 256 | awk '{print $1}'; }
@@ -74,11 +76,13 @@ description: |
 2. 최종 보고서와 오늘할일을 작성한다.
    - 최종 보고서는 `$FINAL_REPORT`에 `mydocs/_templates/final_report.md`를 기준으로 작성한다.
    - `$ORDER_FILE`의 `#{N}` 행을 `완료`와 완료 시각으로 갱신한다.
-3. 최종 보고서와 오늘할일만 하나의 commit으로 만들고, hook 실행 전후의 저장소 전체 index와 commit 경로를 검증한다.
+3. 최종 보고서와 오늘할일만 하나의 commit으로 만들고, hook을 비활성화한 저장소 전체 index와 commit 경로를 검증한다.
    ```bash
    set -euo pipefail
-   LC_ALL=C
-   export LC_ALL
+    LC_ALL=C
+    export LC_ALL
+    export GIT_NO_REPLACE_OBJECTS=1
+    test -z "$(git for-each-ref --format='%(refname)' refs/replace/)" || exit 1
 
    case "${ISSUE_NUMBER:-}" in ""|*[!0-9]*) exit 1 ;; esac
    case "${APPROVED_IMPL_PLAN_COMMIT:-}" in ""|*[!0-9a-f]*) exit 1 ;; esac
@@ -121,11 +125,11 @@ description: |
    test "$(git diff --cached --name-only)" = "$EXPECTED_COMMIT_PATHS"
    git diff --cached --check
 
-   INDEX_BEFORE_COMMIT_HOOKS="$(git ls-files -s)"
-   PRE_HOOK_TREE_OID="$(git write-tree)"
-   test "$(git ls-tree "$PRE_HOOK_TREE_OID" -- "$FINAL_REPORT" | awk '{print $1 " " $3}')" = "100644 $REPORT_STAGED_BLOB_OID"
-   test "$(git ls-tree "$PRE_HOOK_TREE_OID" -- "$ORDER_FILE" | awk '{print $1 " " $3}')" = "100644 $ORDER_STAGED_BLOB_OID"
-   git commit -m "Task #${ISSUE_NUMBER}: 최종 보고서 작성과 오늘할일 완료 처리" \
+    INDEX_BEFORE_COMMIT="$(git ls-files -s)"
+    PRE_COMMIT_TREE_OID="$(git write-tree)"
+    test "$(git ls-tree "$PRE_COMMIT_TREE_OID" -- "$FINAL_REPORT" | awk '{print $1 " " $3}')" = "100644 $REPORT_STAGED_BLOB_OID"
+    test "$(git ls-tree "$PRE_COMMIT_TREE_OID" -- "$ORDER_FILE" | awk '{print $1 " " $3}')" = "100644 $ORDER_STAGED_BLOB_OID"
+    git -c core.hooksPath=/dev/null commit -m "Task #${ISSUE_NUMBER}: 최종 보고서 작성과 오늘할일 완료 처리" \
      -m "Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)" \
      -m "Co-authored-by: Sisyphus <clio-agent@sisyphuslabs.ai>"
    FINAL_COMMIT_OID="$(git rev-parse --verify HEAD^{commit})"
@@ -133,13 +137,13 @@ description: |
    test "${#FINAL_COMMIT_OID}" -eq 40
    test "$(git diff-tree --root --no-commit-id --name-only -r "$FINAL_COMMIT_OID")" = "$EXPECTED_COMMIT_PATHS"
    FINAL_COMMIT_TREE_OID="$(git rev-parse "$FINAL_COMMIT_OID^{tree}")"
-   test "$FINAL_COMMIT_TREE_OID" = "$PRE_HOOK_TREE_OID"
+    test "$FINAL_COMMIT_TREE_OID" = "$PRE_COMMIT_TREE_OID"
    test "$(git ls-tree "$FINAL_COMMIT_TREE_OID" -- "$FINAL_REPORT" | awk '{print $1 " " $3}')" = "100644 $REPORT_STAGED_BLOB_OID"
    test "$(git ls-tree "$FINAL_COMMIT_TREE_OID" -- "$ORDER_FILE" | awk '{print $1 " " $3}')" = "100644 $ORDER_STAGED_BLOB_OID"
    test "$(git rev-parse "$FINAL_COMMIT_OID:$FINAL_REPORT")" = "$REPORT_STAGED_BLOB_OID"
    test "$(git rev-parse "$FINAL_COMMIT_OID:$ORDER_FILE")" = "$ORDER_STAGED_BLOB_OID"
-   INDEX_AFTER_COMMIT_HOOKS="$(git ls-files -s)"
-   test "$INDEX_BEFORE_COMMIT_HOOKS" = "$INDEX_AFTER_COMMIT_HOOKS"
+    INDEX_AFTER_COMMIT="$(git ls-files -s)"
+    test "$INDEX_BEFORE_COMMIT" = "$INDEX_AFTER_COMMIT"
    validate_regular_0644_file "$FINAL_REPORT"
    validate_regular_0644_file "$ORDER_FILE"
    test -z "$(git diff --cached --name-only)"
@@ -147,12 +151,14 @@ description: |
    test -z "$(git ls-files --others --exclude-standard)"
    test -z "$(git status --porcelain)"
    ```
-   - `INDEX_BEFORE_COMMIT_HOOKS`와 `INDEX_AFTER_COMMIT_HOOKS`는 `pre-commit`, `prepare-commit-msg`, `commit-msg`, `post-commit`을 포함한 commit hook 실행 경계의 repository-wide index이다. 일치하지 않거나 final commit 경로가 정확히 두 경로가 아니면 publication으로 진행하지 않는다.
+   - `INDEX_BEFORE_COMMIT`와 `INDEX_AFTER_COMMIT`는 hooks를 비활성화한 commit 경계의 repository-wide index이다. 일치하지 않거나 final commit 경로가 정확히 두 경로가 아니면 publication으로 진행하지 않는다.
 4. 첫 번째 final report/evidence 승인 tuple을 만들고 즉시 중단한다.
    ```bash
    set -euo pipefail
-   LC_ALL=C
-   export LC_ALL
+    LC_ALL=C
+    export LC_ALL
+    export GIT_NO_REPLACE_OBJECTS=1
+    test -z "$(git for-each-ref --format='%(refname)' refs/replace/)" || exit 1
 
    validate_oid() { case "$1" in ""|*[!0-9a-f]*) exit 1 ;; esac; test "${#1}" -eq 40; }
    sha256_text() { printf '%s' "$1" | shasum -a 256 | awk '{print $1}'; }
@@ -219,8 +225,10 @@ description: |
 5. 첫 번째 승인을 정확히 다시 검증한 뒤에만 private publication input directory와 검증된 내부 PR 제목을 준비한다.
    ```bash
    set -euo pipefail
-   LC_ALL=C
-   export LC_ALL
+    LC_ALL=C
+    export LC_ALL
+    export GIT_NO_REPLACE_OBJECTS=1
+    test -z "$(git for-each-ref --format='%(refname)' refs/replace/)" || exit 1
 
    validate_oid() { case "$1" in ""|*[!0-9a-f]*) exit 1 ;; esac; test "${#1}" -eq 40; }
    validate_sha256() { case "$1" in ""|*[!0-9a-f]*) exit 1 ;; esac; test "${#1}" -eq 64; }
@@ -342,13 +350,15 @@ description: |
 
    printf '%s\n' "PUBLICATION_DIR=$PUBLICATION_DIR" "EXPECTED_PR_TITLE=$EXPECTED_PR_TITLE"
    ```
-   - 파일 쓰기 도구만 `$PUBLICATION_DIR/title`에 `EXPECTED_PR_TITLE` 한 줄과 끝 newline을, `$PUBLICATION_DIR/body`에 완성 PR 본문을 쓴다. 두 파일은 directory 안에만 두며 `/tmp` 고정 이름, persistent manifest, `--body-file` handoff를 사용하지 않는다.
+   - 파일 쓰기 도구만 `$PUBLICATION_DIR/title`에 `EXPECTED_PR_TITLE` 한 줄과 끝 newline을, `$PUBLICATION_DIR/body`에 완성 PR 본문을 쓴다. writer는 즉시 `chmod 600 "$PUBLICATION_DIR/title" "$PUBLICATION_DIR/body"`를 실행하고, 두 파일이 regular, single-link, owner-only mode `0600`인지 확인한다. 두 파일은 directory 안에만 두며 `/tmp` 고정 이름, persistent manifest, `--body-file` handoff를 사용하지 않는다.
    - PR 본문에는 target issue를 닫는 독립된 정확한 한 줄 `Closes #${ISSUE_NUMBER}`를 포함한다. 이후 fence가 title, body, 소유자, mode, hard-link count, UTF-8, NUL, CR, hash를 다시 검증하므로 다른 제목 또는 본문은 승인 tuple에 도달하지 못한다.
 6. publication input과 원격 상태를 분류해 두 번째 approval tuple을 출력하고 즉시 중단한다.
    ```bash
    set -euo pipefail
-   LC_ALL=C
-   export LC_ALL
+    LC_ALL=C
+    export LC_ALL
+    export GIT_NO_REPLACE_OBJECTS=1
+    test -z "$(git for-each-ref --format='%(refname)' refs/replace/)" || exit 1
 
    validate_oid() { case "$1" in ""|*[!0-9a-f]*) exit 1 ;; esac; test "${#1}" -eq 40; }
    validate_sha256() { case "$1" in ""|*[!0-9a-f]*) exit 1 ;; esac; test "${#1}" -eq 64; }
@@ -393,7 +403,7 @@ description: |
      validate_origin_url_list "$FETCH_ORIGIN_URLS"
      validate_origin_url_list "$PUSH_ORIGIN_URLS"
    }
-   validate_publication_dir() {
+    validate_publication_dir() {
      test -n "${PUBLICATION_DIR:-}"
      TMP_PARENT="$(cd -P -- "${TMPDIR:-/tmp}" && pwd -P)"
      test -d "$PUBLICATION_DIR"
@@ -404,19 +414,24 @@ description: |
        "gpuwatcher-task${ISSUE_NUMBER}-publication."??????) ;;
        *) exit 1 ;;
      esac
-      test "$(stat -f '%Su' "$PUBLICATION_DIR")" = "$(id -un)"
-      test "$(stat -f '%Lp' "$PUBLICATION_DIR")" = "700"
-   }
-   read_publication_inputs() {
-     TITLE_FILE="$PUBLICATION_DIR/title"
-     BODY_FILE="$PUBLICATION_DIR/body"
-     for INPUT_FILE in "$TITLE_FILE" "$BODY_FILE"; do
-       test -f "$INPUT_FILE"
-       test ! -L "$INPUT_FILE"
-       test "$(stat -f '%Su' "$INPUT_FILE")" = "$(id -un)"
-       test "$(stat -f '%l' "$INPUT_FILE")" = "1"
-       case "$(stat -f '%Lp' "$INPUT_FILE")" in 600|400) ;; *) exit 1 ;; esac
-     done
+       test "$(stat -f '%Su' "$PUBLICATION_DIR")" = "$(id -un)"
+       test "$(stat -f '%Lp' "$PUBLICATION_DIR")" = "700"
+    }
+    validate_publication_input_membership() {
+      validate_publication_dir
+      test "$(find "$PUBLICATION_DIR" -mindepth 1 -maxdepth 1 -print | LC_ALL=C wc -l | tr -d '[:space:]')" = "2"
+      for INPUT_FILE in "$PUBLICATION_DIR/title" "$PUBLICATION_DIR/body"; do
+        test -f "$INPUT_FILE"
+        test ! -L "$INPUT_FILE"
+        test "$(stat -f '%Su' "$INPUT_FILE")" = "$(id -un)"
+        test "$(stat -f '%l' "$INPUT_FILE")" = "1"
+        test "$(stat -f '%Lp' "$INPUT_FILE")" = "600"
+      done
+    }
+    read_publication_inputs() {
+      TITLE_FILE="$PUBLICATION_DIR/title"
+      BODY_FILE="$PUBLICATION_DIR/body"
+      validate_publication_input_membership
 
      IFS= read -r PR_TITLE < "$TITLE_FILE"
      printf '%s\n' "$PR_TITLE" | cmp -s - "$TITLE_FILE"
@@ -438,7 +453,7 @@ description: |
      validate_utf8 "$BODY_FILE"
      BODY_HEX="$(od -An -tx1 -v "$BODY_FILE")"
      BODY_OCTETS="$(printf '%s\n' "$BODY_HEX" | tr -s '[:space:]' ' ')"
-     if grep -Eq '(^| )(0[0-9b-f]|1[0-9a-f]|7f)( |$)|(^| )c2 (8[0-9a-f]|9[0-9a-f])( |$)' <<< "$BODY_OCTETS"; then
+      if grep -Eq '(^| )(0[0-8b-f]|1[0-9a-f]|7f)( |$)|(^| )c2 (8[0-9a-f]|9[0-9a-f])( |$)' <<< "$BODY_OCTETS"; then
        exit 1
      else
        BODY_SCAN_STATUS=$?
@@ -495,16 +510,21 @@ description: |
          ;;
      esac
    }
-   list_matching_pr() {
-      MATCHING_PR_NUMBERS="$(GH_HOST=github.com gh api --hostname github.com --method GET --paginate --slurp "repos/jinzer0/GPUWatch/pulls?state=all&head=jinzer0%3A${PUBLISH_BRANCH}&per_page=100" --jq '.[][] | .number')"
-     case "$MATCHING_PR_NUMBERS" in
-       "") PUBLICATION_PR_NUMBER="none" ;;
-       *$'\n'*) exit 1 ;;
-       *)
-         case "$MATCHING_PR_NUMBERS" in *[!0-9]*) exit 1 ;; esac
-         PUBLICATION_PR_NUMBER="$MATCHING_PR_NUMBERS"
-         ;;
-     esac
+    list_matching_pr() {
+      MATCHING_PR_PAGES="$(GH_HOST=github.com gh api --hostname github.com --method GET --paginate --slurp "repos/jinzer0/GPUWatch/pulls?state=all&head=jinzer0%3A${PUBLISH_BRANCH}&per_page=100")" || exit 1
+      MATCHING_PR_NUMBER="$(printf '%s' "$MATCHING_PR_PAGES" | jq -er '
+        . as $pages |
+        select(($pages | type) == "array" and ($pages | length) > 0 and
+        all($pages[]; type == "array" and all(.[]; type == "object" and (.number | type) == "number" and .number >= 1 and (.number | floor) == .number))) |
+        [$pages[][] | .number] as $numbers |
+        select(($numbers | length) <= 1) |
+        if $numbers == [] then "none" else $numbers[0] | tostring end
+      ')" || exit 1
+      case "$MATCHING_PR_NUMBER" in
+        none) PUBLICATION_PR_NUMBER="none" ;;
+        *$'\n'*|*[!0-9]*) exit 1 ;;
+        *) PUBLICATION_PR_NUMBER="$MATCHING_PR_NUMBER" ;;
+      esac
    }
    verify_open_pr_exact() {
      EXPECTED_PR_NUMBER="$1"
@@ -633,9 +653,11 @@ description: |
 7. 두 번째 승인을 정확히 재검증하고, 승인된 exact 상태에서만 draft 생성과 ready 전환을 한 번에 수행한다.
    - 승인 응답의 `APPROVED_ACTION`, `APPROVED_HOST`, `APPROVED_REPOSITORY`, `APPROVED_REPOSITORY_ID`, `APPROVED_ISSUE_NUMBER`, `APPROVED_PLAN_OID`, `APPROVED_FINAL_COMMIT_OID`, `APPROVED_FINAL_REPORT_PATH`, `APPROVED_FINAL_REPORT_BLOB_OID`, `APPROVED_ORDERS_PATH`, `APPROVED_ORDERS_BLOB_OID`, `APPROVED_ACCEPTANCE_EVIDENCE_SHA256`, `APPROVED_DEVEL_OID`, `APPROVED_PUBLISH_BRANCH`, `APPROVED_BASE`, `APPROVED_TITLE_SHA256`, `APPROVED_BODY_SHA256`, `APPROVED_PUBLICATION_STATE`, `APPROVED_PUBLICATION_PR_NUMBER`, `APPROVED_PUBLICATION_PR_NODE_ID`를 그대로 설정한다. 이어 ambient `ISSUE_NUMBER`, `APPROVED_IMPL_PLAN_COMMIT`, `IMPL_PLAN`, `ORDER_FILE`, `ACCEPTANCE_EVIDENCE`, `PUBLICATION_DIR`도 설정하고 한 번에 실행한다.
    ```bash
-   set -euo pipefail
-   LC_ALL=C
-   export LC_ALL
+    set -euo pipefail
+    LC_ALL=C
+    export LC_ALL
+    export GIT_NO_REPLACE_OBJECTS=1
+    test -z "$(git for-each-ref --format='%(refname)' refs/replace/)" || exit 1
 
    validate_oid() { case "$1" in ""|*[!0-9a-f]*) exit 1 ;; esac; test "${#1}" -eq 40; }
    validate_sha256() { case "$1" in ""|*[!0-9a-f]*) exit 1 ;; esac; test "${#1}" -eq 64; }
@@ -677,10 +699,21 @@ description: |
        "gpuwatcher-task${ISSUE_NUMBER}-publication."??????) ;;
        *) exit 1 ;;
      esac
-     test "$(stat -f '%Su' "$PUBLICATION_DIR")" = "$(id -un)"
-     test "$(stat -f '%Lp' "$PUBLICATION_DIR")" = "700"
-   }
-   read_validated_issue_title() {
+      test "$(stat -f '%Su' "$PUBLICATION_DIR")" = "$(id -un)"
+      test "$(stat -f '%Lp' "$PUBLICATION_DIR")" = "700"
+    }
+    validate_publication_input_membership() {
+      validate_publication_dir
+      test "$(find "$PUBLICATION_DIR" -mindepth 1 -maxdepth 1 -print | LC_ALL=C wc -l | tr -d '[:space:]')" = "2"
+      for INPUT_FILE in "$PUBLICATION_DIR/title" "$PUBLICATION_DIR/body"; do
+        test -f "$INPUT_FILE"
+        test ! -L "$INPUT_FILE"
+        test "$(stat -f '%Su' "$INPUT_FILE")" = "$(id -un)"
+        test "$(stat -f '%l' "$INPUT_FILE")" = "1"
+        test "$(stat -f '%Lp' "$INPUT_FILE")" = "600"
+      done
+    }
+    read_validated_issue_title() {
      ISSUE_RECORD="$(GH_HOST=github.com gh api --hostname github.com --method GET "repos/jinzer0/GPUWatch/issues/$ISSUE_NUMBER" --jq '[.number, .state, ((.pull_request != null) | tostring), (.title | @base64)] | @tsv')"
      case "$ISSUE_RECORD" in *$'\n'*) exit 1 ;; esac
      IFS="$(printf '\t')" read -r RETURNED_ISSUE_NUMBER ISSUE_STATE IS_PULL_REQUEST ISSUE_TITLE_BASE64 ISSUE_EXTRA <<< "$ISSUE_RECORD"
@@ -726,16 +759,10 @@ description: |
      test "$(git ls-tree "$APPROVED_FINAL_COMMIT_OID" -- "$ARTIFACT_PATH" | awk '{print $1 " " $3}')" = "100644 $EXPECTED_BLOB_OID"
      test "$(git hash-object -- "$ARTIFACT_PATH")" = "$EXPECTED_BLOB_OID"
    }
-   read_publication_inputs() {
-     TITLE_FILE="$PUBLICATION_DIR/title"
-     BODY_FILE="$PUBLICATION_DIR/body"
-     for INPUT_FILE in "$TITLE_FILE" "$BODY_FILE"; do
-       test -f "$INPUT_FILE"
-       test ! -L "$INPUT_FILE"
-       test "$(stat -f '%Su' "$INPUT_FILE")" = "$(id -un)"
-       test "$(stat -f '%l' "$INPUT_FILE")" = "1"
-       case "$(stat -f '%Lp' "$INPUT_FILE")" in 600|400) ;; *) exit 1 ;; esac
-     done
+    read_publication_inputs() {
+      TITLE_FILE="$PUBLICATION_DIR/title"
+      BODY_FILE="$PUBLICATION_DIR/body"
+      validate_publication_input_membership
 
      IFS= read -r PR_TITLE < "$TITLE_FILE"
      printf '%s\n' "$PR_TITLE" | cmp -s - "$TITLE_FILE"
@@ -757,7 +784,7 @@ description: |
      validate_utf8 "$BODY_FILE"
      BODY_HEX="$(od -An -tx1 -v "$BODY_FILE")"
      BODY_OCTETS="$(printf '%s\n' "$BODY_HEX" | tr -s '[:space:]' ' ')"
-     if grep -Eq '(^| )(0[0-9b-f]|1[0-9a-f]|7f)( |$)|(^| )c2 (8[0-9a-f]|9[0-9a-f])( |$)' <<< "$BODY_OCTETS"; then
+      if grep -Eq '(^| )(0[0-8b-f]|1[0-9a-f]|7f)( |$)|(^| )c2 (8[0-9a-f]|9[0-9a-f])( |$)' <<< "$BODY_OCTETS"; then
        exit 1
      else
        BODY_SCAN_STATUS=$?
@@ -782,16 +809,21 @@ description: |
          ;;
      esac
    }
-   list_matching_pr() {
-      MATCHING_PR_NUMBERS="$(GH_HOST=github.com gh api --hostname github.com --method GET --paginate --slurp "repos/jinzer0/GPUWatch/pulls?state=all&head=jinzer0%3A${APPROVED_PUBLISH_BRANCH}&per_page=100" --jq '.[][] | .number')"
-     case "$MATCHING_PR_NUMBERS" in
-       "") CURRENT_PR_NUMBER="none" ;;
-       *$'\n'*) exit 1 ;;
-       *)
-         case "$MATCHING_PR_NUMBERS" in *[!0-9]*) exit 1 ;; esac
-         CURRENT_PR_NUMBER="$MATCHING_PR_NUMBERS"
-         ;;
-     esac
+    list_matching_pr() {
+      MATCHING_PR_PAGES="$(GH_HOST=github.com gh api --hostname github.com --method GET --paginate --slurp "repos/jinzer0/GPUWatch/pulls?state=all&head=jinzer0%3A${APPROVED_PUBLISH_BRANCH}&per_page=100")" || exit 1
+      MATCHING_PR_NUMBER="$(printf '%s' "$MATCHING_PR_PAGES" | jq -er '
+        . as $pages |
+        select(($pages | type) == "array" and ($pages | length) > 0 and
+        all($pages[]; type == "array" and all(.[]; type == "object" and (.number | type) == "number" and .number >= 1 and (.number | floor) == .number))) |
+        [$pages[][] | .number] as $numbers |
+        select(($numbers | length) <= 1) |
+        if $numbers == [] then "none" else $numbers[0] | tostring end
+      ')" || exit 1
+      case "$MATCHING_PR_NUMBER" in
+        none) CURRENT_PR_NUMBER="none" ;;
+        *$'\n'*|*[!0-9]*) exit 1 ;;
+        *) CURRENT_PR_NUMBER="$MATCHING_PR_NUMBER" ;;
+      esac
    }
    verify_open_pr_exact() {
      EXPECTED_PR_NUMBER="$1"
@@ -861,14 +893,46 @@ description: |
      list_matching_pr
      test "$CURRENT_PR_NUMBER" = "$CREATED_PR_NUMBER"
    }
-   verify_closing_issue_evidence() {
-     CLOSING_ISSUE_NUMBERS="$(GH_HOST=github.com gh api --hostname github.com graphql -F owner=jinzer0 -F name=GPUWatch -F number="$CURRENT_PR_NUMBER" -f query='query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { closingIssuesReferences(first: 100) { nodes { number repository { nameWithOwner } } } } } }' --jq '.data.repository.pullRequest.closingIssuesReferences.nodes[] | select(.repository.nameWithOwner == "jinzer0/GPUWatch") | .number')" || exit 1
-     test "$CLOSING_ISSUE_NUMBERS" = "$ISSUE_NUMBER"
-   }
-   cleanup_publication_input() {
-     EXIT_STATUS=$?
-     if test "${PUBLICATION_SUCCEEDED:-0}" = "1" || test "${PUBLICATION_BECAME_AMBIGUOUS:-0}" = "1"; then
-       rm -rf -- "$PUBLICATION_DIR"
+    verify_closing_issue_evidence() {
+      CLOSING_ISSUE_PAGES="$(GH_HOST=github.com gh api --hostname github.com graphql --paginate --slurp -F owner=jinzer0 -F name=GPUWatch -F number="$CURRENT_PR_NUMBER" -f query='query($owner: String!, $name: String!, $number: Int!, $endCursor: String) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { closingIssuesReferences(first: 100, after: $endCursor) { nodes { number repository { nameWithOwner } } pageInfo { hasNextPage endCursor } } } } }')" || exit 1
+      CLOSING_ISSUE_NUMBER="$(printf '%s' "$CLOSING_ISSUE_PAGES" | jq -er --argjson issue "$ISSUE_NUMBER" '
+        . as $pages |
+        select(
+        ($pages | type) == "array" and ($pages | length) > 0 and
+        all($pages[];
+          type == "object" and
+          (.errors? == null or ((.errors | type) == "array" and (.errors | length) == 0)) and
+          (.data | type) == "object" and
+          (.data.repository | type) == "object" and
+          (.data.repository.pullRequest | type) == "object" and
+          (.data.repository.pullRequest.closingIssuesReferences | type) == "object" and
+          (.data.repository.pullRequest.closingIssuesReferences.nodes | type) == "array" and
+          (.data.repository.pullRequest.closingIssuesReferences.pageInfo | type) == "object" and
+          (.data.repository.pullRequest.closingIssuesReferences.pageInfo.hasNextPage | type) == "boolean" and
+          (if .data.repository.pullRequest.closingIssuesReferences.pageInfo.hasNextPage then
+             (.data.repository.pullRequest.closingIssuesReferences.pageInfo.endCursor | type) == "string" and
+             (.data.repository.pullRequest.closingIssuesReferences.pageInfo.endCursor | length) > 0
+           else
+             ((.data.repository.pullRequest.closingIssuesReferences.pageInfo.endCursor | type) == "string" or
+              .data.repository.pullRequest.closingIssuesReferences.pageInfo.endCursor == null)
+           end) and
+          all(.data.repository.pullRequest.closingIssuesReferences.nodes[];
+            type == "object" and (.number | type) == "number" and .number >= 1 and (.number | floor) == .number and
+            (.repository | type) == "object" and (.repository.nameWithOwner | type) == "string")) and
+        all(range(0; ($pages | length) - 1); $pages[.].data.repository.pullRequest.closingIssuesReferences.pageInfo.hasNextPage == true) and
+        $pages[-1].data.repository.pullRequest.closingIssuesReferences.pageInfo.hasNextPage == false
+        ) |
+        [$pages[].data.repository.pullRequest.closingIssuesReferences.nodes[] | select(.repository.nameWithOwner == "jinzer0/GPUWatch") | .number] as $canonical_issues |
+        select($canonical_issues == [$issue]) |
+        $issue | tostring
+      ')" || exit 1
+      test "$CLOSING_ISSUE_NUMBER" = "$ISSUE_NUMBER"
+    }
+    cleanup_publication_input() {
+      EXIT_STATUS=$?
+      if test "${PUBLICATION_SUCCEEDED:-0}" = "1" || test "${PUBLICATION_BECAME_AMBIGUOUS:-0}" = "1"; then
+        validate_publication_input_membership
+        rm -rf -- "$PUBLICATION_DIR"
        test ! -e "$PUBLICATION_DIR"
      else
        printf '%s\n' "publication did not finish; retained $PUBLICATION_DIR for exact-state retry or explicit recovery cleanup" >&2
@@ -1013,11 +1077,11 @@ description: |
    - create 또는 ready mutation을 시작한 뒤 실패, signal, 잘못된 응답, 잘못된 GET, state drift가 발생하면 결과가 ambiguous하므로 private input을 폐기하고 fresh preparation과 replacement publication 승인을 요구한다. persistent manifest나 이전 승인으로 fuzzy adoption하지 않는다.
 8. publication input을 폐기하거나 재승인 전에 안전하게 정리해야 할 때만 다음 recovery cleanup을 실행한다.
    ```bash
-   set -euo pipefail
+    set -euo pipefail
 
    case "${ISSUE_NUMBER:-}" in ""|*[!0-9]*) exit 1 ;; esac
-   test -n "${PUBLICATION_DIR:-}"
-   TMP_PARENT="$(cd -P -- "${TMPDIR:-/tmp}" && pwd -P)"
+    test -n "${PUBLICATION_DIR:-}"
+    TMP_PARENT="$(cd -P -- "${TMPDIR:-/tmp}" && pwd -P)"
    test -d "$PUBLICATION_DIR"
    test ! -L "$PUBLICATION_DIR"
    PUBLICATION_DIR="$(cd -P -- "$PUBLICATION_DIR" && pwd -P)"
@@ -1026,9 +1090,17 @@ description: |
      "gpuwatcher-task${ISSUE_NUMBER}-publication."??????) ;;
      *) exit 1 ;;
    esac
-   test "$(stat -f '%Su' "$PUBLICATION_DIR")" = "$(id -un)"
-   test "$(stat -f '%Lp' "$PUBLICATION_DIR")" = "700"
-   rm -rf -- "$PUBLICATION_DIR"
+    test "$(stat -f '%Su' "$PUBLICATION_DIR")" = "$(id -un)"
+    test "$(stat -f '%Lp' "$PUBLICATION_DIR")" = "700"
+    test "$(find "$PUBLICATION_DIR" -mindepth 1 -maxdepth 1 -print | LC_ALL=C wc -l | tr -d '[:space:]')" = "2"
+    for INPUT_FILE in "$PUBLICATION_DIR/title" "$PUBLICATION_DIR/body"; do
+      test -f "$INPUT_FILE"
+      test ! -L "$INPUT_FILE"
+      test "$(stat -f '%Su' "$INPUT_FILE")" = "$(id -un)"
+      test "$(stat -f '%l' "$INPUT_FILE")" = "1"
+      test "$(stat -f '%Lp' "$INPUT_FILE")" = "600"
+    done
+    rm -rf -- "$PUBLICATION_DIR"
    test ! -e "$PUBLICATION_DIR"
    ```
 9. 작업지시자에게 검증된 PR 번호와 URL을 전달하고, 리뷰 및 merge 승인을 요청한다.
@@ -1047,7 +1119,7 @@ description: |
 ## 검증
 
 - 승인 구현 계획서 OID의 plan blob이 HEAD, index, working tree와 일치한 뒤 수용 기준을 실제 실행하고, acceptance evidence SHA-256을 첫 승인에 결박함
-- final report/orders commit 전 staged/untracked 변경을 거부하고, hook 전후 repository-wide index와 final commit 경로가 정확히 report/orders 두 파일임을 검증함
+- final report/orders commit 전 staged/untracked 변경을 거부하고, hook을 비활성화한 repository-wide index와 final commit 경로가 정확히 report/orders 두 파일임을 검증함
 - 첫 승인 tuple이 issue, plan OID, final commit OID, report/orders paths와 blob OIDs, acceptance evidence SHA-256을 정확히 결박하고 publication input 생성 전에 멈춤
 - 두 번째 승인 tuple이 canonical repository identity, approved issue/plan scalar, exact devel/final OIDs, first-approval artifacts, private title/body hashes, publish branch/base, 네 publication states와 PR number/node ID 또는 none을 결박함
 - canonical `github.com`, `jinzer0/GPUWatch`, repository ID `1256824919`, 모든 origin fetch/push URL을 `ls-remote`, `fetch`, `push`, `gh api` 전에 확인함
