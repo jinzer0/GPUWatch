@@ -18,7 +18,7 @@
 - 각 단계 완료 후 승인 없이 다음 단계 진행 금지
 - 범위가 불명확하거나 기존 작업과 충돌할 가능성이 있으면 먼저 확인
 - 사용자나 다른 작업자가 만든 변경은 되돌리지 않음
-- 이슈 close는 작업지시자 승인 후 또는 PR merge 확인 후에만 수행
+- 이슈가 `OPEN`이면 PR merge만으로 close를 승인하지 않으며, `pr-merge-cleanup` preflight의 exact approval tuple을 같은 스레드에서 승인받은 cleanup transaction에서만 close한다. 이미 `CLOSED`인 이슈는 검증된 no-op으로 처리한다.
 - 문서 수정은 기존 내용을 먼저 읽고 필요한 부분만 수정하며, 불가피할 때만 내용을 추가
 - 제품/사용자/기여자/외부 통합/API/아키텍처/로드맵 문서를 생성, 이동, 수정할 때는 수행계획서에 문서 위치 판단을 기록하고 승인받음
 - `mydocs/manual`은 대상 프로젝트 제품 문서 위치가 아니며, 공식 문서 루트(`docs/`, `specs/`, `site/`, `website/`, `adr/` 등)는 대상 프로젝트가 별도 task에서 명시적으로 선택
@@ -123,7 +123,7 @@ GPUWATCHER_LIVE_SSH_TARGET=tml-server cargo test --manifest-path crates/gpuwatch
 
 - [`README.md`](README.md) — 프로젝트 개요, 초기 설정, 빌드
 - [`mydocs/manual/document_structure_guide.md`](mydocs/manual/document_structure_guide.md) — `mydocs/` 폴더 역할, 문서 파일명, 외부 PR 폴더 정책, Skills 위치 정책
-- [`mydocs/manual/task_workflow_guide.md`](mydocs/manual/task_workflow_guide.md) — 타스크 진행 15단계, 커밋 메시지 규칙, 작업 시간 규칙
+- [`mydocs/manual/task_workflow_guide.md`](mydocs/manual/task_workflow_guide.md) — 타스크 진행 16단계, 커밋 메시지 규칙, 작업 시간 규칙
 - [`mydocs/manual/git_workflow_guide.md`](mydocs/manual/git_workflow_guide.md) — 브랜치 정책, Git 다이어그램, 메인테이너/컨트리뷰터 워크플로우
 - [`mydocs/manual/pr_process_guide.md`](mydocs/manual/pr_process_guide.md) — 외부 기여 PR 검토
 - [`mydocs/manual/agent_code_hyperfall_rule_conflict.md`](mydocs/manual/agent_code_hyperfall_rule_conflict.md) — 하이퍼-워터폴과 에이전트 기본 동작 충돌 규칙
