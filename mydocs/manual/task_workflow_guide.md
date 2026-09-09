@@ -44,7 +44,7 @@ Lifecycle 판단 결과가 승인되어 실제 파일 변경으로 넘어가면,
   - 세부 하위 단계 허용: `Task #{issue번호} [Stage {N.M}]: 내용`
   - 최종 보고서 커밋: `Task #{issue번호}: 최종 보고서 작성과 오늘할일 완료 처리`
 - `mydocs/orders/`에서 `M100 #1` 형식으로 마일스톤+이슈 참조
-- 타스크 완료 시: PR merge 후 `pr-merge-cleanup`의 read-only preflight가 출력한 host, repository, repository ID, PR 번호, 이슈 번호, merged head OID, base/head refs, action `close-issue:completed` exact tuple을 같은 스레드에서 승인한 뒤 cleanup transaction을 실행한다. merge 자체는 현재 `OPEN` 이슈 close 승인이 아니다. 이슈가 처음 `CLOSED`여도 삭제 직전 또는 close 직전 `OPEN`으로 관측되면 같은 exact tuple 승인이 필요하다. 이미 `CLOSED`인 이슈는 검증된 no-op으로 처리한다.
+- 타스크 완료 시: PR merge 후 `pr-merge-cleanup`의 read-only preflight가 atomically fetched issue `state`와 exact server `updated_at`를 포함해 출력한 host, repository, repository ID, PR 번호, 이슈 번호, merged head OID, base/head refs, action `close-issue:completed` exact tuple을 같은 스레드에서 승인한 뒤 cleanup transaction을 실행한다. merge 자체는 현재 `OPEN` 이슈 close 승인이 아니다. 이슈가 처음 `CLOSED`여도 삭제 직전 또는 close 직전 `OPEN`으로 관측되면 exact `updated_at`까지 일치하는 같은 exact tuple 승인이 필요하다. 이미 `CLOSED`인 이슈는 검증된 no-op으로 처리한다.
 
 ## 타스크 진행 절차
 
@@ -52,11 +52,15 @@ Lifecycle 판단 결과가 승인되어 실제 파일 변경으로 넘어가면,
 2. 작업지시자가 지정한 이슈를 `task-start`로 시작하고 `local/task{issue번호}` 브랜치 생성 후 진행
 3. 수행 전 수행계획서 작성 → 승인 요청
 4. 구현 계획서 작성 (최소 3단계, 최대 6단계) → 내용 승인 요청. 승인 후 Stage 1 시작 전에 승인본을 독립 커밋으로 기록
-   ```bash
-   export GIT_NO_REPLACE_OBJECTS=1
+    ```bash
+    GIT_CONFIG_COUNT=1
+    GIT_CONFIG_KEY_0=core.hooksPath
+    GIT_CONFIG_VALUE_0=/dev/null
+    export GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0
+    export GIT_NO_REPLACE_OBJECTS=1
    test -z "$(git for-each-ref --format='%(refname)' refs/replace/)" || exit 1
    git add "mydocs/plans/task_{milestone_slug}_{issue번호}_impl.md"
-   git -c core.hooksPath=/dev/null commit -m "Task #{issue번호}: 승인된 구현 계획서 확정" \
+    git commit -m "Task #{issue번호}: 승인된 구현 계획서 확정" \
       -m "Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)" \
       -m "Co-authored-by: Sisyphus <clio-agent@sisyphuslabs.ai>"
    git rev-parse HEAD
@@ -73,13 +77,13 @@ Lifecycle 판단 결과가 승인되어 실제 파일 변경으로 넘어가면,
 7. **단계별 완료보고서(`_stage{N}.md`)는 해당 단계 소스 커밋과 함께 타스크 브랜치에서 커밋한다.**
 8. 승인 후 다음 단계 진행
 9. 마지막 단계 보고서 commit과 작업지시자 승인이 완료된 뒤 최종 결과보고서 작성·검증과 오늘할일 갱신을 수행한다. 마지막 Stage와 최종 보고서를 한 commit으로 합치지 않는다.
-10. **최종 결과보고서(`_report.md`)와 오늘할일(`orders/`) 갱신이 regular/non-symlink/single-link working-tree mode `0644`, stage/commit mode `100644`인지 확인하고 pre-hook tree/blob을 결박한 뒤 타스크 브랜치에서 커밋한다.**
+10. **최종 결과보고서(`_report.md`)와 오늘할일(`orders/`) 갱신이 regular/non-symlink/single-link working-tree mode `0644`, stage/commit mode `100644`인지 확인하고 hook-suppressed commit boundary의 tree/blob을 결박한 뒤 타스크 브랜치에서 커밋한다.**
 11. 커밋 직후 즉시 멈추고, 같은 스레드에서 커밋된 최종 보고서와 수용 기준 검증 근거 승인 요청. 이전 단계 승인이나 task-final-report 호출 지시는 이 승인으로 대체되지 않는다.
 12. 첫 번째 final report/evidence 승인을 받은 뒤에만 `task-final-report`가 private publication input을 만들고 두 번째 publication approval tuple을 출력한다. 첫 승인은 input 준비만 허용한다. publication 승인은 approved issue number/plan OID, 원격 `devel` OID, final commit OID, report/orders blob OID, acceptance evidence SHA-256, title/body SHA-256, base `devel`, head `publish/task{issue번호}`, exact PR number/node ID를 묶는다. 허용 state는 `branch-absent-pr-absent`, `branch-exact-pr-absent`, `branch-exact-pr-draft`, `branch-exact-pr-ready`다.
 13. 두 번째 publication 승인을 받은 뒤에만 `task-final-report`가 approved final OID를 게시한다. no-PR 승인은 생성 직전 all-state absence를 다시 확인하고 draft PR을 만든 뒤 반환 number/node ID의 exact draft를 검증한다. 이어 그 PR만 ready로 전환하고 exact non-draft REST GET과 모든 page 및 GraphQL error를 검증하는 read-only GraphQL `closingIssuesReferences`를 실행한다. ready 승인은 mutation 없는 verification-only 경로다. concurrent PR, duplicate, state drift, create/ready interruption 또는 잘못된 응답/GET은 fresh preparation과 replacement publication 승인을 요구한다. 일반 내부 task에서 직접 `git push` 또는 `gh pr create`를 실행하지 않는다.
 14. 승인 요청 시 작업지시자가 피드백 문서를 `mydocs/feedback/`에 등록
 15. 모든 테스트 통과 시 피드백 없음
-16. PR merge 확인 후 `pr-merge-cleanup`으로 read-only preflight를 실행한다. 이슈가 `OPEN`이면 host, repository, repository ID, PR 번호, 이슈 번호, merged head OID, base/head refs, action `close-issue:completed` exact tuple을 같은 스레드에서 승인받은 뒤 cleanup 실행 fence에 해당 scalar 값을 입력한다. cleanup은 삭제 직전과 close 직전에 PR/이슈 tuple과 이슈 상태를 다시 읽고, 각 경계에서 `OPEN`이면 exact tuple 승인이 있어야만 계속한다. merge 완료된 `publish/task{issue번호}` 원격 브랜치와 재생성 가능한 로컬 부산물을 정리한 다음 마지막에 `gh issue close {번호} --reason completed`를 실행해 `CLOSED`를 확인한다. 이미 `CLOSED`인 이슈는 승인 없이 검증된 no-op으로 처리한다.
+16. PR merge 확인 후 `pr-merge-cleanup`으로 read-only preflight를 실행한다. 이슈가 `OPEN`이면 host, repository, repository ID, PR 번호, 이슈 번호, atomically fetched issue `state`, exact server `updated_at`, merged head OID, base/head refs, action `close-issue:completed` exact tuple을 같은 스레드에서 승인받은 뒤 cleanup 실행 fence에 해당 scalar 값을 입력한다. cleanup은 삭제 직전과 close 직전에 PR/이슈 tuple과 issue `state`/`updated_at`를 다시 읽고, 각 경계에서 `OPEN`이면 exact `updated_at`까지 같은 tuple 승인이 있어야만 계속한다. merge 완료된 `publish/task{issue번호}` 원격 브랜치와 재생성 가능한 로컬 부산물을 정리한 다음 마지막에 `gh issue close {번호} --reason completed`를 실행해 `CLOSED`를 확인한다. 이미 `CLOSED`인 이슈는 승인 없이 검증된 no-op으로 처리한다.
 
 ## 작업 규칙
 

@@ -33,9 +33,13 @@ description: |
 1. 이슈와 구현 계획서 승인 상태를 검증하고 수용 기준을 실행한다.
    ```bash
    set -euo pipefail
-    LC_ALL=C
-    export LC_ALL
-    export GIT_NO_REPLACE_OBJECTS=1
+     LC_ALL=C
+     export LC_ALL
+     GIT_CONFIG_COUNT=1
+     GIT_CONFIG_KEY_0=core.hooksPath
+     GIT_CONFIG_VALUE_0=/dev/null
+     export GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0
+     export GIT_NO_REPLACE_OBJECTS=1
     test -z "$(git for-each-ref --format='%(refname)' refs/replace/)" || exit 1
 
    validate_oid() { case "$1" in ""|*[!0-9a-f]*) exit 1 ;; esac; test "${#1}" -eq 40; }
@@ -79,9 +83,13 @@ description: |
 3. 최종 보고서와 오늘할일만 하나의 commit으로 만들고, hook을 비활성화한 저장소 전체 index와 commit 경로를 검증한다.
    ```bash
    set -euo pipefail
-    LC_ALL=C
-    export LC_ALL
-    export GIT_NO_REPLACE_OBJECTS=1
+     LC_ALL=C
+     export LC_ALL
+     GIT_CONFIG_COUNT=1
+     GIT_CONFIG_KEY_0=core.hooksPath
+     GIT_CONFIG_VALUE_0=/dev/null
+     export GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0
+     export GIT_NO_REPLACE_OBJECTS=1
     test -z "$(git for-each-ref --format='%(refname)' refs/replace/)" || exit 1
 
    case "${ISSUE_NUMBER:-}" in ""|*[!0-9]*) exit 1 ;; esac
@@ -129,7 +137,7 @@ description: |
     PRE_COMMIT_TREE_OID="$(git write-tree)"
     test "$(git ls-tree "$PRE_COMMIT_TREE_OID" -- "$FINAL_REPORT" | awk '{print $1 " " $3}')" = "100644 $REPORT_STAGED_BLOB_OID"
     test "$(git ls-tree "$PRE_COMMIT_TREE_OID" -- "$ORDER_FILE" | awk '{print $1 " " $3}')" = "100644 $ORDER_STAGED_BLOB_OID"
-    git -c core.hooksPath=/dev/null commit -m "Task #${ISSUE_NUMBER}: 최종 보고서 작성과 오늘할일 완료 처리" \
+     git commit -m "Task #${ISSUE_NUMBER}: 최종 보고서 작성과 오늘할일 완료 처리" \
      -m "Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)" \
      -m "Co-authored-by: Sisyphus <clio-agent@sisyphuslabs.ai>"
    FINAL_COMMIT_OID="$(git rev-parse --verify HEAD^{commit})"
@@ -155,9 +163,13 @@ description: |
 4. 첫 번째 final report/evidence 승인 tuple을 만들고 즉시 중단한다.
    ```bash
    set -euo pipefail
-    LC_ALL=C
-    export LC_ALL
-    export GIT_NO_REPLACE_OBJECTS=1
+     LC_ALL=C
+     export LC_ALL
+     GIT_CONFIG_COUNT=1
+     GIT_CONFIG_KEY_0=core.hooksPath
+     GIT_CONFIG_VALUE_0=/dev/null
+     export GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0
+     export GIT_NO_REPLACE_OBJECTS=1
     test -z "$(git for-each-ref --format='%(refname)' refs/replace/)" || exit 1
 
    validate_oid() { case "$1" in ""|*[!0-9a-f]*) exit 1 ;; esac; test "${#1}" -eq 40; }
@@ -225,9 +237,13 @@ description: |
 5. 첫 번째 승인을 정확히 다시 검증한 뒤에만 private publication input directory와 검증된 내부 PR 제목을 준비한다.
    ```bash
    set -euo pipefail
-    LC_ALL=C
-    export LC_ALL
-    export GIT_NO_REPLACE_OBJECTS=1
+     LC_ALL=C
+     export LC_ALL
+     GIT_CONFIG_COUNT=1
+     GIT_CONFIG_KEY_0=core.hooksPath
+     GIT_CONFIG_VALUE_0=/dev/null
+     export GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0
+     export GIT_NO_REPLACE_OBJECTS=1
     test -z "$(git for-each-ref --format='%(refname)' refs/replace/)" || exit 1
 
    validate_oid() { case "$1" in ""|*[!0-9a-f]*) exit 1 ;; esac; test "${#1}" -eq 40; }
@@ -355,9 +371,13 @@ description: |
 6. publication input과 원격 상태를 분류해 두 번째 approval tuple을 출력하고 즉시 중단한다.
    ```bash
    set -euo pipefail
-    LC_ALL=C
-    export LC_ALL
-    export GIT_NO_REPLACE_OBJECTS=1
+     LC_ALL=C
+     export LC_ALL
+     GIT_CONFIG_COUNT=1
+     GIT_CONFIG_KEY_0=core.hooksPath
+     GIT_CONFIG_VALUE_0=/dev/null
+     export GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0
+     export GIT_NO_REPLACE_OBJECTS=1
     test -z "$(git for-each-ref --format='%(refname)' refs/replace/)" || exit 1
 
    validate_oid() { case "$1" in ""|*[!0-9a-f]*) exit 1 ;; esac; test "${#1}" -eq 40; }
@@ -654,9 +674,13 @@ description: |
    - 승인 응답의 `APPROVED_ACTION`, `APPROVED_HOST`, `APPROVED_REPOSITORY`, `APPROVED_REPOSITORY_ID`, `APPROVED_ISSUE_NUMBER`, `APPROVED_PLAN_OID`, `APPROVED_FINAL_COMMIT_OID`, `APPROVED_FINAL_REPORT_PATH`, `APPROVED_FINAL_REPORT_BLOB_OID`, `APPROVED_ORDERS_PATH`, `APPROVED_ORDERS_BLOB_OID`, `APPROVED_ACCEPTANCE_EVIDENCE_SHA256`, `APPROVED_DEVEL_OID`, `APPROVED_PUBLISH_BRANCH`, `APPROVED_BASE`, `APPROVED_TITLE_SHA256`, `APPROVED_BODY_SHA256`, `APPROVED_PUBLICATION_STATE`, `APPROVED_PUBLICATION_PR_NUMBER`, `APPROVED_PUBLICATION_PR_NODE_ID`를 그대로 설정한다. 이어 ambient `ISSUE_NUMBER`, `APPROVED_IMPL_PLAN_COMMIT`, `IMPL_PLAN`, `ORDER_FILE`, `ACCEPTANCE_EVIDENCE`, `PUBLICATION_DIR`도 설정하고 한 번에 실행한다.
    ```bash
     set -euo pipefail
-    LC_ALL=C
-    export LC_ALL
-    export GIT_NO_REPLACE_OBJECTS=1
+     LC_ALL=C
+     export LC_ALL
+     GIT_CONFIG_COUNT=1
+     GIT_CONFIG_KEY_0=core.hooksPath
+     GIT_CONFIG_VALUE_0=/dev/null
+     export GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0
+     export GIT_NO_REPLACE_OBJECTS=1
     test -z "$(git for-each-ref --format='%(refname)' refs/replace/)" || exit 1
 
    validate_oid() { case "$1" in ""|*[!0-9a-f]*) exit 1 ;; esac; test "${#1}" -eq 40; }

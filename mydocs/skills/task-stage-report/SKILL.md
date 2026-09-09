@@ -27,6 +27,10 @@ description: |
    - 승인 commit의 내용, 현재 계획서 blob, 현재 단계와의 선행 관계를 먼저 확인한다.
       ```bash
        IMPL_PLAN="mydocs/plans/task_{milestone_slug}_{N}_impl.md"
+       GIT_CONFIG_COUNT=1
+       GIT_CONFIG_KEY_0=core.hooksPath
+       GIT_CONFIG_VALUE_0=/dev/null
+       export GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0
        export GIT_NO_REPLACE_OBJECTS=1
        test -z "$(git for-each-ref --format='%(refname)' refs/replace/)" || exit 1
       APPROVED_IMPL_PLAN_COMMIT_FILE="$(mktemp)"
@@ -68,16 +72,25 @@ description: |
      - 다음 단계 영향
      - 승인 요청 (다음 단계 진입 또는 PR 단계)
 3. 변경 점검
-   ```bash
-   git status --short
+    ```bash
+    GIT_CONFIG_COUNT=1
+    GIT_CONFIG_KEY_0=core.hooksPath
+    GIT_CONFIG_VALUE_0=/dev/null
+    export GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0
+    export GIT_NO_REPLACE_OBJECTS=1
+    git status --short
    git diff --check
    ```
 4. 단계 소스 + 보고서 묶음 커밋
-   ```bash
-   export GIT_NO_REPLACE_OBJECTS=1
+    ```bash
+    GIT_CONFIG_COUNT=1
+    GIT_CONFIG_KEY_0=core.hooksPath
+    GIT_CONFIG_VALUE_0=/dev/null
+    export GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0
+    export GIT_NO_REPLACE_OBJECTS=1
    test -z "$(git for-each-ref --format='%(refname)' refs/replace/)" || exit 1
    git add {단계 산출 파일들} mydocs/working/task_{milestone_slug}_{N}_stage{S}.md
-   git -c core.hooksPath=/dev/null commit -m "Task #{N} Stage {S}: {핵심 내용 요약}" \
+    git commit -m "Task #{N} Stage {S}: {핵심 내용 요약}" \
      -m "Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)" \
      -m "Co-authored-by: Sisyphus <clio-agent@sisyphuslabs.ai>"
    ```
