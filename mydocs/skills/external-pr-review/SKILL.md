@@ -173,7 +173,7 @@ capture() {
   gh api --method GET --hostname "$BASE_HOST" --paginate --slurp "repos/$BASE_REPOSITORY/commits/$head_oid/statuses?per_page=100" | write_private "$prefix.statuses.json"
   jq -se 'length == 5 and all(.[]; type == "array" and length > 0 and all(.[]; type == "array"))' "$(child "$prefix.issue-comments.json")" "$(child "$prefix.issue-timeline.json")" "$(child "$prefix.reviews.json")" "$(child "$prefix.review-comments.json")" "$(child "$prefix.statuses.json")" >/dev/null
   jq -e 'type == "array" and length > 0 and all(.[]; . as $page | ($page | type) == "object" and ($page.errors? == null or (($page.errors | type) == "array" and ($page.errors | length) == 0)) and ($page.data.repository | type) == "object" and ($page.data.repository.pullRequest | type) == "object" and ($page.data.repository.pullRequest.reviewThreads.nodes | type) == "array" and ($page.data.repository.pullRequest.reviewThreads.pageInfo | type) == "object" and ($page.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage | type) == "boolean" and (if $page.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage then (($page.data.repository.pullRequest.reviewThreads.pageInfo.endCursor | type) == "string" and ($page.data.repository.pullRequest.reviewThreads.pageInfo.endCursor | length) > 0) else (($page.data.repository.pullRequest.reviewThreads.pageInfo.endCursor | type) == "string" or $page.data.repository.pullRequest.reviewThreads.pageInfo.endCursor == null) end))' "$(child "$prefix.review-threads.json")" >/dev/null
-  jq -e '([.[].check_runs[]] | length) == (.[0].total_count // -1)' "$(child "$prefix.check-runs.json")" >/dev/null
+  jq -e '. as $pages | type == "array" and length > 0 and all(.[]; type == "object" and (.total_count | type) == "number" and .total_count >= 0 and (.total_count | floor) == .total_count and (.check_runs | type) == "array" and all(.check_runs[]; type == "object" and (.id | type) == "number" and .id >= 0 and (.id | floor) == .id)) and ([$pages[].total_count] | unique | length) == 1 and ([$pages[].check_runs[]] | length) == $pages[0].total_count and ([$pages[].check_runs[].id] | unique | length) == $pages[0].total_count' "$(child "$prefix.check-runs.json")" >/dev/null
 
   FETCH_BASE_REF="refs/gpuwatcher-external-review/$PR_NUMBER/$REVIEW_ROUND/$NONCE/$prefix/base"
   FETCH_HEAD_REF="refs/gpuwatcher-external-review/$PR_NUMBER/$REVIEW_ROUND/$NONCE/$prefix/head"
@@ -251,7 +251,7 @@ printf 'temporary_refs=absent\nsnapshot_root=removed\n'
 
 ### 4. Archive 준비: 승인 tuple 생성
 
-archive는 local document 정리이며 GitHub와 무관하다. final report가 cleanup 결과를 기록한 뒤, 작업지시자가 같은 스레드에서 아래 출력 전체를 승인할 때만 실행한다. 출력 JSON은 승인 tuple일 뿐이며 파일로 저장하거나 manifest로 만들지 않는다. `SNAPSHOT_SHA256`, `BASE_OID`, `DIFF_BASE_OID`, `HEAD_OID`, `DIFF_SHA256`, `DIFF_BYTES`, `DIFF_LINES`는 Step 1/2에서 검증한 값으로 설정한다. tuple 생성 전 모든 present review/report/implementation 문서는 아래 exact identity line을 각각 한 번 포함해야 하고, report는 `temporary_refs=absent`, `snapshot_root=removed`도 각각 한 번 포함해야 한다.
+archive는 local document 정리이며 GitHub와 무관하다. final report가 cleanup 결과를 기록한 뒤, 작업지시자가 같은 스레드에서 아래 출력 전체를 승인할 때만 실행한다. 출력 JSON은 승인 tuple일 뿐이며 파일로 저장하거나 manifest로 만들지 않는다. `SNAPSHOT_SHA256`, `BASE_OID`, `DIFF_BASE_OID`, `HEAD_OID`, `DIFF_SHA256`, `DIFF_BYTES`, `DIFF_LINES`는 Step 1/2에서 검증한 값으로 설정한다. tuple 생성 전 모든 present review/report/implementation 문서는 아래 exact identity line을 각각 한 번 포함해야 하고, report는 `temporary_refs=absent`, `snapshot_root=removed`도 각각 한 번 포함해야 한다. tuple은 named local branch, exact parent OID와 commit subject, source identity와 destination도 함께 bind하며 detached HEAD와 approved source 외 worktree 변경을 거부한다.
 
 ```bash
 set -euo pipefail
@@ -270,10 +270,20 @@ case "$DIFF_BYTES:$DIFF_LINES" in *[!0-9:]*|*::*) fail 'diff count invalid' ;; e
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 git -C "$REPO_ROOT" diff --cached --quiet || fail 'index is not clean'
+git -C "$REPO_ROOT" diff --quiet || fail 'tracked worktree is not clean'
+LOCAL_BRANCH="$(git -C "$REPO_ROOT" symbolic-ref --quiet --short HEAD)" || fail 'archive preparation requires a named local branch'
+test -n "$LOCAL_BRANCH" || fail 'local branch is empty'
+PARENT_OID="$(git -C "$REPO_ROOT" rev-parse 'HEAD^{commit}')"
+case "$PARENT_OID" in *[!0-9a-f]*|'') fail 'parent OID invalid' ;; esac
+test "${#PARENT_OID}" = 40 || fail 'parent OID length invalid'
+COMMIT_SUBJECT="External PR #${PR_NUMBER} Round ${REVIEW_ROUND}: 검토 기록 보관"
 REVIEW="mydocs/pr/pr_${PR_NUMBER}_review.md"
 REPORT="mydocs/pr/pr_${PR_NUMBER}_report.md"
 IMPLEMENTATION="mydocs/pr/pr_${PR_NUMBER}_review_impl.md"
 ARCHIVE="mydocs/pr/archives/pr_${PR_NUMBER}_round${REVIEW_ROUND}"
+REVIEW_DESTINATION="$ARCHIVE/$(basename -- "$REVIEW")"
+REPORT_DESTINATION="$ARCHIVE/$(basename -- "$REPORT")"
+IMPLEMENTATION_DESTINATION="$ARCHIVE/$(basename -- "$IMPLEMENTATION")"
 test ! -e "$REPO_ROOT/$ARCHIVE" || fail 'archive already exists'
 
 validate_source() {
@@ -284,7 +294,9 @@ require_exact_line() {
   local path line count
   path=$1
   line=$2
-  count="$(LC_ALL=C grep -Fxc -- "$line" "$REPO_ROOT/$path" || true)"
+  if ! count="$(LC_ALL=C awk -v expected="$line" '$0 == expected { count++ } END { print count + 0 }' "$REPO_ROOT/$path")"; then
+    fail 'document identity file could not be read'
+  fi
   test "$count" = 1 || fail 'document identity line is missing or duplicated'
 }
 require_document_identity() {
@@ -319,32 +331,46 @@ source_state() {
   fi
 }
 source_tuple() {
-  local role path state sha bytes
+  local role path destination state sha bytes
   role=$1
   path=$2
+  destination=$3
   validate_source "$path"
   require_document_identity "$path"
   state="$(source_state "$path")"
   sha="$(shasum -a 256 "$REPO_ROOT/$path" | cut -d' ' -f1)"
   bytes="$(wc -c < "$REPO_ROOT/$path" | tr -d ' ')"
-  jq -n --arg role "$role" --arg path "$path" --arg state "$state" --arg sha256 "$sha" --argjson bytes "$bytes" '{role:$role,path:$path,present:true,state:$state,sha256:$sha256,bytes:$bytes}'
+  jq -n --arg role "$role" --arg path "$path" --arg destination "$destination" --arg state "$state" --arg sha256 "$sha" --argjson bytes "$bytes" '{role:$role,path:$path,destination:$destination,present:true,state:$state,sha256:$sha256,bytes:$bytes}'
 }
 
-REVIEW_TUPLE="$(source_tuple review "$REVIEW")"
-REPORT_TUPLE="$(source_tuple report "$REPORT")"
+REVIEW_TUPLE="$(source_tuple review "$REVIEW" "$REVIEW_DESTINATION")"
+REPORT_TUPLE="$(source_tuple report "$REPORT" "$REPORT_DESTINATION")"
 require_report_cleanup "$REPORT"
-if test -e "$REPO_ROOT/$IMPLEMENTATION"; then
-  IMPLEMENTATION_TUPLE="$(source_tuple implementation "$IMPLEMENTATION")"
+if test -e "$REPO_ROOT/$IMPLEMENTATION" || test -L "$REPO_ROOT/$IMPLEMENTATION"; then
+  IMPLEMENTATION_TUPLE="$(source_tuple implementation "$IMPLEMENTATION" "$IMPLEMENTATION_DESTINATION")"
 else
-  IMPLEMENTATION_TUPLE="$(jq -n --arg path "$IMPLEMENTATION" '{role:"implementation",path:$path,present:false,state:"absent",sha256:null,bytes:null}')"
+  test ! -e "$REPO_ROOT/$IMPLEMENTATION" && test ! -L "$REPO_ROOT/$IMPLEMENTATION" || fail 'implementation absence is not stable'
+  IMPLEMENTATION_TUPLE="$(jq -n --arg path "$IMPLEMENTATION" --arg destination "$IMPLEMENTATION_DESTINATION" '{role:"implementation",path:$path,destination:$destination,present:false,state:"absent",sha256:null,bytes:null}')"
 fi
-APPROVAL_TUPLE="$(jq -S -c -n --arg action archive-external-review --arg schema "$SNAPSHOT_SCHEMA" --arg host "$BASE_HOST" --arg repository "$BASE_REPOSITORY" --argjson repositoryId "$BASE_REPOSITORY_ID" --argjson prNumber "$PR_NUMBER" --argjson reviewRound "$REVIEW_ROUND" --arg archivePath "$ARCHIVE" --arg snapshotSha256 "$SNAPSHOT_SHA256" --arg baseOid "$BASE_OID" --arg diffBaseOid "$DIFF_BASE_OID" --arg headOid "$HEAD_OID" --arg diffSha256 "$DIFF_SHA256" --argjson diffBytes "$DIFF_BYTES" --argjson diffLines "$DIFF_LINES" --argjson review "$REVIEW_TUPLE" --argjson report "$REPORT_TUPLE" --argjson implementation "$IMPLEMENTATION_TUPLE" '{action:$action,snapshotSchema:$schema,repositoryHost:$host,repositoryName:$repository,repositoryId:$repositoryId,prNumber:$prNumber,reviewRound:$reviewRound,archivePath:$archivePath,snapshot:{sha256:$snapshotSha256,baseOid:$baseOid,diffBaseOid:$diffBaseOid,headOid:$headOid,diff:{sha256:$diffSha256,bytes:$diffBytes,lines:$diffLines}},sources:{review:$review,report:$report,implementation:$implementation}}')"
+
+EXPECTED_WORKTREE=
+for source_tuple_json in "$REVIEW_TUPLE" "$REPORT_TUPLE" "$IMPLEMENTATION_TUPLE"; do
+  if test "$(printf '%s' "$source_tuple_json" | jq -r '.state')" = untracked; then
+    source_path="$(printf '%s' "$source_tuple_json" | jq -r '.path')"
+    EXPECTED_WORKTREE="${EXPECTED_WORKTREE}?? ${source_path}\n"
+  fi
+done
+ACTUAL_WORKTREE="$(git -C "$REPO_ROOT" status --porcelain=v1 --untracked-files=all | LC_ALL=C sort)"
+EXPECTED_WORKTREE="$(printf '%b' "$EXPECTED_WORKTREE" | LC_ALL=C sort)"
+test "$ACTUAL_WORKTREE" = "$EXPECTED_WORKTREE" || fail 'worktree contains changes outside approved sources'
+
+APPROVAL_TUPLE="$(jq -S -c -n --arg action archive-external-review --arg schema "$SNAPSHOT_SCHEMA" --arg host "$BASE_HOST" --arg repository "$BASE_REPOSITORY" --argjson repositoryId "$BASE_REPOSITORY_ID" --argjson prNumber "$PR_NUMBER" --argjson reviewRound "$REVIEW_ROUND" --arg archivePath "$ARCHIVE" --arg localBranch "$LOCAL_BRANCH" --arg parentOid "$PARENT_OID" --arg commitSubject "$COMMIT_SUBJECT" --arg snapshotSha256 "$SNAPSHOT_SHA256" --arg baseOid "$BASE_OID" --arg diffBaseOid "$DIFF_BASE_OID" --arg headOid "$HEAD_OID" --arg diffSha256 "$DIFF_SHA256" --argjson diffBytes "$DIFF_BYTES" --argjson diffLines "$DIFF_LINES" --argjson review "$REVIEW_TUPLE" --argjson report "$REPORT_TUPLE" --argjson implementation "$IMPLEMENTATION_TUPLE" '{action:$action,snapshotSchema:$schema,repositoryHost:$host,repositoryName:$repository,repositoryId:$repositoryId,prNumber:$prNumber,reviewRound:$reviewRound,archivePath:$archivePath,localBranch:$localBranch,parentOid:$parentOid,commitSubject:$commitSubject,snapshot:{sha256:$snapshotSha256,baseOid:$baseOid,diffBaseOid:$diffBaseOid,headOid:$headOid,diff:{sha256:$diffSha256,bytes:$diffBytes,lines:$diffLines}},sources:{review:$review,report:$report,implementation:$implementation}}')"
 printf '%s\n' "$APPROVAL_TUPLE"
 ```
 
 ### 5. Archive 실행
 
-`APPROVAL_TUPLE`에는 Step 4에서 출력되고 같은 스레드에서 승인된 JSON byte를 변경 없이 넣는다. 이 block은 tuple schema, identity, optional-file presence, every source path/state/hash/byte count를 move 전과 commit 후 다시 검증한다. Round 1의 untracked source는 archive destination additions만 stage한다. tracked source는 source와 destination을 stage하여 exact `R100` rename만 허용한다. mixed state는 tuple의 per-file state와 정확히 일치해야 한다.
+`APPROVAL_TUPLE`에는 Step 4에서 출력되고 같은 스레드에서 승인된 JSON byte를 변경 없이 넣는다. 이 block은 tuple schema, branch/parent/subject identity, optional-file presence, every source path/state/hash/byte count와 destination을 move 전과 commit 후 다시 검증한다. Round 1의 untracked source는 archive destination additions만 stage한다. tracked source는 source와 destination을 stage하여 exact `R100` rename만 허용한다. mixed state는 tuple의 per-file state와 정확히 일치해야 한다. staging 후 expected tree와 `100644` destination blob을 고정하고, commit hook 이후에도 exact branch/parent/subject/tree/name-status/mode/blob과 clean index/worktree를 확인한다.
 
 ```bash
 set -euo pipefail
@@ -352,26 +378,32 @@ fail() { printf '%s\n' "$1" >&2; exit 1; }
 : "${APPROVAL_TUPLE:?}"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 git -C "$REPO_ROOT" diff --cached --quiet || fail 'index is not clean'
+git -C "$REPO_ROOT" diff --quiet || fail 'tracked worktree is not clean'
 
 tuple() { printf '%s' "$APPROVAL_TUPLE" | jq -er "$1"; }
 tuple_raw() { printf '%s' "$APPROVAL_TUPLE" | jq -r "$1"; }
 printf '%s' "$APPROVAL_TUPLE" | jq -e '
   . as $tuple |
   type == "object" and
-  (keys == ["action","archivePath","prNumber","repositoryHost","repositoryId","repositoryName","reviewRound","snapshot","snapshotSchema","sources"]) and
+  (keys == ["action","archivePath","commitSubject","localBranch","parentOid","prNumber","repositoryHost","repositoryId","repositoryName","reviewRound","snapshot","snapshotSchema","sources"]) and
   .action == "archive-external-review" and .snapshotSchema == "review snapshot schema v2" and .repositoryHost == "github.com" and .repositoryName == "jinzer0/GPUWatch" and .repositoryId == 1256824919 and
   (.prNumber | type == "number" and . >= 1 and floor == .) and (.reviewRound | type == "number" and . >= 1 and floor == .) and
   (.archivePath == ("mydocs/pr/archives/pr_" + (.prNumber|tostring) + "_round" + (.reviewRound|tostring))) and
+  (.localBranch | type == "string" and length > 0) and (.parentOid | test("^[0-9a-f]{40}$")) and
+  (.commitSubject == ("External PR #" + (.prNumber|tostring) + " Round " + (.reviewRound|tostring) + ": 검토 기록 보관")) and
   (.snapshot | type == "object" and (keys == ["baseOid","diff","diffBaseOid","headOid","sha256"]) and (.sha256|test("^[0-9a-f]{64}$")) and (.baseOid|test("^[0-9a-f]{40}$")) and (.diffBaseOid|test("^[0-9a-f]{40}$")) and (.headOid|test("^[0-9a-f]{40}$")) and (.diff | type == "object" and (keys == ["bytes","lines","sha256"]) and (.sha256|test("^[0-9a-f]{64}$")) and (.bytes|type == "number" and . >= 0 and floor == .) and (.lines|type == "number" and . >= 0 and floor == .))) and
   (.sources | type == "object" and (keys == ["implementation","report","review"]) and
-    (.review | type == "object" and (keys == ["bytes","path","present","role","sha256","state"]) and .role == "review" and .path == ("mydocs/pr/pr_" + ($tuple.prNumber|tostring) + "_review.md") and .present == true and (.state == "tracked" or .state == "untracked") and (.sha256|test("^[0-9a-f]{64}$")) and (.bytes|type == "number" and . >= 0 and floor == .)) and
-    (.report | type == "object" and (keys == ["bytes","path","present","role","sha256","state"]) and .role == "report" and .path == ("mydocs/pr/pr_" + ($tuple.prNumber|tostring) + "_report.md") and .present == true and (.state == "tracked" or .state == "untracked") and (.sha256|test("^[0-9a-f]{64}$")) and (.bytes|type == "number" and . >= 0 and floor == .)) and
-    (.implementation | type == "object" and (keys == ["bytes","path","present","role","sha256","state"]) and .role == "implementation" and .path == ("mydocs/pr/pr_" + ($tuple.prNumber|tostring) + "_review_impl.md") and (if .present then (.state == "tracked" or .state == "untracked") and (.sha256|test("^[0-9a-f]{64}$")) and (.bytes|type == "number" and . >= 0 and floor == .) else .state == "absent" and .sha256 == null and .bytes == null end)))
+    (.review | type == "object" and (keys == ["bytes","destination","path","present","role","sha256","state"]) and .role == "review" and .path == ("mydocs/pr/pr_" + ($tuple.prNumber|tostring) + "_review.md") and .destination == ($tuple.archivePath + "/pr_" + ($tuple.prNumber|tostring) + "_review.md") and .present == true and (.state == "tracked" or .state == "untracked") and (.sha256|test("^[0-9a-f]{64}$")) and (.bytes|type == "number" and . >= 0 and floor == .)) and
+    (.report | type == "object" and (keys == ["bytes","destination","path","present","role","sha256","state"]) and .role == "report" and .path == ("mydocs/pr/pr_" + ($tuple.prNumber|tostring) + "_report.md") and .destination == ($tuple.archivePath + "/pr_" + ($tuple.prNumber|tostring) + "_report.md") and .present == true and (.state == "tracked" or .state == "untracked") and (.sha256|test("^[0-9a-f]{64}$")) and (.bytes|type == "number" and . >= 0 and floor == .)) and
+    (.implementation | type == "object" and (keys == ["bytes","destination","path","present","role","sha256","state"]) and .role == "implementation" and .path == ("mydocs/pr/pr_" + ($tuple.prNumber|tostring) + "_review_impl.md") and .destination == ($tuple.archivePath + "/pr_" + ($tuple.prNumber|tostring) + "_review_impl.md") and (if .present then (.state == "tracked" or .state == "untracked") and (.sha256|test("^[0-9a-f]{64}$")) and (.bytes|type == "number" and . >= 0 and floor == .) else .state == "absent" and .sha256 == null and .bytes == null end)))
 ' >/dev/null || fail 'approval tuple schema invalid'
 
 PR_NUMBER="$(tuple '.prNumber')"
 REVIEW_ROUND="$(tuple '.reviewRound')"
 ARCHIVE="$(tuple '.archivePath')"
+LOCAL_BRANCH="$(tuple '.localBranch')"
+PARENT_OID="$(tuple '.parentOid')"
+COMMIT_SUBJECT="$(tuple '.commitSubject')"
 BASE_HOST="$(tuple '.repositoryHost')"
 BASE_REPOSITORY="$(tuple '.repositoryName')"
 BASE_REPOSITORY_ID="$(tuple '.repositoryId')"
@@ -386,13 +418,21 @@ DIFF_LINES="$(tuple '.snapshot.diff.lines')"
 REVIEW="mydocs/pr/pr_${PR_NUMBER}_review.md"
 REPORT="mydocs/pr/pr_${PR_NUMBER}_report.md"
 IMPLEMENTATION="mydocs/pr/pr_${PR_NUMBER}_review_impl.md"
+REVIEW_DESTINATION="$(tuple '.sources.review.destination')"
+REPORT_DESTINATION="$(tuple '.sources.report.destination')"
+IMPLEMENTATION_DESTINATION="$(tuple '.sources.implementation.destination')"
+CURRENT_BRANCH="$(git -C "$REPO_ROOT" symbolic-ref --quiet --short HEAD)" || fail 'archive execution requires a named local branch'
+test "$CURRENT_BRANCH" = "$LOCAL_BRANCH" || fail 'local branch differs from approval'
+test "$(git -C "$REPO_ROOT" rev-parse 'HEAD^{commit}')" = "$PARENT_OID" || fail 'archive parent differs from approval'
 test ! -e "$REPO_ROOT/$ARCHIVE" || fail 'archive already exists'
 
 require_exact_line() {
   local path line count
   path=$1
   line=$2
-  count="$(LC_ALL=C grep -Fxc -- "$line" "$REPO_ROOT/$path" || true)"
+  if ! count="$(LC_ALL=C awk -v expected="$line" '$0 == expected { count++ } END { print count + 0 }' "$REPO_ROOT/$path")"; then
+    fail 'document identity file could not be read'
+  fi
   test "$count" = 1 || fail 'document identity line is missing or duplicated'
 }
 require_document_identity() {
@@ -418,11 +458,14 @@ require_report_cleanup() {
 }
 
 validate_approved_source() {
-  local role path expected_path expected_state expected_sha expected_bytes actual_state actual_sha actual_bytes
+  local role path destination expected_path expected_destination expected_state expected_sha expected_bytes actual_state actual_sha actual_bytes
   role=$1
   path=$2
+  destination=$3
   expected_path="$(tuple ".sources.$role.path")"
   test "$expected_path" = "$path" || fail 'approved path differs'
+  expected_destination="$(tuple ".sources.$role.destination")"
+  test "$expected_destination" = "$destination" || fail 'approved destination differs'
   test "$(tuple ".sources.$role.present")" = true || fail 'required source is absent from tuple'
   test -f "$REPO_ROOT/$path" && test ! -L "$REPO_ROOT/$path" && test "$(stat -f '%l' "$REPO_ROOT/$path")" = 1 || fail 'source is not a private regular file'
   require_document_identity "$path"
@@ -442,33 +485,48 @@ validate_approved_source() {
   expected_bytes="$(tuple ".sources.$role.bytes")"
   test "$actual_sha" = "$expected_sha" && test "$actual_bytes" = "$expected_bytes" || fail 'source content differs from approval'
 }
-validate_approved_source review "$REVIEW"
-validate_approved_source report "$REPORT"
+validate_approved_source review "$REVIEW" "$REVIEW_DESTINATION"
+validate_approved_source report "$REPORT" "$REPORT_DESTINATION"
 require_report_cleanup "$REPORT"
 HAS_IMPL="$(tuple_raw '.sources.implementation.present')"
 test "$HAS_IMPL" = true || test "$HAS_IMPL" = false || fail 'implementation presence invalid'
 if test "$HAS_IMPL" = true; then
-  validate_approved_source implementation "$IMPLEMENTATION"
+  validate_approved_source implementation "$IMPLEMENTATION" "$IMPLEMENTATION_DESTINATION"
 else
   test "$(tuple '.sources.implementation.path')" = "$IMPLEMENTATION" || fail 'implementation path differs'
+  test "$(tuple '.sources.implementation.destination')" = "$IMPLEMENTATION_DESTINATION" || fail 'implementation destination differs'
   test "$(tuple '.sources.implementation.state')" = absent || fail 'implementation state differs'
   test "$(tuple_raw '.sources.implementation.sha256')" = null && test "$(tuple_raw '.sources.implementation.bytes')" = null || fail 'absent implementation content differs'
-  test ! -e "$REPO_ROOT/$IMPLEMENTATION" || fail 'implementation appeared after approval'
+  test ! -e "$REPO_ROOT/$IMPLEMENTATION" && test ! -L "$REPO_ROOT/$IMPLEMENTATION" || fail 'implementation appeared after approval'
 fi
+
+EXPECTED_WORKTREE=
+for role in review report implementation; do
+  if test "$(tuple ".sources.$role.state")" = untracked; then
+    source_path="$(tuple ".sources.$role.path")"
+    EXPECTED_WORKTREE="${EXPECTED_WORKTREE}?? ${source_path}\n"
+  fi
+done
+ACTUAL_WORKTREE="$(git -C "$REPO_ROOT" status --porcelain=v1 --untracked-files=all | LC_ALL=C sort)"
+EXPECTED_WORKTREE="$(printf '%b' "$EXPECTED_WORKTREE" | LC_ALL=C sort)"
+test "$ACTUAL_WORKTREE" = "$EXPECTED_WORKTREE" || fail 'worktree differs from approved source state'
 
 SOURCES=("$REVIEW" "$REPORT")
 ROLES=(review report)
+DESTINATIONS=("$REVIEW_DESTINATION" "$REPORT_DESTINATION")
 if test "$HAS_IMPL" = true; then
   SOURCES+=("$IMPLEMENTATION")
   ROLES+=(implementation)
+  DESTINATIONS+=("$IMPLEMENTATION_DESTINATION")
 fi
 MOVED=(0 0 0)
-DESTINATIONS=()
+ORIGINAL_MODES=()
+INDEX_BLOBS=()
 INDEX_PATHS=()
 COMMIT_SUCCEEDED=0
 ARCHIVE_CREATED=0
 rollback_archive() {
-  local exit_status=$? rollback_failed index i source destination
+  local exit_status=$? rollback_failed i source destination
   trap - EXIT HUP INT TERM
   set +e
   rollback_failed=0
@@ -477,9 +535,13 @@ rollback_archive() {
     i=$((${#SOURCES[@]} - 1))
     while test "$i" -ge 0; do
       source="${SOURCES[$i]}"
-      destination="$ARCHIVE/$(basename -- "$source")"
+      destination="${DESTINATIONS[$i]}"
       if test "${MOVED[$i]}" = 1; then
-        test -f "$REPO_ROOT/$destination" && test ! -e "$REPO_ROOT/$source" && mv -- "$REPO_ROOT/$destination" "$REPO_ROOT/$source" || rollback_failed=1
+        if test -f "$REPO_ROOT/$destination" && test ! -e "$REPO_ROOT/$source" && test ! -L "$REPO_ROOT/$source"; then
+          mv -- "$REPO_ROOT/$destination" "$REPO_ROOT/$source" && chmod "${ORIGINAL_MODES[$i]}" "$REPO_ROOT/$source" || rollback_failed=1
+        else
+          rollback_failed=1
+        fi
       fi
       i=$((i - 1))
     done
@@ -497,11 +559,12 @@ ARCHIVE_CREATED=1
 i=0
 while test "$i" -lt "${#SOURCES[@]}"; do
   source="${SOURCES[$i]}"
-  destination="$ARCHIVE/$(basename -- "$source")"
+  destination="${DESTINATIONS[$i]}"
   role="${ROLES[$i]}"
+  ORIGINAL_MODES+=("$(stat -f '%Lp' "$REPO_ROOT/$source")")
   mv -- "$REPO_ROOT/$source" "$REPO_ROOT/$destination"
   MOVED[$i]=1
-  DESTINATIONS+=("$destination")
+  chmod 644 "$REPO_ROOT/$destination"
   expected_sha="$(tuple ".sources.$role.sha256")"
   expected_bytes="$(tuple ".sources.$role.bytes")"
   test "$(shasum -a 256 "$REPO_ROOT/$destination" | cut -d' ' -f1)" = "$expected_sha" && test "$(wc -c < "$REPO_ROOT/$destination" | tr -d ' ')" = "$expected_bytes" || fail 'destination content differs from approval'
@@ -512,6 +575,9 @@ while test "$i" -lt "${#SOURCES[@]}"; do
     git -C "$REPO_ROOT" add -- "$destination"
     INDEX_PATHS+=("$destination")
   fi
+  expected_blob="$(git -C "$REPO_ROOT" hash-object -- "$REPO_ROOT/$destination")"
+  INDEX_BLOBS+=("$expected_blob")
+  test "$(git -C "$REPO_ROOT" ls-files --stage -- "$destination")" = "100644 $expected_blob 0$(printf '\t')$destination" || fail 'staged destination mode or blob differs'
   i=$((i + 1))
 done
 
@@ -532,38 +598,54 @@ ACTUAL_STATUS="$(git -C "$REPO_ROOT" diff --cached --name-status --find-renames=
 EXPECTED_STATUS="$(printf '%b' "$EXPECTED_STATUS" | LC_ALL=C sort)"
 test "$ACTUAL_STATUS" = "$EXPECTED_STATUS" || fail 'staged name-status is not exactly approved'
 git -C "$REPO_ROOT" diff --cached --check
-git -C "$REPO_ROOT" commit --only -m "External PR #${PR_NUMBER} Round ${REVIEW_ROUND}: 검토 기록 보관" -m "Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)" -m "Co-authored-by: Sisyphus <clio-agent@sisyphuslabs.ai>" -- "${INDEX_PATHS[@]}"
+test "$(git -C "$REPO_ROOT" symbolic-ref --quiet --short HEAD)" = "$LOCAL_BRANCH" || fail 'local branch changed before commit'
+test "$(git -C "$REPO_ROOT" rev-parse 'HEAD^{commit}')" = "$PARENT_OID" || fail 'archive parent changed before commit'
+EXPECTED_TREE="$(git -C "$REPO_ROOT" write-tree)"
+git -C "$REPO_ROOT" commit --only -m "$COMMIT_SUBJECT" -m "Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)" -m "Co-authored-by: Sisyphus <clio-agent@sisyphuslabs.ai>" -- "${INDEX_PATHS[@]}"
 COMMIT_SUCCEEDED=1
+HEAD_COMMIT="$(git -C "$REPO_ROOT" rev-parse 'HEAD^{commit}')"
+test "$(git -C "$REPO_ROOT" symbolic-ref --quiet --short HEAD)" = "$LOCAL_BRANCH" || fail 'committed branch differs from approval'
+test "$(git -C "$REPO_ROOT" rev-list --parents -n 1 "$HEAD_COMMIT")" = "$HEAD_COMMIT $PARENT_OID" || fail 'committed parent differs from approval'
+test "$(git -C "$REPO_ROOT" log -1 --format=%s "$HEAD_COMMIT")" = "$COMMIT_SUBJECT" || fail 'commit subject differs from approval'
+test "$(git -C "$REPO_ROOT" rev-parse "$HEAD_COMMIT^{tree}")" = "$EXPECTED_TREE" || fail 'committed tree differs from staged tree'
+ACTUAL_COMMIT_STATUS="$(git -C "$REPO_ROOT" diff-tree --no-commit-id --name-status -r --find-renames=100% "$PARENT_OID" "$HEAD_COMMIT" | LC_ALL=C sort)"
+test "$ACTUAL_COMMIT_STATUS" = "$EXPECTED_STATUS" || fail 'committed name-status is not exactly approved'
 i=0
 while test "$i" -lt "${#SOURCES[@]}"; do
   source="${SOURCES[$i]}"
   destination="${DESTINATIONS[$i]}"
   role="${ROLES[$i]}"
+  expected_blob="${INDEX_BLOBS[$i]}"
+  test -f "$REPO_ROOT/$destination" && test ! -L "$REPO_ROOT/$destination" && test "$(stat -f '%l' "$REPO_ROOT/$destination")" = 1 && test "$(stat -f '%Lp' "$REPO_ROOT/$destination")" = 644 || fail 'destination file mode or links differ'
   test "$(shasum -a 256 "$REPO_ROOT/$destination" | cut -d' ' -f1)" = "$(tuple ".sources.$role.sha256")" && test "$(wc -c < "$REPO_ROOT/$destination" | tr -d ' ')" = "$(tuple ".sources.$role.bytes")" || fail 'committed destination differs from approval'
-  test "$(git -C "$REPO_ROOT" show "HEAD:$destination" | shasum -a 256 | cut -d' ' -f1)" = "$(tuple ".sources.$role.sha256")" && test "$(git -C "$REPO_ROOT" show "HEAD:$destination" | wc -c | tr -d ' ')" = "$(tuple ".sources.$role.bytes")" || fail 'committed blob differs from approval'
-  if test "$(tuple ".sources.$role.state")" = tracked; then ! git -C "$REPO_ROOT" cat-file -e "HEAD:$source" 2>/dev/null || fail 'tracked source remains in committed tree'; fi
+  test "$(git -C "$REPO_ROOT" ls-tree "$HEAD_COMMIT" -- "$destination")" = "100644 blob $expected_blob$(printf '\t')$destination" || fail 'committed destination mode or blob differs'
+  test "$(git -C "$REPO_ROOT" show "$HEAD_COMMIT:$destination" | shasum -a 256 | cut -d' ' -f1)" = "$(tuple ".sources.$role.sha256")" && test "$(git -C "$REPO_ROOT" show "$HEAD_COMMIT:$destination" | wc -c | tr -d ' ')" = "$(tuple ".sources.$role.bytes")" || fail 'committed blob differs from approval'
+  test ! -e "$REPO_ROOT/$source" && test ! -L "$REPO_ROOT/$source" || fail 'source remains in worktree'
+  if test "$(tuple ".sources.$role.state")" = tracked; then ! git -C "$REPO_ROOT" cat-file -e "$HEAD_COMMIT:$source" 2>/dev/null || fail 'tracked source remains in committed tree'; fi
   i=$((i + 1))
 done
 git -C "$REPO_ROOT" diff --cached --quiet || fail 'hook left staged residue anywhere in repository'
+git -C "$REPO_ROOT" diff --quiet || fail 'hook left tracked worktree residue'
+test -z "$(git -C "$REPO_ROOT" status --porcelain=v1 --untracked-files=all)" || fail 'hook left unexpected worktree residue'
 trap - EXIT HUP INT TERM
 ```
 
-Pre-commit failure rolls back only the approved, successfully moved files and only the index pathspecs that this block staged. If a hook leaves staged residue after a successful commit, the block fails without attempting a destructive rollback of the durable commit; preserve the repository for manual recovery.
+Pre-commit failure rolls back only the approved, successfully moved files, their original modes, and only the index pathspecs that this block staged. If a hook changes commit identity or leaves index/worktree residue after a successful commit, the block fails without attempting a destructive rollback of the durable commit; preserve the repository for manual recovery.
 
 ## 검증
 
 - required `트리거`, `사전 조건`, `절차`, `검증`, `절대 하지 말 것`, `호출 방법` heading이 있고 capture, evidence, cleanup, archive blocks는 `절차` 아래에 있다.
 - canonical origin은 six exact HTTPS, SCP-style SSH, `ssh://` allowlist form(`.git` 유무 포함)만 허용한다. 모든 REST `gh api` 호출은 explicit `--method GET`이고 GraphQL은 read-only query POST만 사용한다.
-- canonical before/after snapshot은 fixed repository host/name/ID, direct-fork gate, paginated issue timeline, comments/reviews/threads/checks/statuses, check-run `total_count`, API base OID와 immutable fetched-object diff를 포함하고 byte-identical하다.
+- canonical before/after snapshot은 fixed repository host/name/ID, direct-fork gate, paginated issue timeline, comments/reviews/threads/checks/statuses, every-page integer `total_count` equality와 flattened/unique check-run ID count, API base OID와 immutable fetched-object diff를 포함하고 byte-identical하다.
 - review draft와 full-diff/hash revalidation이 root cleanup보다 먼저, actual temporary-ref absence/root removal이 final report보다 먼저 일어난다.
-- archive approval tuple은 schema, repository host/name/ID, PR/round, base/diff-base/head OID, snapshot/diff identity/action, every source path/state/SHA-256/byte count, optional implementation presence를 bind한다. tuple 생성 전과 execution move 전에는 모든 present source의 identical exact identity lines와 report cleanup lines를 재검증하고, execution은 commit 후 content와 global staged-index residue도 검증한다.
+- archive approval tuple은 schema, repository host/name/ID, PR/round, base/diff-base/head OID, snapshot/diff identity/action, named local branch, parent OID, exact subject, every source path/destination/state/SHA-256/byte count, optional implementation presence를 bind한다. tuple 생성 전과 execution move 전에는 모든 present source의 identical exact identity lines, report cleanup lines, clean approved worktree를 재검증하고, execution은 staged tree와 `100644` blobs 및 post-hook branch/parent/subject/tree/name-status/index/worktree를 검증한다.
 - Bash 3.2에서만 사용하는 indexed arrays, `local`, `read`-free POSIX-like control flow를 사용한다. associative arrays, `mapfile`, `readarray`, `wait -n`은 사용하지 않는다.
 
 ## 절대 하지 말 것
 
 - GitHub review, request-changes, comment, approve, merge, close, label, issue mutation, `gh api -X POST/PATCH/PUT/DELETE`, GraphQL `mutation`, mutation manifest 또는 payload executor를 만들거나 실행하지 않는다.
 - moving branch diff, incomplete pagination, check-run `total_count` 불일치, contributor-controlled code 실행, physical validation 없는 root cleanup, CAS 검증 없는 temporary ref 삭제를 허용하지 않는다.
-- approved tuple과 다른 path/state/content 또는 missing/mismatched machine-readable identity/cleanup line이 있는 문서를 archive하지 않고, untracked source의 nonexistent path를 `git add`, `git reset`, `git commit` pathspec으로 넘기지 않는다. exact staged name-status, destination digest, repository-wide empty index after hooks 없이 archive를 완료로 기록하지 않는다.
+- approved tuple과 다른 branch/parent/subject/path/destination/state/content 또는 missing/mismatched machine-readable identity/cleanup line이 있는 문서를 archive하지 않고, dangling symlink나 다른 non-regular optional path를 absent로 취급하지 않으며, untracked source의 nonexistent path를 `git add`, `git reset`, `git commit` pathspec으로 넘기지 않는다. exact staged/committed tree, name-status, `100644` destination blob, repository-wide clean index/worktree after hooks 없이 archive를 완료로 기록하지 않는다.
 
 ## 호출 방법
 
