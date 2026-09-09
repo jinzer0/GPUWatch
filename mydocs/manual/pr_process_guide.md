@@ -20,7 +20,7 @@
 - 내부 task PR title은 live target issue title에서 검증한 정확한 `Task #N: <live issue title>` 한 줄이다.
 - 내부 task PR publication은 `task-final-report`만 수행한다. 직접 `git push` 또는 `gh pr create`로 일반 내부 task PR을 만들지 않는다.
 - PR 본문에는 실제 실행한 검증만 적고, 명령 나열이 아니라 검증 결과 요약과 근거를 함께 남긴다.
-- PR 본문에는 target issue를 닫는 `Closes #N` 독립 줄을 포함하고, publication 뒤 read-only GraphQL `closingIssuesReferences` query로 연결을 확인한다. 이 GraphQL 호출은 HTTP POST transport를 쓰지만 mutation이 아니다.
+- PR 본문에는 target issue를 닫는 `Closes #N` 독립 줄을 포함하고, publication 뒤 모든 page와 GraphQL error를 검증하는 read-only GraphQL `closingIssuesReferences` query로 연결을 확인한다. 이 GraphQL 호출은 HTTP POST transport를 쓰지만 mutation이 아니다.
 - 현재 PR이 직접 수행하는 issue는 `대상 타스크`에 적는다.
 - `관련 이슈`는 선행, 후속, Epic, upstream, 참고 PR/issue처럼 PR 이해에 필요한 맥락을 적는다.
 - 외부 기여 PR은 코드 변경과 문서 변경을 함께 검토한다.

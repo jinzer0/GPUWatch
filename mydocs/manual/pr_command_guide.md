@@ -15,7 +15,7 @@ publication state는 `branch-absent-pr-absent`, `branch-exact-pr-absent`, `branc
 
 PR title은 target issue REST 응답에서 읽은 live title로 만든 정확한 `Task #N: <live issue title>` 한 줄이다. PR body에는 target issue를 닫는 독립 줄 `Closes #N`과 approved final OID 링크가 있어야 한다. title/body hash는 approval tuple에만 두고, PR body 자체 hash나 publication 뒤 closing linkage 결과는 본문에 넣지 않는다.
 
-no-PR 승인은 생성 직전 absence를 재검증하고 draft PR을 만든다. 같은 uninterrupted shell이 POST 반환 number/node ID를 결박하고 exact draft REST GET을 통과한 뒤에만 그 node를 ready로 전환한다. 이후 exact non-draft REST GET과 read-only GraphQL `closingIssuesReferences`를 검증하며 linkage는 성공 출력에만 기록한다. create/ready mutation 뒤 interruption, 잘못된 응답/GET, duplicate 또는 state drift는 fresh preparation과 replacement publication 승인을 요구하고 persistent manifest나 fuzzy adoption을 사용하지 않는다.
+no-PR 승인은 생성 직전 absence를 재검증하고 draft PR을 만든다. 같은 uninterrupted shell이 POST 반환 number/node ID를 결박하고 exact draft REST GET을 통과한 뒤에만 그 node를 ready로 전환한다. 이후 exact non-draft REST GET과 모든 page를 끝까지 읽고 GraphQL error를 확인하는 read-only GraphQL `closingIssuesReferences`를 검증하며 linkage는 성공 출력에만 기록한다. create/ready mutation 뒤 interruption, 잘못된 응답/GET, duplicate 또는 state drift는 fresh preparation과 replacement publication 승인을 요구하고 persistent manifest나 fuzzy adoption을 사용하지 않는다.
 
 ## PR 본문 문서 링크 규칙
 

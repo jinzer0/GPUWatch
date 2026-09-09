@@ -49,7 +49,7 @@
 
 - target issue를 닫는 독립 줄 `Closes #N`을 적는다.
 - `N`은 `task-final-report`가 검증한 `ISSUE_NUMBER`와 같아야 한다.
-- publication 뒤 mandatory read-only GraphQL `closingIssuesReferences` query가 canonical repository의 같은 issue 번호를 반환해야 한다. 이 결과는 PR body가 아니라 `task-final-report`의 성공 출력에만 남긴다. 이 GraphQL 호출은 HTTP POST transport를 쓰지만 mutation이 아니다.
+- publication 뒤 mandatory read-only GraphQL `closingIssuesReferences` query는 모든 page를 끝까지 읽고 GraphQL error를 확인한 뒤 canonical repository의 같은 issue 번호만 반환해야 한다. 이 결과는 PR body가 아니라 `task-final-report`의 성공 출력에만 남긴다. 이 GraphQL 호출은 HTTP POST transport를 쓰지만 mutation이 아니다.
 
 `변경 내역`:
 
