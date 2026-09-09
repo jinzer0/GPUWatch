@@ -2,15 +2,17 @@
 
 ## 목적
 
-이 문서는 내부 task PR 본문 작성 규칙을 정의한다. 내부 task PR은 `local/task{번호}`에서 작업한 내용을 `publish/task{번호}`로 push한 뒤 `devel` 대상으로 생성한다.
+이 문서는 내부 task PR 본문 작성 규칙을 정의한다. 내부 task PR은 `local/task{번호}`에서 작업한 내용을 [`task-final-report`](../skills/task-final-report/SKILL.md)의 두 approval gate를 거쳐 `publish/task{번호}`와 `devel` 대상 Open PR로 게시한다.
 
-브랜치 생성, push, `gh pr create` 명령은 [`pr_command_guide.md`](pr_command_guide.md)를 따른다.
+브랜치 생성은 `task-start`, PR publication은 `task-final-report`, 문서 링크 기준은 [`pr_command_guide.md`](pr_command_guide.md)를 따른다. 일반 내부 task에서 직접 `git push` 또는 `gh pr create`를 실행하지 않는다.
 
 ## 기본 원칙
 
 - PR 본문은 `.github/pull_request_template.md`를 기준으로 작성한다.
 - 템플릿은 이 저장소의 하이퍼-워터폴 산출물과 연결되도록 확장한 형식이다.
 - PR 본문은 최종 결과 보고서의 짧은 압축본이다.
+- PR title은 target issue REST 응답에서 검증한 live title로 만든 정확한 `Task #N: <live issue title>` 한 줄이다.
+- PR body에는 target issue를 닫는 독립 줄 `Closes #N`이 있어야 한다.
 - 상세 내용은 `변경 내역`의 Stage 링크와 작업 문서 링크로 참조한다.
 
 ## 섹션 구성
@@ -18,6 +20,7 @@
 내부 task PR에는 다음 최상위 섹션을 둔다.
 
 - `요약`
+- `대상 이슈 연결`
 - `변경 내역`
   - `### 영향 영역` (선택)
   - `### 작업 문서`
@@ -40,6 +43,12 @@
 - 대상 타스크, 변경 이유, 변경 내용, 리뷰어가 먼저 볼 지점을 적는다.
 - 현재 PR이 직접 수행하는 issue는 `대상 타스크`에 적는다.
 
+`대상 이슈 연결`:
+
+- target issue를 닫는 독립 줄 `Closes #N`을 적는다.
+- `N`은 `task-final-report`가 검증한 `ISSUE_NUMBER`와 같아야 한다.
+- publication 뒤 mandatory read-only GraphQL `closingIssuesReferences` query가 canonical repository의 같은 issue 번호를 반환해야 한다. 이 GraphQL 호출은 HTTP POST transport를 쓰지만 mutation이 아니다.
+
 `변경 내역`:
 
 - 본문에는 Stage timeline만 둔다. 영역 표와 작업 문서 링크는 하위 목차로 분리한다.
@@ -57,7 +66,7 @@
 
 - 수행 계획서, 구현 계획서, 최종 보고서를 적는다.
 - 단계별 완료 보고서는 위 Stage timeline의 단계 보고서 링크에서 이미 노출되므로 중복 적지 않는다.
-- 작업 문서 링크는 PR head commit SHA 기준 GitHub blob URL을 사용하고, raw URL 대신 `[파일명](URL)` 형식으로 표시한다.
+- 작업 문서 링크는 approved final commit OID 기준 GitHub blob URL을 사용하고, raw URL 대신 `[파일명](URL)` 형식으로 표시한다.
 
 `핵심 리뷰 포인트`:
 
@@ -121,10 +130,14 @@
 - 무엇: {핵심 변경}
 - 리뷰 포인트: {리뷰어가 먼저 볼 지점}
 
+## 대상 이슈 연결
+
+Closes #22
+
 ## 변경 내역
 
-- **[Stage 1](https://github.com/jinzer0/GPUWatch/blob/{sha}/mydocs/working/task_m050_22_stage1.md)** ([abc1234](https://github.com/jinzer0/GPUWatch/commit/{stage1_sha})): {Stage 1 요약}
-- **[Stage 2](https://github.com/jinzer0/GPUWatch/blob/{sha}/mydocs/working/task_m050_22_stage2.md)** ([def5678](https://github.com/jinzer0/GPUWatch/commit/{stage2_sha})): {Stage 2 요약}
+- **[Stage 1](https://github.com/jinzer0/GPUWatch/blob/{final_commit_oid}/mydocs/working/task_m050_22_stage1.md)** ([abc1234](https://github.com/jinzer0/GPUWatch/commit/{stage1_sha})): {Stage 1 요약}
+- **[Stage 2](https://github.com/jinzer0/GPUWatch/blob/{final_commit_oid}/mydocs/working/task_m050_22_stage2.md)** ([def5678](https://github.com/jinzer0/GPUWatch/commit/{stage2_sha})): {Stage 2 요약}
 
 ### 영향 영역
 
@@ -134,9 +147,9 @@
 
 ### 작업 문서
 
-- 수행 계획서: [task_m050_22.md](https://github.com/jinzer0/GPUWatch/blob/{sha}/mydocs/plans/task_m050_22.md)
-- 구현 계획서: [task_m050_22_impl.md](https://github.com/jinzer0/GPUWatch/blob/{sha}/mydocs/plans/task_m050_22_impl.md)
-- 최종 보고서: [task_m050_22_report.md](https://github.com/jinzer0/GPUWatch/blob/{sha}/mydocs/report/task_m050_22_report.md)
+- 수행 계획서: [task_m050_22.md](https://github.com/jinzer0/GPUWatch/blob/{final_commit_oid}/mydocs/plans/task_m050_22.md)
+- 구현 계획서: [task_m050_22_impl.md](https://github.com/jinzer0/GPUWatch/blob/{final_commit_oid}/mydocs/plans/task_m050_22_impl.md)
+- 최종 보고서: [task_m050_22_report.md](https://github.com/jinzer0/GPUWatch/blob/{final_commit_oid}/mydocs/report/task_m050_22_report.md)
 
 ## 검증
 
@@ -158,6 +171,7 @@
 | 항목 | 결과 | 근거 |
 |------|------|------|
 | GitHub Checks | OK | run 링크 또는 확인 시점 |
+| Closing issue linkage | OK | read-only GraphQL `closingIssuesReferences` query가 #22 반환 |
 
 ### 검증 한계
 

@@ -1,8 +1,19 @@
-# PR 생성과 링크 가이드
+# PR publication과 링크 가이드
 
 ## 목적
 
-내부 task PR의 게시와 생성은 [`task-final-report`](../skills/task-final-report/SKILL.md)만 사용한다. 이 문서는 PR 본문의 SHA 고정 링크 형식만 정의하며, 직접 `git push`, `gh pr create`, `/tmp` body file 예시를 제공하지 않는다.
+내부 task PR의 게시와 생성은 [`task-final-report`](../skills/task-final-report/SKILL.md)만 사용한다. 이 문서는 PR 본문의 SHA 고정 링크 형식과 publication 검증 기준만 정의하며, 직접 `git push`, `gh pr create`, `/tmp` body file 예시를 제공하지 않는다. release-specific 예외는 release 문서에서 승인된 경우에만 별도로 따른다.
+
+## 내부 task publication 경계
+
+`task-final-report`는 두 번 멈춘다.
+
+- final report/evidence 승인: 최종 보고서와 오늘할일 commit, report/orders blob OID, acceptance evidence SHA-256을 묶는다. 이 승인 전에는 publication input을 만들지 않는다.
+- publication 승인: canonical repository, `devel` OID, final commit OID, `publish/task{번호}`, PR title/body hash, publication state를 묶는다. 이 승인 전에는 원격 mutation을 하지 않는다.
+
+publication state는 `branch-absent-pr-absent`, `branch-exact-pr-absent`, `branch-exact-pr-exact`만 허용한다. 기존 publish branch가 다른 OID를 가리키거나, Open PR의 base/head/repository/title/body가 exact 값과 다르면 재승인이 필요하다.
+
+PR title은 target issue REST 응답에서 읽은 live title로 만든 정확한 `Task #N: <live issue title>` 한 줄이다. PR body에는 target issue를 닫는 독립 줄 `Closes #N`이 있어야 한다. 이 줄은 publication 뒤 mandatory read-only GraphQL `closingIssuesReferences` query로 다시 확인한다. GitHub GraphQL 호출은 HTTP POST transport를 쓰지만 mutation이 아니라 read-only query다.
 
 ## PR 본문 문서 링크 규칙
 
@@ -36,3 +47,5 @@ Stage별 요약은 Stage 제목을 단계 보고서로, 짧은 commit SHA를 com
 - ambient repository/host, `/tmp` 또는 `--body-file` handoff
 - 상대 링크, `blob/publish/task{번호}/...`, raw URL
 - `--fill`을 기본 PR 본문 방식으로 사용
+- first final report/evidence 승인만으로 publication을 시작하는 행위
+- 세 publication state 밖의 branch/PR 상태를 추정해 재개하는 행위

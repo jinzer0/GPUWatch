@@ -12,6 +12,16 @@
 - 무엇:
 - 리뷰 포인트:
 
+## 대상 이슈 연결
+
+<!--
+아래 줄은 반드시 실제 target issue 번호로 바꿉니다.
+예: Closes #123
+`#<target issue number>`를 그대로 남기면 task-final-report 검증을 통과할 수 없습니다.
+-->
+
+Closes #<target issue number>
+
 ## 변경 내역
 
 <!--
@@ -34,14 +44,34 @@ Stage 제목은 단계 보고서로, 짧은 커밋 SHA는 commit URL로 링크�
 ### 작업 문서
 
 <!--
-작업 문서는 PR 생성 직전 `git rev-parse HEAD`로 확인한 PR head commit SHA 기준 GitHub blob URL을 사용합니다.
-raw URL 대신 `[파일명](https://github.com/jinzer0/GPUWatch/blob/{head_sha}/mydocs/...)` 형식으로 적습니다.
+작업 문서는 task-final-report의 approved final commit OID 기준 GitHub blob URL을 사용합니다.
+raw URL 대신 `[파일명](https://github.com/jinzer0/GPUWatch/blob/{final_commit_oid}/mydocs/...)` 형식으로 적습니다.
 해당 없는 항목은 삭제합니다.
 -->
 
-- 수행 계획서: [task_{milestone_slug}_{issue}.md](https://github.com/jinzer0/GPUWatch/blob/{head_sha}/mydocs/plans/task_{milestone_slug}_{issue}.md)
-- 구현 계획서: [task_{milestone_slug}_{issue}_impl.md](https://github.com/jinzer0/GPUWatch/blob/{head_sha}/mydocs/plans/task_{milestone_slug}_{issue}_impl.md)
-- 최종 보고서: [task_{milestone_slug}_{issue}_report.md](https://github.com/jinzer0/GPUWatch/blob/{head_sha}/mydocs/report/task_{milestone_slug}_{issue}_report.md)
+- 수행 계획서: [task_{milestone_slug}_{issue}.md](https://github.com/jinzer0/GPUWatch/blob/{final_commit_oid}/mydocs/plans/task_{milestone_slug}_{issue}.md)
+- 구현 계획서: [task_{milestone_slug}_{issue}_impl.md](https://github.com/jinzer0/GPUWatch/blob/{final_commit_oid}/mydocs/plans/task_{milestone_slug}_{issue}_impl.md)
+- 최종 보고서: [task_{milestone_slug}_{issue}_report.md](https://github.com/jinzer0/GPUWatch/blob/{final_commit_oid}/mydocs/report/task_{milestone_slug}_{issue}_report.md)
+
+### Publication 승인 근거
+
+<!--
+task-final-report가 출력한 exact tuple 값을 요약합니다.
+GraphQL closingIssuesReferences 확인은 GitHub API의 HTTP POST transport를 쓰지만 mutation이 아니라 read-only query입니다.
+-->
+
+- final commit OID: `{final_commit_oid}`
+- approved plan OID: `{approved_plan_oid}`
+- final report path: `mydocs/report/task_{milestone_slug}_{issue}_report.md`
+- final report blob OID: `{final_report_blob_oid}`
+- orders path: `mydocs/orders/{yyyymmdd}.md`
+- orders blob OID: `{orders_blob_oid}`
+- acceptance evidence SHA-256: `{acceptance_evidence_sha256}`
+- devel OID: `{devel_oid}`
+- title SHA-256: `{title_sha256}`
+- body SHA-256: `{body_sha256}`
+- publication state: `{branch-absent-pr-absent | branch-exact-pr-absent | branch-exact-pr-exact}`
+- closing issue evidence: read-only GraphQL `closingIssuesReferences` returned `#<target issue number>`
 
 ## 핵심 리뷰 포인트
 
