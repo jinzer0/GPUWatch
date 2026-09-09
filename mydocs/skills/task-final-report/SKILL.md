@@ -2,7 +2,7 @@
 name: task-final-report
 description: |
   하이퍼-워터폴 타스크의 최종 보고와 승인된 exact OID PR 게시 절차를 적용한다.
-  최종 보고·오늘할일 commit 뒤, 명시 승인된 publication tuple만 publish/task{N}으로 게시하고 devel Open PR을 생성 또는 재개한다.
+  최종 보고 증거 승인과 exact publication tuple 승인을 분리하고, 승인된 상태에서만 publish/task{N} Open PR을 생성 또는 재개한다.
 ---
 
 # 하이퍼-워터폴 최종 보고와 PR 게시
@@ -17,20 +17,43 @@ description: |
 - 최초 승인된 구현 계획서 commit은 Stage 1보다 먼저 존재하고, 모든 Stage 보고서와 승인이 완료됨
 - 최신 승인 구현 계획서 OID와 통합 검증 명령을 작업지시자가 같은 스레드에서 지정함
 - `local/task{N}`에 최종 보고서/오늘할일에 포함할 변경 외 미커밋 변경이 없음
+- 작업지시자가 `ISSUE_NUMBER`, `APPROVED_IMPL_PLAN_COMMIT`, `IMPL_PLAN`, `ORDER_FILE`, 실행한 수용 기준의 원문 증거 `ACCEPTANCE_EVIDENCE`를 제공함. `IMPL_PLAN`은 `mydocs/plans/task_{milestone_slug}_{N}_impl.md`이고 `ORDER_FILE`은 `mydocs/orders/{yyyymmdd}.md`이다.
+
+## 승인 경계
+
+이 절차에는 같은 스레드의 서로 다른 두 승인만 있다.
+
+1. final report/evidence 승인: 최종 보고서와 오늘할일 commit, 정확한 두 blob, 수용 기준 증거 hash를 결박한다. 이 승인이 있기 전에는 publication input directory, PR 제목, PR 본문을 만들지 않는다.
+2. publication 승인: 원격 `devel`/publish ref와 Open PR의 분류, title/body hash를 결박한다. 이 tuple을 만들기 위한 canonical identity, issue, ref, Open PR 상태의 read-only 조회(`gh api --method GET`, GraphQL query, `ls-remote`, 검증용 `fetch`)는 이 승인 전에 허용한다. 이 승인 전에는 원격 mutation(`push`, `gh api --method POST`, PR 생성 또는 재개)을 하지 않는다.
+
+이전 Stage 승인, 최종 보고서 작성 지시, 첫 번째 승인, 이 Skill 호출은 두 번째 publication 승인이 아니다.
 
 ## 절차
 
-1. 이슈와 구현 계획서 승인 상태 검증
-   - 작업지시자는 `ISSUE_NUMBER`, `APPROVED_IMPL_PLAN_COMMIT`, `IMPL_PLAN`을 명시한다. `IMPL_PLAN`은 `mydocs/plans/task_{milestone_slug}_{N}_impl.md`이다.
+1. 이슈와 구현 계획서 승인 상태를 검증하고 수용 기준을 실행한다.
    ```bash
    set -euo pipefail
    LC_ALL=C
    export LC_ALL
+
+   validate_oid() { case "$1" in ""|*[!0-9a-f]*) exit 1 ;; esac; test "${#1}" -eq 40; }
+   sha256_text() { printf '%s' "$1" | shasum -a 256 | awk '{print $1}'; }
+
    case "${ISSUE_NUMBER:-}" in ""|*[!0-9]*) exit 1 ;; esac
-   case "${APPROVED_IMPL_PLAN_COMMIT:-}" in ""|*[!0-9a-f]*) exit 1 ;; esac
-   test "${#APPROVED_IMPL_PLAN_COMMIT}" -eq 40
+   validate_oid "${APPROVED_IMPL_PLAN_COMMIT:-}"
    test -n "${IMPL_PLAN:-}"
+   test -n "${ORDER_FILE:-}"
    printf '%s\n' "$IMPL_PLAN" | grep -Eq "^mydocs/plans/task_m[0-9]+x?_${ISSUE_NUMBER}_impl\\.md$"
+   case "$ORDER_FILE" in
+     mydocs/orders/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9].md) ;;
+     *) exit 1 ;;
+   esac
+   case "$ORDER_FILE" in *$'\r'*|*$'\n'*) exit 1 ;; esac
+
+   FINAL_REPORT="mydocs/report/${IMPL_PLAN#mydocs/plans/}"
+   FINAL_REPORT="${FINAL_REPORT%_impl.md}_report.md"
+   printf '%s\n' "$FINAL_REPORT" | grep -Eq "^mydocs/report/task_m[0-9]+x?_${ISSUE_NUMBER}_report\\.md$"
+
    git cat-file -e "$APPROVED_IMPL_PLAN_COMMIT^{commit}"
    test "$(git diff-tree --root --no-commit-id --name-only -r "$APPROVED_IMPL_PLAN_COMMIT")" = "$IMPL_PLAN"
    test ! -L "$IMPL_PLAN"
@@ -42,164 +65,369 @@ description: |
    test "$PLAN_BLOB" = "$(git rev-parse ":$IMPL_PLAN")"
    test "$PLAN_BLOB" = "$(git hash-object -- "$IMPL_PLAN")"
    git merge-base --is-ancestor "$APPROVED_IMPL_PLAN_COMMIT" HEAD
+
+   test -n "${ACCEPTANCE_EVIDENCE:-}"
+   case "$ACCEPTANCE_EVIDENCE" in *$'\r'*) exit 1 ;; esac
+   ACCEPTANCE_EVIDENCE_SHA256="$(sha256_text "$ACCEPTANCE_EVIDENCE")"
+   printf '%s\n' "acceptance_evidence_sha256=$ACCEPTANCE_EVIDENCE_SHA256"
    ```
-   - 위 검증 뒤 구현 계획서 수용 기준 또는 마지막 Stage 검증 명령을 실행한다.
-2. 최종 보고서와 오늘할일 작성
-   - 최종 보고서는 `mydocs/report/task_{milestone_slug}_{N}_report.md`에 `mydocs/_templates/final_report.md`를 기준으로 작성한다.
-   - 오늘할일 `mydocs/orders/{yyyymmdd}.md`의 `#{N}` 행을 `완료`와 완료 시각으로 갱신한다.
-3. 최종 보고서와 오늘할일 단일 commit
-   ```bash
-   git status --short
-   git diff --check
-   git add mydocs/report/task_{milestone_slug}_{N}_report.md mydocs/orders/{yyyymmdd}.md
-   git commit -m "Task #{N}: 최종 보고서 작성과 오늘할일 완료 처리" \
-     -m "Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)" \
-     -m "Co-authored-by: Sisyphus <clio-agent@sisyphuslabs.ai>"
-   test -z "$(git status --porcelain)"
-   ```
-4. 승인 전 private PR 입력 directory 생성
-    ```bash
-    set -euo pipefail
-    case "${ISSUE_NUMBER:-}" in ""|*[!0-9]*) exit 1 ;; esac
-    umask 077
-    TMP_PARENT="$(cd -P -- "${TMPDIR:-/tmp}" && pwd -P)"
-    PUBLICATION_DIR="$(mktemp -d "${TMP_PARENT%/}/gpuwatcher-task${ISSUE_NUMBER}-publication.XXXXXX")"
-    chmod 700 "$PUBLICATION_DIR"
-    test ! -L "$PUBLICATION_DIR"
-    PUBLICATION_DIR="$(cd -P -- "$PUBLICATION_DIR" && pwd -P)"
-    test "$(dirname -- "$PUBLICATION_DIR")" = "$TMP_PARENT"
-    case "$(basename -- "$PUBLICATION_DIR")" in
-      "gpuwatcher-task${ISSUE_NUMBER}-publication."??????) ;;
-      *) exit 1 ;;
-    esac
-   test "$(stat -f '%Su' "$PUBLICATION_DIR")" = "$(id -un)"
-   test "$(stat -f '%Lp' "$PUBLICATION_DIR")" = "700"
-   printf 'PUBLICATION_DIR=%s\n' "$PUBLICATION_DIR"
-   ```
-   - 파일 쓰기 도구로 `$PUBLICATION_DIR/title`에 승인 요청할 PR 제목 한 줄을, `$PUBLICATION_DIR/body`에 완성 PR 본문을 기록한다. 두 파일은 directory 안에만 두며 `/tmp`의 고정 이름이나 `--body-file` handoff를 사용하지 않는다.
-5. 승인 tuple 준비 및 출력
+   - 위 검증 뒤 승인된 구현 계획서의 수용 기준 또는 마지막 Stage 검증 명령을 실제로 실행한다. `ACCEPTANCE_EVIDENCE`에는 실행한 명령, exit status, 필요한 출력 요약을 순서와 줄바꿈까지 보존해 넣는다. 다음 승인 fence에서도 동일한 원문을 다시 제공할 수 있어야 한다.
+2. 최종 보고서와 오늘할일을 작성한다.
+   - 최종 보고서는 `$FINAL_REPORT`에 `mydocs/_templates/final_report.md`를 기준으로 작성한다.
+   - `$ORDER_FILE`의 `#{N}` 행을 `완료`와 완료 시각으로 갱신한다.
+3. 최종 보고서와 오늘할일만 하나의 commit으로 만들고, hook 실행 전후의 저장소 전체 index와 commit 경로를 검증한다.
    ```bash
    set -euo pipefail
    LC_ALL=C
    export LC_ALL
+
    case "${ISSUE_NUMBER:-}" in ""|*[!0-9]*) exit 1 ;; esac
    case "${APPROVED_IMPL_PLAN_COMMIT:-}" in ""|*[!0-9a-f]*) exit 1 ;; esac
    test "${#APPROVED_IMPL_PLAN_COMMIT}" -eq 40
-    test -n "${IMPL_PLAN:-}" && test -n "${PUBLICATION_DIR:-}"
-    TMP_PARENT="$(cd -P -- "${TMPDIR:-/tmp}" && pwd -P)"
-    test -d "$PUBLICATION_DIR" && test ! -L "$PUBLICATION_DIR"
-    PUBLICATION_DIR="$(cd -P -- "$PUBLICATION_DIR" && pwd -P)"
-    test "$(dirname -- "$PUBLICATION_DIR")" = "$TMP_PARENT"
-    case "$(basename -- "$PUBLICATION_DIR")" in
-      "gpuwatcher-task${ISSUE_NUMBER}-publication."??????) ;;
-      *) exit 1 ;;
-    esac
-   test "$(stat -f '%Su' "$PUBLICATION_DIR")" = "$(id -un)"
-   test "$(stat -f '%Lp' "$PUBLICATION_DIR")" = "700"
-   TITLE_FILE="$PUBLICATION_DIR/title"
-   BODY_FILE="$PUBLICATION_DIR/body"
-    for INPUT_FILE in "$TITLE_FILE" "$BODY_FILE"; do
-      test -f "$INPUT_FILE" && test ! -L "$INPUT_FILE"
-      test "$(stat -f '%Su' "$INPUT_FILE")" = "$(id -un)"
-      test "$(stat -f '%l' "$INPUT_FILE")" = "1"
-      case "$(stat -f '%Lp' "$INPUT_FILE")" in 600|400) ;; *) exit 1 ;; esac
-   done
-   IFS= read -r PR_TITLE < "$TITLE_FILE"
-   printf '%s\n' "$PR_TITLE" | cmp -s - "$TITLE_FILE"
-   test -n "$PR_TITLE"
-   case "$PR_TITLE" in *$'\r'*) exit 1 ;; esac
-   printf '%s' "$PR_TITLE" | iconv -f UTF-8 -t UTF-8 >/dev/null
-   BODY_BYTES="$(wc -c < "$BODY_FILE" | tr -d '[:space:]')"
-   case "$BODY_BYTES" in ""|*[!0-9]*) exit 1 ;; esac
-   test "$BODY_BYTES" -gt 0 && test "$BODY_BYTES" -le 65536
-   if od -An -tx1 -v "$BODY_FILE" | tr -s ' ' '\n' | grep -qx '00'; then exit 1; fi
-   iconv -f UTF-8 -t UTF-8 "$BODY_FILE" >/dev/null
-   PR_BODY="$(cat "$BODY_FILE"; printf '\001')"
-   PR_BODY="${PR_BODY%?}"
-   case "$PR_BODY" in *$'\r'*) exit 1 ;; esac
-   sha256_text() { printf '%s' "$1" | shasum -a 256 | awk '{print $1}'; }
+   test -n "${IMPL_PLAN:-}"
+   test -n "${ORDER_FILE:-}"
+   printf '%s\n' "$IMPL_PLAN" | grep -Eq "^mydocs/plans/task_m[0-9]+x?_${ISSUE_NUMBER}_impl\\.md$"
+   case "$ORDER_FILE" in
+     mydocs/orders/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9].md) ;;
+     *) exit 1 ;;
+   esac
+
+   FINAL_REPORT="mydocs/report/${IMPL_PLAN#mydocs/plans/}"
+   FINAL_REPORT="${FINAL_REPORT%_impl.md}_report.md"
+   EXPECTED_COMMIT_PATHS="$(printf '%s\n%s' "$ORDER_FILE" "$FINAL_REPORT")"
+
+   test -z "$(git diff --cached --name-only)"
+   git add -- "$FINAL_REPORT" "$ORDER_FILE"
+   test -z "$(git diff --name-only)"
+   test -z "$(git ls-files --others --exclude-standard)"
+   test "$(git diff --cached --name-only)" = "$EXPECTED_COMMIT_PATHS"
+   git diff --cached --check
+
+   INDEX_BEFORE_COMMIT_HOOKS="$(git ls-files -s)"
+   git commit -m "Task #${ISSUE_NUMBER}: 최종 보고서 작성과 오늘할일 완료 처리" \
+     -m "Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)" \
+     -m "Co-authored-by: Sisyphus <clio-agent@sisyphuslabs.ai>"
+   FINAL_COMMIT_OID="$(git rev-parse --verify HEAD^{commit})"
+   case "$FINAL_COMMIT_OID" in ""|*[!0-9a-f]*) exit 1 ;; esac
+   test "${#FINAL_COMMIT_OID}" -eq 40
+   test "$(git diff-tree --root --no-commit-id --name-only -r "$FINAL_COMMIT_OID")" = "$EXPECTED_COMMIT_PATHS"
+   INDEX_AFTER_COMMIT_HOOKS="$(git ls-files -s)"
+   test "$INDEX_BEFORE_COMMIT_HOOKS" = "$INDEX_AFTER_COMMIT_HOOKS"
+   test -z "$(git diff --cached --name-only)"
+   test -z "$(git diff --name-only)"
+   test -z "$(git ls-files --others --exclude-standard)"
+   test -z "$(git status --porcelain)"
+   ```
+   - `INDEX_BEFORE_COMMIT_HOOKS`와 `INDEX_AFTER_COMMIT_HOOKS`는 `pre-commit`, `prepare-commit-msg`, `commit-msg`, `post-commit`을 포함한 commit hook 실행 경계의 repository-wide index이다. 일치하지 않거나 final commit 경로가 정확히 두 경로가 아니면 publication으로 진행하지 않는다.
+4. 첫 번째 final report/evidence 승인 tuple을 만들고 즉시 중단한다.
+   ```bash
+   set -euo pipefail
+   LC_ALL=C
+   export LC_ALL
+
    validate_oid() { case "$1" in ""|*[!0-9a-f]*) exit 1 ;; esac; test "${#1}" -eq 40; }
-   validate_canonical_origin() {
-     GH_HOST=github.com gh auth status --hostname github.com >/dev/null
-     test "$(GH_HOST=github.com gh api --hostname github.com repos/jinzer0/GPUWatch --jq .id)" = "1256824919"
-     test "$(GH_HOST=github.com gh repo view jinzer0/GPUWatch --json nameWithOwner --jq .nameWithOwner)" = "jinzer0/GPUWatch"
-     ORIGIN_URLS="$(git remote get-url --all origin; git remote get-url --push --all origin)"
-     test -n "$ORIGIN_URLS"
-     while IFS= read -r ORIGIN_URL; do
-       case "$ORIGIN_URL" in
-         git@github.com:jinzer0/GPUWatch|git@github.com:jinzer0/GPUWatch.git|https://github.com/jinzer0/GPUWatch|https://github.com/jinzer0/GPUWatch.git|ssh://git@github.com/jinzer0/GPUWatch|ssh://git@github.com/jinzer0/GPUWatch.git) ;;
-         *) exit 1 ;;
-       esac
-     done <<EOF
-$ORIGIN_URLS
-EOF
-   }
-   validate_canonical_origin
+   sha256_text() { printf '%s' "$1" | shasum -a 256 | awk '{print $1}'; }
+
+   case "${ISSUE_NUMBER:-}" in ""|*[!0-9]*) exit 1 ;; esac
+   validate_oid "${APPROVED_IMPL_PLAN_COMMIT:-}"
+   test -n "${IMPL_PLAN:-}"
+   test -n "${ORDER_FILE:-}"
+   test -n "${ACCEPTANCE_EVIDENCE:-}"
+   printf '%s\n' "$IMPL_PLAN" | grep -Eq "^mydocs/plans/task_m[0-9]+x?_${ISSUE_NUMBER}_impl\\.md$"
+   case "$ORDER_FILE" in
+     mydocs/orders/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9].md) ;;
+     *) exit 1 ;;
+   esac
+   case "$ACCEPTANCE_EVIDENCE" in *$'\r'*) exit 1 ;; esac
+
    TASK_BRANCH="local/task${ISSUE_NUMBER}"
-   PUBLISH_BRANCH="publish/task${ISSUE_NUMBER}"
    test "$(git branch --show-current)" = "$TASK_BRANCH"
    FINAL_COMMIT_OID="$(git rev-parse --verify HEAD^{commit})"
    validate_oid "$FINAL_COMMIT_OID"
    test "$(git rev-parse --verify "${TASK_BRANCH}^{commit}")" = "$FINAL_COMMIT_OID"
    test -z "$(git status --porcelain)"
+
+   FINAL_REPORT="mydocs/report/${IMPL_PLAN#mydocs/plans/}"
+   FINAL_REPORT="${FINAL_REPORT%_impl.md}_report.md"
+   EXPECTED_COMMIT_PATHS="$(printf '%s\n%s' "$ORDER_FILE" "$FINAL_REPORT")"
    git cat-file -e "$APPROVED_IMPL_PLAN_COMMIT^{commit}"
+   test "$(git diff-tree --root --no-commit-id --name-only -r "$APPROVED_IMPL_PLAN_COMMIT")" = "$IMPL_PLAN"
    test "$(git rev-parse "$APPROVED_IMPL_PLAN_COMMIT:$IMPL_PLAN")" = "$(git rev-parse "$FINAL_COMMIT_OID:$IMPL_PLAN")"
-   DEVEL_LINE="$(git ls-remote --heads origin refs/heads/devel)"
-   case "$DEVEL_LINE" in *$'\n'*) exit 1 ;; esac
-   IFS="$(printf '\t')" read -r DEVEL_OID DEVEL_REF DEVEL_EXTRA <<EOF
-$DEVEL_LINE
-EOF
-   test -z "${DEVEL_EXTRA:-}" && test "$DEVEL_REF" = "refs/heads/devel"
-   validate_oid "$DEVEL_OID"
-    git fetch --no-tags origin +refs/heads/devel:refs/remotes/origin/devel
-   test "$(git rev-parse --verify refs/remotes/origin/devel^{commit})" = "$DEVEL_OID"
-   test -z "$(git ls-remote --heads origin "refs/heads/$PUBLISH_BRANCH")"
-   TITLE_SHA256="$(sha256_text "$PR_TITLE")"
-   BODY_SHA256="$(sha256_text "$PR_BODY")"
-    printf '%s\n' "action=push-exact-oid-and-create-open-pr" "host=github.com" "repository=jinzer0/GPUWatch" "repository_id=1256824919" "issue_number=$ISSUE_NUMBER" "approved_plan_oid=$APPROVED_IMPL_PLAN_COMMIT" "devel_oid=$DEVEL_OID" "final_commit_oid=$FINAL_COMMIT_OID" "publish_branch=$PUBLISH_BRANCH" "base=devel" "title_sha256=$TITLE_SHA256" "body_sha256=$BODY_SHA256"
+   test "$(git diff-tree --root --no-commit-id --name-only -r "$FINAL_COMMIT_OID")" = "$EXPECTED_COMMIT_PATHS"
+   REPORT_BLOB_OID="$(git rev-parse "$FINAL_COMMIT_OID:$FINAL_REPORT")"
+   ORDERS_BLOB_OID="$(git rev-parse "$FINAL_COMMIT_OID:$ORDER_FILE")"
+   validate_oid "$REPORT_BLOB_OID"
+   validate_oid "$ORDERS_BLOB_OID"
+   ACCEPTANCE_EVIDENCE_SHA256="$(sha256_text "$ACCEPTANCE_EVIDENCE")"
+
+   printf '%s\n' \
+     "action=approve-final-report-and-evidence" \
+     "issue_number=$ISSUE_NUMBER" \
+     "approved_plan_oid=$APPROVED_IMPL_PLAN_COMMIT" \
+     "final_commit_oid=$FINAL_COMMIT_OID" \
+     "final_report_path=$FINAL_REPORT" \
+     "final_report_blob_oid=$REPORT_BLOB_OID" \
+     "orders_path=$ORDER_FILE" \
+     "orders_blob_oid=$ORDERS_BLOB_OID" \
+     "acceptance_evidence_sha256=$ACCEPTANCE_EVIDENCE_SHA256"
    ```
-   - 여기서 즉시 멈춘다. 작업지시자는 같은 스레드에서 위의 모든 tuple 값과 action `push-exact-oid-and-create-open-pr`를 명시해 승인해야 한다. 이전 Stage 승인, 최종 보고서 작성 지시, 본 Skill 호출은 게시 승인이 아니다.
-6. 승인 후 exact OID 게시 및 Open PR 생성/재개
-    - 승인 응답의 `APPROVED_ACTION=push-exact-oid-and-create-open-pr`, `APPROVED_HOST=github.com`, `APPROVED_REPOSITORY=jinzer0/GPUWatch`, `APPROVED_REPOSITORY_ID=1256824919`, `ISSUE_NUMBER`, `APPROVED_IMPL_PLAN_COMMIT`, `IMPL_PLAN`, `PUBLICATION_DIR`, `APPROVED_DEVEL_OID`, `APPROVED_FINAL_COMMIT_OID`, `APPROVED_TITLE_SHA256`, `APPROVED_BODY_SHA256`를 그대로 설정하고 한 번에 실행한다.
+   - 여기서 즉시 중단한다. 작업지시자는 같은 스레드에서 `action=approve-final-report-and-evidence`와 출력된 모든 tuple 값을 정확히 명시해 승인해야 한다. 승인 응답 전에는 `$PUBLICATION_DIR`을 만들거나 title/body 파일을 만들지 않는다.
+5. 첫 번째 승인을 정확히 다시 검증한 뒤에만 private publication input directory와 검증된 내부 PR 제목을 준비한다.
    ```bash
-    set -euo pipefail
-    LC_ALL=C
-    export LC_ALL
-    test "${APPROVED_ACTION:-}" = "push-exact-oid-and-create-open-pr"
-    test "${APPROVED_HOST:-}" = "github.com"
-    test "${APPROVED_REPOSITORY:-}" = "jinzer0/GPUWatch"
-    test "${APPROVED_REPOSITORY_ID:-}" = "1256824919"
+   set -euo pipefail
+   LC_ALL=C
+   export LC_ALL
+
+   validate_oid() { case "$1" in ""|*[!0-9a-f]*) exit 1 ;; esac; test "${#1}" -eq 40; }
+   validate_sha256() { case "$1" in ""|*[!0-9a-f]*) exit 1 ;; esac; test "${#1}" -eq 64; }
+   sha256_text() { printf '%s' "$1" | shasum -a 256 | awk '{print $1}'; }
+   validate_canonical_origin() {
+     GH_HOST=github.com gh auth status --hostname github.com >/dev/null
+     test "$(GH_HOST=github.com gh api --hostname github.com --method GET repos/jinzer0/GPUWatch --jq .id)" = "1256824919"
+     test "$(GH_HOST=github.com gh api --hostname github.com --method GET repos/jinzer0/GPUWatch --jq .full_name)" = "jinzer0/GPUWatch"
+     ORIGIN_URLS="$(git remote get-url --all origin; git remote get-url --push --all origin)"
+     test -n "$ORIGIN_URLS"
+     while IFS= read -r ORIGIN_URL; do
+       case "$ORIGIN_URL" in
+         git@github.com:jinzer0/GPUWatch|git@github.com:jinzer0/GPUWatch.git|https://github.com/jinzer0/GPUWatch|https://github.com/jinzer0/GPUWatch.git|ssh://git@github.com/jinzer0/GPUWatch|ssh://git@github.com/jinzer0/GPUWatch.git) ;;
+         *) exit 1 ;;
+       esac
+     done <<< "$ORIGIN_URLS"
+   }
+   read_validated_issue_title() {
+     ISSUE_RECORD="$(GH_HOST=github.com gh api --hostname github.com --method GET "repos/jinzer0/GPUWatch/issues/$ISSUE_NUMBER" --jq '[.number, .state, ((.pull_request != null) | tostring), (.title | @base64)] | @tsv')"
+     case "$ISSUE_RECORD" in *$'\n'*) exit 1 ;; esac
+     IFS="$(printf '\t')" read -r RETURNED_ISSUE_NUMBER ISSUE_STATE IS_PULL_REQUEST ISSUE_TITLE_BASE64 ISSUE_EXTRA <<< "$ISSUE_RECORD"
+     test -z "${ISSUE_EXTRA:-}"
+     test "$RETURNED_ISSUE_NUMBER" = "$ISSUE_NUMBER"
+     test "$ISSUE_STATE" = "OPEN"
+     test "$IS_PULL_REQUEST" = "false"
+     ISSUE_TITLE="$(printf '%s' "$ISSUE_TITLE_BASE64" | base64 -D)"
+     test -n "$ISSUE_TITLE"
+     case "$ISSUE_TITLE" in *$'\r'*|*$'\n'*) exit 1 ;; esac
+     printf '%s' "$ISSUE_TITLE" | iconv -f UTF-8 -t UTF-8 >/dev/null
+   }
+
    case "${ISSUE_NUMBER:-}" in ""|*[!0-9]*) exit 1 ;; esac
-   for OID in "${APPROVED_IMPL_PLAN_COMMIT:-}" "${APPROVED_DEVEL_OID:-}" "${APPROVED_FINAL_COMMIT_OID:-}"; do
-     case "$OID" in ""|*[!0-9a-f]*) exit 1 ;; esac
-     test "${#OID}" -eq 40
-   done
-   for DIGEST in "${APPROVED_TITLE_SHA256:-}" "${APPROVED_BODY_SHA256:-}"; do
-     case "$DIGEST" in ""|*[!0-9a-f]*) exit 1 ;; esac
-     test "${#DIGEST}" -eq 64
-    done
-    test -n "${IMPL_PLAN:-}" && test -n "${PUBLICATION_DIR:-}"
-    TMP_PARENT="$(cd -P -- "${TMPDIR:-/tmp}" && pwd -P)"
-    test -d "$PUBLICATION_DIR" && test ! -L "$PUBLICATION_DIR"
-    PUBLICATION_DIR="$(cd -P -- "$PUBLICATION_DIR" && pwd -P)"
-    test "$(dirname -- "$PUBLICATION_DIR")" = "$TMP_PARENT"
-    case "$(basename -- "$PUBLICATION_DIR")" in
-      "gpuwatcher-task${ISSUE_NUMBER}-publication."??????) ;;
-      *) exit 1 ;;
-    esac
-    test "$(stat -f '%Su' "$PUBLICATION_DIR")" = "$(id -un)"
-    test "$(stat -f '%Lp' "$PUBLICATION_DIR")" = "700"
-    cleanup() { rm -rf -- "$PUBLICATION_DIR"; }
-    on_signal() { trap - HUP INT TERM; exit 1; }
-    trap cleanup EXIT
-    trap on_signal HUP INT TERM
+   validate_oid "${APPROVED_IMPL_PLAN_COMMIT:-}"
+   test -n "${IMPL_PLAN:-}"
+   test -n "${ORDER_FILE:-}"
+   test -n "${ACCEPTANCE_EVIDENCE:-}"
+   test "${APPROVED_FINAL_REPORT_ACTION:-}" = "approve-final-report-and-evidence"
+   test "${APPROVED_FINAL_REPORT_ISSUE_NUMBER:-}" = "$ISSUE_NUMBER"
+   test "${APPROVED_FINAL_REPORT_PLAN_OID:-}" = "$APPROVED_IMPL_PLAN_COMMIT"
+   validate_oid "${APPROVED_FINAL_REPORT_FINAL_COMMIT_OID:-}"
+   validate_oid "${APPROVED_FINAL_REPORT_REPORT_BLOB_OID:-}"
+   validate_oid "${APPROVED_FINAL_REPORT_ORDERS_BLOB_OID:-}"
+   validate_sha256 "${APPROVED_FINAL_REPORT_ACCEPTANCE_EVIDENCE_SHA256:-}"
+   case "$ACCEPTANCE_EVIDENCE" in *$'\r'*) exit 1 ;; esac
+   test "$(sha256_text "$ACCEPTANCE_EVIDENCE")" = "$APPROVED_FINAL_REPORT_ACCEPTANCE_EVIDENCE_SHA256"
+
+   FINAL_REPORT="mydocs/report/${IMPL_PLAN#mydocs/plans/}"
+   FINAL_REPORT="${FINAL_REPORT%_impl.md}_report.md"
+   test "${APPROVED_FINAL_REPORT_REPORT_PATH:-}" = "$FINAL_REPORT"
+   test "${APPROVED_FINAL_REPORT_ORDERS_PATH:-}" = "$ORDER_FILE"
+   TASK_BRANCH="local/task${ISSUE_NUMBER}"
+   test "$(git branch --show-current)" = "$TASK_BRANCH"
+   FINAL_COMMIT_OID="$(git rev-parse --verify HEAD^{commit})"
+   validate_oid "$FINAL_COMMIT_OID"
+   test "$FINAL_COMMIT_OID" = "$APPROVED_FINAL_REPORT_FINAL_COMMIT_OID"
+   test "$(git rev-parse --verify "${TASK_BRANCH}^{commit}")" = "$FINAL_COMMIT_OID"
+   test -z "$(git status --porcelain)"
+   EXPECTED_COMMIT_PATHS="$(printf '%s\n%s' "$ORDER_FILE" "$FINAL_REPORT")"
+   test "$(git diff-tree --root --no-commit-id --name-only -r "$FINAL_COMMIT_OID")" = "$EXPECTED_COMMIT_PATHS"
+   git cat-file -e "$APPROVED_IMPL_PLAN_COMMIT^{commit}"
+   test "$(git diff-tree --root --no-commit-id --name-only -r "$APPROVED_IMPL_PLAN_COMMIT")" = "$IMPL_PLAN"
+   test "$(git rev-parse "$APPROVED_IMPL_PLAN_COMMIT:$IMPL_PLAN")" = "$(git rev-parse "$FINAL_COMMIT_OID:$IMPL_PLAN")"
+   test "$(git rev-parse "$FINAL_COMMIT_OID:$FINAL_REPORT")" = "$APPROVED_FINAL_REPORT_REPORT_BLOB_OID"
+   test "$(git rev-parse "$FINAL_COMMIT_OID:$ORDER_FILE")" = "$APPROVED_FINAL_REPORT_ORDERS_BLOB_OID"
+
+   validate_canonical_origin
+   read_validated_issue_title
+   EXPECTED_PR_TITLE="Task #${ISSUE_NUMBER}: ${ISSUE_TITLE}"
+
+   umask 077
+   TMP_PARENT="$(cd -P -- "${TMPDIR:-/tmp}" && pwd -P)"
+   PUBLICATION_DIR="$(mktemp -d "${TMP_PARENT%/}/gpuwatcher-task${ISSUE_NUMBER}-publication.XXXXXX")"
+   chmod 700 "$PUBLICATION_DIR"
+   test ! -L "$PUBLICATION_DIR"
+   PUBLICATION_DIR="$(cd -P -- "$PUBLICATION_DIR" && pwd -P)"
+   test "$(dirname -- "$PUBLICATION_DIR")" = "$TMP_PARENT"
+   case "$(basename -- "$PUBLICATION_DIR")" in
+     "gpuwatcher-task${ISSUE_NUMBER}-publication."??????) ;;
+     *) exit 1 ;;
+   esac
+   test "$(stat -f '%Su' "$PUBLICATION_DIR")" = "$(id -un)"
+   test "$(stat -f '%Lp' "$PUBLICATION_DIR")" = "700"
+
+   printf '%s\n' "PUBLICATION_DIR=$PUBLICATION_DIR" "EXPECTED_PR_TITLE=$EXPECTED_PR_TITLE"
+   ```
+   - 파일 쓰기 도구만 `$PUBLICATION_DIR/title`에 `EXPECTED_PR_TITLE` 한 줄과 끝 newline을, `$PUBLICATION_DIR/body`에 완성 PR 본문을 쓴다. 두 파일은 directory 안에만 두며 `/tmp` 고정 이름, persistent manifest, `--body-file` handoff를 사용하지 않는다.
+   - PR 본문에는 target issue를 닫는 독립된 정확한 한 줄 `Closes #${ISSUE_NUMBER}`를 포함한다. 이후 fence가 title, body, 소유자, mode, hard-link count, UTF-8, NUL, CR, hash를 다시 검증하므로 다른 제목 또는 본문은 승인 tuple에 도달하지 못한다.
+6. publication input과 원격 상태를 분류해 두 번째 approval tuple을 출력하고 즉시 중단한다.
+   ```bash
+   set -euo pipefail
+   LC_ALL=C
+   export LC_ALL
+
+   validate_oid() { case "$1" in ""|*[!0-9a-f]*) exit 1 ;; esac; test "${#1}" -eq 40; }
+   validate_sha256() { case "$1" in ""|*[!0-9a-f]*) exit 1 ;; esac; test "${#1}" -eq 64; }
+   sha256_text() { printf '%s' "$1" | shasum -a 256 | awk '{print $1}'; }
+   validate_canonical_origin() {
+     GH_HOST=github.com gh auth status --hostname github.com >/dev/null
+     test "$(GH_HOST=github.com gh api --hostname github.com --method GET repos/jinzer0/GPUWatch --jq .id)" = "1256824919"
+     test "$(GH_HOST=github.com gh api --hostname github.com --method GET repos/jinzer0/GPUWatch --jq .full_name)" = "jinzer0/GPUWatch"
+     ORIGIN_URLS="$(git remote get-url --all origin; git remote get-url --push --all origin)"
+     test -n "$ORIGIN_URLS"
+     while IFS= read -r ORIGIN_URL; do
+       case "$ORIGIN_URL" in
+         git@github.com:jinzer0/GPUWatch|git@github.com:jinzer0/GPUWatch.git|https://github.com/jinzer0/GPUWatch|https://github.com/jinzer0/GPUWatch.git|ssh://git@github.com/jinzer0/GPUWatch|ssh://git@github.com/jinzer0/GPUWatch.git) ;;
+         *) exit 1 ;;
+       esac
+     done <<< "$ORIGIN_URLS"
+   }
+   validate_publication_dir() {
+     test -n "${PUBLICATION_DIR:-}"
+     TMP_PARENT="$(cd -P -- "${TMPDIR:-/tmp}" && pwd -P)"
+     test -d "$PUBLICATION_DIR"
+     test ! -L "$PUBLICATION_DIR"
+     PUBLICATION_DIR="$(cd -P -- "$PUBLICATION_DIR" && pwd -P)"
+     test "$(dirname -- "$PUBLICATION_DIR")" = "$TMP_PARENT"
+     case "$(basename -- "$PUBLICATION_DIR")" in
+       "gpuwatcher-task${ISSUE_NUMBER}-publication."??????) ;;
+       *) exit 1 ;;
+     esac
+     test "$(stat -f '%Su' "$PUBLICATION_DIR")" = "$(id -un)"
+     test "$(stat -f '%Lp' "$PUBLICATION_DIR")" = "700"
+   }
+   read_validated_issue_title() {
+     ISSUE_RECORD="$(GH_HOST=github.com gh api --hostname github.com --method GET "repos/jinzer0/GPUWatch/issues/$ISSUE_NUMBER" --jq '[.number, .state, ((.pull_request != null) | tostring), (.title | @base64)] | @tsv')"
+     case "$ISSUE_RECORD" in *$'\n'*) exit 1 ;; esac
+     IFS="$(printf '\t')" read -r RETURNED_ISSUE_NUMBER ISSUE_STATE IS_PULL_REQUEST ISSUE_TITLE_BASE64 ISSUE_EXTRA <<< "$ISSUE_RECORD"
+     test -z "${ISSUE_EXTRA:-}"
+     test "$RETURNED_ISSUE_NUMBER" = "$ISSUE_NUMBER"
+     test "$ISSUE_STATE" = "OPEN"
+     test "$IS_PULL_REQUEST" = "false"
+     ISSUE_TITLE="$(printf '%s' "$ISSUE_TITLE_BASE64" | base64 -D)"
+     test -n "$ISSUE_TITLE"
+     case "$ISSUE_TITLE" in *$'\r'*|*$'\n'*) exit 1 ;; esac
+     printf '%s' "$ISSUE_TITLE" | iconv -f UTF-8 -t UTF-8 >/dev/null
+   }
+   read_devel_ref() {
+     DEVEL_LINE="$(git ls-remote --heads origin refs/heads/devel)"
+     case "$DEVEL_LINE" in ""|*$'\n'*) exit 1 ;; esac
+     IFS="$(printf '\t')" read -r DEVEL_OID DEVEL_REF DEVEL_EXTRA <<< "$DEVEL_LINE"
+     test -z "${DEVEL_EXTRA:-}"
+     test "$DEVEL_REF" = "refs/heads/devel"
+     validate_oid "$DEVEL_OID"
+     test "$DEVEL_OID" = "$EXPECTED_DEVEL_OID"
+     git fetch --no-tags origin +refs/heads/devel:refs/remotes/origin/devel
+     test "$(git rev-parse --verify refs/remotes/origin/devel^{commit})" = "$EXPECTED_DEVEL_OID"
+   }
+   read_publish_ref() {
+     PUBLISH_LINE="$(git ls-remote --heads origin "refs/heads/$PUBLISH_BRANCH")"
+     case "$PUBLISH_LINE" in
+       "") REMOTE_PUBLISH_OID="" ;;
+       *$'\n'*) exit 1 ;;
+       *)
+         IFS="$(printf '\t')" read -r REMOTE_PUBLISH_OID REMOTE_PUBLISH_REF REMOTE_PUBLISH_EXTRA <<< "$PUBLISH_LINE"
+         test -z "${REMOTE_PUBLISH_EXTRA:-}"
+         test "$REMOTE_PUBLISH_REF" = "refs/heads/$PUBLISH_BRANCH"
+         validate_oid "$REMOTE_PUBLISH_OID"
+         ;;
+     esac
+   }
+   list_open_pr() {
+     OPEN_PR_NUMBERS="$(GH_HOST=github.com gh api --hostname github.com --method GET "repos/jinzer0/GPUWatch/pulls?state=open&head=jinzer0%3A${PUBLISH_BRANCH}&per_page=100" --jq '.[].number')"
+     case "$OPEN_PR_NUMBERS" in
+       "") PUBLICATION_PR_NUMBER="none" ;;
+       *$'\n'*) exit 1 ;;
+       *)
+         case "$OPEN_PR_NUMBERS" in *[!0-9]*) exit 1 ;; esac
+         PUBLICATION_PR_NUMBER="$OPEN_PR_NUMBERS"
+         ;;
+     esac
+   }
+   verify_open_pr_exact() {
+     PR_RECORD="$(GH_HOST=github.com gh api --hostname github.com --method GET "repos/jinzer0/GPUWatch/pulls/$1" --jq '[.number, .state, (.draft | tostring), .base.ref, .base.sha, .base.repo.full_name, (.base.repo.id | tostring), .head.ref, .head.sha, .head.repo.full_name, (.head.repo.id | tostring), (.title | @base64), ((.body // "") | @base64)] | @tsv')"
+     case "$PR_RECORD" in *$'\n'*) exit 1 ;; esac
+     IFS="$(printf '\t')" read -r REST_PR_NUMBER REST_PR_STATE REST_PR_DRAFT REST_BASE_REF REST_BASE_SHA REST_BASE_REPO REST_BASE_REPO_ID REST_HEAD_REF REST_HEAD_SHA REST_HEAD_REPO REST_HEAD_REPO_ID REST_TITLE_BASE64 REST_BODY_BASE64 REST_PR_EXTRA <<< "$PR_RECORD"
+     test -z "${REST_PR_EXTRA:-}"
+     test "$REST_PR_NUMBER" = "$1"
+     test "$REST_PR_STATE" = "OPEN"
+     test "$REST_PR_DRAFT" = "false"
+     test "$REST_BASE_REF" = "devel"
+     test "$REST_BASE_SHA" = "$EXPECTED_DEVEL_OID"
+     test "$REST_BASE_REPO" = "jinzer0/GPUWatch"
+     test "$REST_BASE_REPO_ID" = "1256824919"
+     test "$REST_HEAD_REF" = "$PUBLISH_BRANCH"
+     test "$REST_HEAD_SHA" = "$EXPECTED_FINAL_COMMIT_OID"
+     test "$REST_HEAD_REPO" = "jinzer0/GPUWatch"
+     test "$REST_HEAD_REPO_ID" = "1256824919"
+     test "$REST_TITLE_BASE64" = "$(printf '%s' "$PR_TITLE" | base64 | tr -d '\n')"
+     test "$REST_BODY_BASE64" = "$(printf '%s' "$PR_BODY" | base64 | tr -d '\n')"
+   }
+   classify_publication() {
+     read_devel_ref
+     read_publish_ref
+     list_open_pr
+     if test -z "$REMOTE_PUBLISH_OID"; then
+       test "$PUBLICATION_PR_NUMBER" = "none"
+       PUBLICATION_STATE="branch-absent-pr-absent"
+     elif test "$REMOTE_PUBLISH_OID" = "$EXPECTED_FINAL_COMMIT_OID"; then
+       if test "$PUBLICATION_PR_NUMBER" = "none"; then
+         PUBLICATION_STATE="branch-exact-pr-absent"
+       else
+         verify_open_pr_exact "$PUBLICATION_PR_NUMBER"
+         PUBLICATION_STATE="branch-exact-pr-exact"
+       fi
+     else
+       exit 1
+     fi
+   }
+
+   case "${ISSUE_NUMBER:-}" in ""|*[!0-9]*) exit 1 ;; esac
+   validate_oid "${APPROVED_IMPL_PLAN_COMMIT:-}"
+   test -n "${IMPL_PLAN:-}"
+   test -n "${ORDER_FILE:-}"
+   test -n "${ACCEPTANCE_EVIDENCE:-}"
+   test "${APPROVED_FINAL_REPORT_ACTION:-}" = "approve-final-report-and-evidence"
+   test "${APPROVED_FINAL_REPORT_ISSUE_NUMBER:-}" = "$ISSUE_NUMBER"
+   test "${APPROVED_FINAL_REPORT_PLAN_OID:-}" = "$APPROVED_IMPL_PLAN_COMMIT"
+   validate_oid "${APPROVED_FINAL_REPORT_FINAL_COMMIT_OID:-}"
+   validate_oid "${APPROVED_FINAL_REPORT_REPORT_BLOB_OID:-}"
+   validate_oid "${APPROVED_FINAL_REPORT_ORDERS_BLOB_OID:-}"
+   validate_sha256 "${APPROVED_FINAL_REPORT_ACCEPTANCE_EVIDENCE_SHA256:-}"
+   test "$(sha256_text "$ACCEPTANCE_EVIDENCE")" = "$APPROVED_FINAL_REPORT_ACCEPTANCE_EVIDENCE_SHA256"
+
+   FINAL_REPORT="mydocs/report/${IMPL_PLAN#mydocs/plans/}"
+   FINAL_REPORT="${FINAL_REPORT%_impl.md}_report.md"
+   test "${APPROVED_FINAL_REPORT_REPORT_PATH:-}" = "$FINAL_REPORT"
+   test "${APPROVED_FINAL_REPORT_ORDERS_PATH:-}" = "$ORDER_FILE"
+   TASK_BRANCH="local/task${ISSUE_NUMBER}"
+   test "$(git branch --show-current)" = "$TASK_BRANCH"
+   EXPECTED_FINAL_COMMIT_OID="$(git rev-parse --verify HEAD^{commit})"
+   validate_oid "$EXPECTED_FINAL_COMMIT_OID"
+   test "$EXPECTED_FINAL_COMMIT_OID" = "$APPROVED_FINAL_REPORT_FINAL_COMMIT_OID"
+   test "$(git rev-parse --verify "${TASK_BRANCH}^{commit}")" = "$EXPECTED_FINAL_COMMIT_OID"
+   test -z "$(git status --porcelain)"
+   EXPECTED_COMMIT_PATHS="$(printf '%s\n%s' "$ORDER_FILE" "$FINAL_REPORT")"
+   test "$(git diff-tree --root --no-commit-id --name-only -r "$EXPECTED_FINAL_COMMIT_OID")" = "$EXPECTED_COMMIT_PATHS"
+   git cat-file -e "$APPROVED_IMPL_PLAN_COMMIT^{commit}"
+   test "$(git diff-tree --root --no-commit-id --name-only -r "$APPROVED_IMPL_PLAN_COMMIT")" = "$IMPL_PLAN"
+   test "$(git rev-parse "$APPROVED_IMPL_PLAN_COMMIT:$IMPL_PLAN")" = "$(git rev-parse "$EXPECTED_FINAL_COMMIT_OID:$IMPL_PLAN")"
+   test "$(git rev-parse "$EXPECTED_FINAL_COMMIT_OID:$FINAL_REPORT")" = "$APPROVED_FINAL_REPORT_REPORT_BLOB_OID"
+   test "$(git rev-parse "$EXPECTED_FINAL_COMMIT_OID:$ORDER_FILE")" = "$APPROVED_FINAL_REPORT_ORDERS_BLOB_OID"
+
+   validate_publication_dir
    TITLE_FILE="$PUBLICATION_DIR/title"
    BODY_FILE="$PUBLICATION_DIR/body"
-    for INPUT_FILE in "$TITLE_FILE" "$BODY_FILE"; do
-      test -f "$INPUT_FILE" && test ! -L "$INPUT_FILE"
-      test "$(stat -f '%Su' "$INPUT_FILE")" = "$(id -un)"
-      test "$(stat -f '%l' "$INPUT_FILE")" = "1"
-      case "$(stat -f '%Lp' "$INPUT_FILE")" in 600|400) ;; *) exit 1 ;; esac
+   for INPUT_FILE in "$TITLE_FILE" "$BODY_FILE"; do
+     test -f "$INPUT_FILE"
+     test ! -L "$INPUT_FILE"
+     test "$(stat -f '%Su' "$INPUT_FILE")" = "$(id -un)"
+     test "$(stat -f '%l' "$INPUT_FILE")" = "1"
+     case "$(stat -f '%Lp' "$INPUT_FILE")" in 600|400) ;; *) exit 1 ;; esac
    done
    IFS= read -r PR_TITLE < "$TITLE_FILE"
    printf '%s\n' "$PR_TITLE" | cmp -s - "$TITLE_FILE"
@@ -208,18 +436,63 @@ EOF
    printf '%s' "$PR_TITLE" | iconv -f UTF-8 -t UTF-8 >/dev/null
    BODY_BYTES="$(wc -c < "$BODY_FILE" | tr -d '[:space:]')"
    case "$BODY_BYTES" in ""|*[!0-9]*) exit 1 ;; esac
-   test "$BODY_BYTES" -gt 0 && test "$BODY_BYTES" -le 65536
+   test "$BODY_BYTES" -gt 0
+   test "$BODY_BYTES" -le 65536
    if od -An -tx1 -v "$BODY_FILE" | tr -s ' ' '\n' | grep -qx '00'; then exit 1; fi
    iconv -f UTF-8 -t UTF-8 "$BODY_FILE" >/dev/null
    PR_BODY="$(cat "$BODY_FILE"; printf '\001')"
    PR_BODY="${PR_BODY%?}"
    case "$PR_BODY" in *$'\r'*) exit 1 ;; esac
-   sha256_text() { printf '%s' "$1" | shasum -a 256 | awk '{print $1}'; }
+   printf '%s\n' "$PR_BODY" | grep -Eq "^Closes[[:space:]]+#${ISSUE_NUMBER}[[:space:]]*$"
+
+   validate_canonical_origin
+   read_validated_issue_title
+   EXPECTED_PR_TITLE="Task #${ISSUE_NUMBER}: ${ISSUE_TITLE}"
+   test "$PR_TITLE" = "$EXPECTED_PR_TITLE"
+   TITLE_SHA256="$(sha256_text "$PR_TITLE")"
+   BODY_SHA256="$(sha256_text "$PR_BODY")"
+   PUBLISH_BRANCH="publish/task${ISSUE_NUMBER}"
+   EXPECTED_DEVEL_OID="$(git ls-remote --heads origin refs/heads/devel | cut -f1)"
+   validate_oid "$EXPECTED_DEVEL_OID"
+   classify_publication
+
+   printf '%s\n' \
+     "action=push-exact-oid-and-create-or-resume-open-pr" \
+     "host=github.com" \
+     "repository=jinzer0/GPUWatch" \
+     "repository_id=1256824919" \
+     "issue_number=$ISSUE_NUMBER" \
+     "approved_plan_oid=$APPROVED_IMPL_PLAN_COMMIT" \
+     "final_commit_oid=$EXPECTED_FINAL_COMMIT_OID" \
+     "final_report_path=$FINAL_REPORT" \
+     "final_report_blob_oid=$APPROVED_FINAL_REPORT_REPORT_BLOB_OID" \
+     "orders_path=$ORDER_FILE" \
+     "orders_blob_oid=$APPROVED_FINAL_REPORT_ORDERS_BLOB_OID" \
+     "acceptance_evidence_sha256=$APPROVED_FINAL_REPORT_ACCEPTANCE_EVIDENCE_SHA256" \
+     "devel_oid=$EXPECTED_DEVEL_OID" \
+     "publish_branch=$PUBLISH_BRANCH" \
+     "base=devel" \
+     "title_sha256=$TITLE_SHA256" \
+     "body_sha256=$BODY_SHA256" \
+     "publication_state=$PUBLICATION_STATE" \
+     "publication_pr_number=$PUBLICATION_PR_NUMBER"
+   ```
+   - 이 fence는 `branch-absent-pr-absent`, `branch-exact-pr-absent`, `branch-exact-pr-exact`만 수용한다. publish ref가 다른 OID, branch 없이 Open PR이 있는 경우, 둘 이상의 Open PR, base/head/repository/title/body가 다른 Open PR은 모두 실패한다.
+   - 여기서 즉시 중단한다. 작업지시자는 같은 스레드에서 위의 모든 tuple 값과 `action=push-exact-oid-and-create-or-resume-open-pr`를 정확히 명시해 승인해야 한다.
+7. 두 번째 승인을 정확히 재검증하고, 상태를 호환적으로 재분류하여 exact OID만 게시하고 Open PR을 생성 또는 재개한다.
+   - 승인 응답의 `APPROVED_ACTION`, `APPROVED_HOST`, `APPROVED_REPOSITORY`, `APPROVED_REPOSITORY_ID`, `ISSUE_NUMBER`, `APPROVED_IMPL_PLAN_COMMIT`, `IMPL_PLAN`, `ORDER_FILE`, `ACCEPTANCE_EVIDENCE`, `PUBLICATION_DIR`, `APPROVED_FINAL_COMMIT_OID`, `APPROVED_FINAL_REPORT_PATH`, `APPROVED_FINAL_REPORT_BLOB_OID`, `APPROVED_ORDERS_PATH`, `APPROVED_ORDERS_BLOB_OID`, `APPROVED_ACCEPTANCE_EVIDENCE_SHA256`, `APPROVED_DEVEL_OID`, `APPROVED_PUBLISH_BRANCH`, `APPROVED_BASE`, `APPROVED_TITLE_SHA256`, `APPROVED_BODY_SHA256`, `APPROVED_PUBLICATION_STATE`, `APPROVED_PUBLICATION_PR_NUMBER`를 그대로 설정하고 한 번에 실행한다.
+   ```bash
+   set -euo pipefail
+   LC_ALL=C
+   export LC_ALL
+
    validate_oid() { case "$1" in ""|*[!0-9a-f]*) exit 1 ;; esac; test "${#1}" -eq 40; }
+   validate_sha256() { case "$1" in ""|*[!0-9a-f]*) exit 1 ;; esac; test "${#1}" -eq 64; }
+   sha256_text() { printf '%s' "$1" | shasum -a 256 | awk '{print $1}'; }
    validate_canonical_origin() {
      GH_HOST=github.com gh auth status --hostname github.com >/dev/null
-     test "$(GH_HOST=github.com gh api --hostname github.com repos/jinzer0/GPUWatch --jq .id)" = "1256824919"
-     test "$(GH_HOST=github.com gh repo view jinzer0/GPUWatch --json nameWithOwner --jq .nameWithOwner)" = "jinzer0/GPUWatch"
+     test "$(GH_HOST=github.com gh api --hostname github.com --method GET repos/jinzer0/GPUWatch --jq .id)" = "1256824919"
+     test "$(GH_HOST=github.com gh api --hostname github.com --method GET repos/jinzer0/GPUWatch --jq .full_name)" = "jinzer0/GPUWatch"
      ORIGIN_URLS="$(git remote get-url --all origin; git remote get-url --push --all origin)"
      test -n "$ORIGIN_URLS"
      while IFS= read -r ORIGIN_URL; do
@@ -227,87 +500,264 @@ EOF
          git@github.com:jinzer0/GPUWatch|git@github.com:jinzer0/GPUWatch.git|https://github.com/jinzer0/GPUWatch|https://github.com/jinzer0/GPUWatch.git|ssh://git@github.com/jinzer0/GPUWatch|ssh://git@github.com/jinzer0/GPUWatch.git) ;;
          *) exit 1 ;;
        esac
-     done <<EOF
-$ORIGIN_URLS
-EOF
+     done <<< "$ORIGIN_URLS"
    }
-   TITLE_SHA256="$(sha256_text "$PR_TITLE")"
-   BODY_SHA256="$(sha256_text "$PR_BODY")"
-   test "$TITLE_SHA256" = "$APPROVED_TITLE_SHA256"
-   test "$BODY_SHA256" = "$APPROVED_BODY_SHA256"
+   validate_publication_dir() {
+     test -n "${PUBLICATION_DIR:-}"
+     TMP_PARENT="$(cd -P -- "${TMPDIR:-/tmp}" && pwd -P)"
+     test -d "$PUBLICATION_DIR"
+     test ! -L "$PUBLICATION_DIR"
+     PUBLICATION_DIR="$(cd -P -- "$PUBLICATION_DIR" && pwd -P)"
+     test "$(dirname -- "$PUBLICATION_DIR")" = "$TMP_PARENT"
+     case "$(basename -- "$PUBLICATION_DIR")" in
+       "gpuwatcher-task${ISSUE_NUMBER}-publication."??????) ;;
+       *) exit 1 ;;
+     esac
+     test "$(stat -f '%Su' "$PUBLICATION_DIR")" = "$(id -un)"
+     test "$(stat -f '%Lp' "$PUBLICATION_DIR")" = "700"
+   }
+   read_validated_issue_title() {
+     ISSUE_RECORD="$(GH_HOST=github.com gh api --hostname github.com --method GET "repos/jinzer0/GPUWatch/issues/$ISSUE_NUMBER" --jq '[.number, .state, ((.pull_request != null) | tostring), (.title | @base64)] | @tsv')"
+     case "$ISSUE_RECORD" in *$'\n'*) exit 1 ;; esac
+     IFS="$(printf '\t')" read -r RETURNED_ISSUE_NUMBER ISSUE_STATE IS_PULL_REQUEST ISSUE_TITLE_BASE64 ISSUE_EXTRA <<< "$ISSUE_RECORD"
+     test -z "${ISSUE_EXTRA:-}"
+     test "$RETURNED_ISSUE_NUMBER" = "$ISSUE_NUMBER"
+     test "$ISSUE_STATE" = "OPEN"
+     test "$IS_PULL_REQUEST" = "false"
+     ISSUE_TITLE="$(printf '%s' "$ISSUE_TITLE_BASE64" | base64 -D)"
+     test -n "$ISSUE_TITLE"
+     case "$ISSUE_TITLE" in *$'\r'*|*$'\n'*) exit 1 ;; esac
+     printf '%s' "$ISSUE_TITLE" | iconv -f UTF-8 -t UTF-8 >/dev/null
+   }
+   read_devel_ref() {
+     DEVEL_LINE="$(git ls-remote --heads origin refs/heads/devel)"
+     case "$DEVEL_LINE" in ""|*$'\n'*) exit 1 ;; esac
+     IFS="$(printf '\t')" read -r DEVEL_OID DEVEL_REF DEVEL_EXTRA <<< "$DEVEL_LINE"
+     test -z "${DEVEL_EXTRA:-}"
+     test "$DEVEL_REF" = "refs/heads/devel"
+     validate_oid "$DEVEL_OID"
+     test "$DEVEL_OID" = "$APPROVED_DEVEL_OID"
+     git fetch --no-tags origin +refs/heads/devel:refs/remotes/origin/devel
+     test "$(git rev-parse --verify refs/remotes/origin/devel^{commit})" = "$APPROVED_DEVEL_OID"
+   }
+   read_publish_ref() {
+     PUBLISH_LINE="$(git ls-remote --heads origin "refs/heads/$APPROVED_PUBLISH_BRANCH")"
+     case "$PUBLISH_LINE" in
+       "") REMOTE_PUBLISH_OID="" ;;
+       *$'\n'*) exit 1 ;;
+       *)
+         IFS="$(printf '\t')" read -r REMOTE_PUBLISH_OID REMOTE_PUBLISH_REF REMOTE_PUBLISH_EXTRA <<< "$PUBLISH_LINE"
+         test -z "${REMOTE_PUBLISH_EXTRA:-}"
+         test "$REMOTE_PUBLISH_REF" = "refs/heads/$APPROVED_PUBLISH_BRANCH"
+         validate_oid "$REMOTE_PUBLISH_OID"
+         ;;
+     esac
+   }
+   list_open_pr() {
+     OPEN_PR_NUMBERS="$(GH_HOST=github.com gh api --hostname github.com --method GET "repos/jinzer0/GPUWatch/pulls?state=open&head=jinzer0%3A${APPROVED_PUBLISH_BRANCH}&per_page=100" --jq '.[].number')"
+     case "$OPEN_PR_NUMBERS" in
+       "") CURRENT_PR_NUMBER="none" ;;
+       *$'\n'*) exit 1 ;;
+       *)
+         case "$OPEN_PR_NUMBERS" in *[!0-9]*) exit 1 ;; esac
+         CURRENT_PR_NUMBER="$OPEN_PR_NUMBERS"
+         ;;
+     esac
+   }
+   verify_open_pr_exact() {
+     PR_RECORD="$(GH_HOST=github.com gh api --hostname github.com --method GET "repos/jinzer0/GPUWatch/pulls/$1" --jq '[.number, .state, (.draft | tostring), .base.ref, .base.sha, .base.repo.full_name, (.base.repo.id | tostring), .head.ref, .head.sha, .head.repo.full_name, (.head.repo.id | tostring), (.title | @base64), ((.body // "") | @base64)] | @tsv')"
+     case "$PR_RECORD" in *$'\n'*) exit 1 ;; esac
+     IFS="$(printf '\t')" read -r REST_PR_NUMBER REST_PR_STATE REST_PR_DRAFT REST_BASE_REF REST_BASE_SHA REST_BASE_REPO REST_BASE_REPO_ID REST_HEAD_REF REST_HEAD_SHA REST_HEAD_REPO REST_HEAD_REPO_ID REST_TITLE_BASE64 REST_BODY_BASE64 REST_PR_EXTRA <<< "$PR_RECORD"
+     test -z "${REST_PR_EXTRA:-}"
+     test "$REST_PR_NUMBER" = "$1"
+     test "$REST_PR_STATE" = "OPEN"
+     test "$REST_PR_DRAFT" = "false"
+     test "$REST_BASE_REF" = "devel"
+     test "$REST_BASE_SHA" = "$APPROVED_DEVEL_OID"
+     test "$REST_BASE_REPO" = "jinzer0/GPUWatch"
+     test "$REST_BASE_REPO_ID" = "1256824919"
+     test "$REST_HEAD_REF" = "$APPROVED_PUBLISH_BRANCH"
+     test "$REST_HEAD_SHA" = "$APPROVED_FINAL_COMMIT_OID"
+     test "$REST_HEAD_REPO" = "jinzer0/GPUWatch"
+     test "$REST_HEAD_REPO_ID" = "1256824919"
+     test "$REST_TITLE_BASE64" = "$(printf '%s' "$PR_TITLE" | base64 | tr -d '\n')"
+     test "$REST_BODY_BASE64" = "$(printf '%s' "$PR_BODY" | base64 | tr -d '\n')"
+   }
+   classify_publication() {
+     read_devel_ref
+     read_publish_ref
+     list_open_pr
+     if test -z "$REMOTE_PUBLISH_OID"; then
+       test "$CURRENT_PR_NUMBER" = "none"
+       CURRENT_PUBLICATION_STATE="branch-absent-pr-absent"
+     elif test "$REMOTE_PUBLISH_OID" = "$APPROVED_FINAL_COMMIT_OID"; then
+       if test "$CURRENT_PR_NUMBER" = "none"; then
+         CURRENT_PUBLICATION_STATE="branch-exact-pr-absent"
+       else
+         verify_open_pr_exact "$CURRENT_PR_NUMBER"
+         CURRENT_PUBLICATION_STATE="branch-exact-pr-exact"
+       fi
+     else
+       exit 1
+     fi
+   }
+   require_compatible_state() {
+     case "$APPROVED_PUBLICATION_STATE:$CURRENT_PUBLICATION_STATE" in
+       branch-absent-pr-absent:branch-absent-pr-absent|branch-absent-pr-absent:branch-exact-pr-absent|branch-absent-pr-absent:branch-exact-pr-exact|branch-exact-pr-absent:branch-exact-pr-absent|branch-exact-pr-absent:branch-exact-pr-exact|branch-exact-pr-exact:branch-exact-pr-exact) ;;
+       *) exit 1 ;;
+     esac
+     if test "$APPROVED_PUBLICATION_STATE" = "branch-exact-pr-exact"; then
+       test "$CURRENT_PR_NUMBER" = "$APPROVED_PUBLICATION_PR_NUMBER"
+     fi
+   }
+   verify_closing_issue_evidence() {
+     CLOSING_ISSUE_NUMBERS="$(GH_HOST=github.com gh api --hostname github.com graphql -F owner=jinzer0 -F name=GPUWatch -F number="$CURRENT_PR_NUMBER" -f query='query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { closingIssuesReferences(first: 100) { nodes { number repository { nameWithOwner } } } } } }' --jq '.data.repository.pullRequest.closingIssuesReferences.nodes[] | select(.repository.nameWithOwner == "jinzer0/GPUWatch") | .number')" || exit 1
+     test "$CLOSING_ISSUE_NUMBERS" = "$ISSUE_NUMBER"
+   }
+   cleanup_after_success() {
+     EXIT_STATUS=$?
+     if test "${PUBLICATION_SUCCEEDED:-0}" = "1"; then
+       rm -rf -- "$PUBLICATION_DIR"
+       test ! -e "$PUBLICATION_DIR"
+     else
+       printf '%s\n' "publication did not finish; retained $PUBLICATION_DIR for exact-state retry or explicit recovery cleanup" >&2
+     fi
+     trap - EXIT
+     exit "$EXIT_STATUS"
+   }
+   on_signal() { trap - HUP INT TERM; exit 1; }
+
+   test "${APPROVED_ACTION:-}" = "push-exact-oid-and-create-or-resume-open-pr"
+   test "${APPROVED_HOST:-}" = "github.com"
+   test "${APPROVED_REPOSITORY:-}" = "jinzer0/GPUWatch"
+   test "${APPROVED_REPOSITORY_ID:-}" = "1256824919"
+   case "${ISSUE_NUMBER:-}" in ""|*[!0-9]*) exit 1 ;; esac
+   validate_oid "${APPROVED_IMPL_PLAN_COMMIT:-}"
+   validate_oid "${APPROVED_FINAL_COMMIT_OID:-}"
+   validate_oid "${APPROVED_FINAL_REPORT_BLOB_OID:-}"
+   validate_oid "${APPROVED_ORDERS_BLOB_OID:-}"
+   validate_oid "${APPROVED_DEVEL_OID:-}"
+   validate_sha256 "${APPROVED_ACCEPTANCE_EVIDENCE_SHA256:-}"
+   validate_sha256 "${APPROVED_TITLE_SHA256:-}"
+   validate_sha256 "${APPROVED_BODY_SHA256:-}"
+   test -n "${IMPL_PLAN:-}"
+   test -n "${ORDER_FILE:-}"
+   test -n "${ACCEPTANCE_EVIDENCE:-}"
+   test "${APPROVED_BASE:-}" = "devel"
+   test "${APPROVED_PUBLISH_BRANCH:-}" = "publish/task${ISSUE_NUMBER}"
+   case "${APPROVED_PUBLICATION_STATE:-}" in
+     branch-absent-pr-absent|branch-exact-pr-absent) test "${APPROVED_PUBLICATION_PR_NUMBER:-}" = "none" ;;
+     branch-exact-pr-exact)
+       case "${APPROVED_PUBLICATION_PR_NUMBER:-}" in ""|*[!0-9]*) exit 1 ;; esac
+       ;;
+     *) exit 1 ;;
+   esac
+   case "$ACCEPTANCE_EVIDENCE" in *$'\r'*) exit 1 ;; esac
+   test "$(sha256_text "$ACCEPTANCE_EVIDENCE")" = "$APPROVED_ACCEPTANCE_EVIDENCE_SHA256"
+
+   FINAL_REPORT="mydocs/report/${IMPL_PLAN#mydocs/plans/}"
+   FINAL_REPORT="${FINAL_REPORT%_impl.md}_report.md"
+   test "${APPROVED_FINAL_REPORT_PATH:-}" = "$FINAL_REPORT"
+   test "${APPROVED_ORDERS_PATH:-}" = "$ORDER_FILE"
    TASK_BRANCH="local/task${ISSUE_NUMBER}"
-   PUBLISH_BRANCH="publish/task${ISSUE_NUMBER}"
    test "$(git branch --show-current)" = "$TASK_BRANCH"
-   test -z "$(git status --porcelain)"
    test "$(git rev-parse --verify HEAD^{commit})" = "$APPROVED_FINAL_COMMIT_OID"
    test "$(git rev-parse --verify "${TASK_BRANCH}^{commit}")" = "$APPROVED_FINAL_COMMIT_OID"
+   test -z "$(git status --porcelain)"
+   EXPECTED_COMMIT_PATHS="$(printf '%s\n%s' "$ORDER_FILE" "$FINAL_REPORT")"
+   test "$(git diff-tree --root --no-commit-id --name-only -r "$APPROVED_FINAL_COMMIT_OID")" = "$EXPECTED_COMMIT_PATHS"
    git cat-file -e "$APPROVED_IMPL_PLAN_COMMIT^{commit}"
    test "$(git diff-tree --root --no-commit-id --name-only -r "$APPROVED_IMPL_PLAN_COMMIT")" = "$IMPL_PLAN"
    test "$(git rev-parse "$APPROVED_IMPL_PLAN_COMMIT:$IMPL_PLAN")" = "$(git rev-parse "$APPROVED_FINAL_COMMIT_OID:$IMPL_PLAN")"
+   test "$(git rev-parse "$APPROVED_FINAL_COMMIT_OID:$FINAL_REPORT")" = "$APPROVED_FINAL_REPORT_BLOB_OID"
+   test "$(git rev-parse "$APPROVED_FINAL_COMMIT_OID:$ORDER_FILE")" = "$APPROVED_ORDERS_BLOB_OID"
+
+   validate_publication_dir
+   TITLE_FILE="$PUBLICATION_DIR/title"
+   BODY_FILE="$PUBLICATION_DIR/body"
+   for INPUT_FILE in "$TITLE_FILE" "$BODY_FILE"; do
+     test -f "$INPUT_FILE"
+     test ! -L "$INPUT_FILE"
+     test "$(stat -f '%Su' "$INPUT_FILE")" = "$(id -un)"
+     test "$(stat -f '%l' "$INPUT_FILE")" = "1"
+     case "$(stat -f '%Lp' "$INPUT_FILE")" in 600|400) ;; *) exit 1 ;; esac
+   done
+   IFS= read -r PR_TITLE < "$TITLE_FILE"
+   printf '%s\n' "$PR_TITLE" | cmp -s - "$TITLE_FILE"
+   test -n "$PR_TITLE"
+   case "$PR_TITLE" in *$'\r'*) exit 1 ;; esac
+   printf '%s' "$PR_TITLE" | iconv -f UTF-8 -t UTF-8 >/dev/null
+   BODY_BYTES="$(wc -c < "$BODY_FILE" | tr -d '[:space:]')"
+   case "$BODY_BYTES" in ""|*[!0-9]*) exit 1 ;; esac
+   test "$BODY_BYTES" -gt 0
+   test "$BODY_BYTES" -le 65536
+   if od -An -tx1 -v "$BODY_FILE" | tr -s ' ' '\n' | grep -qx '00'; then exit 1; fi
+   iconv -f UTF-8 -t UTF-8 "$BODY_FILE" >/dev/null
+   PR_BODY="$(cat "$BODY_FILE"; printf '\001')"
+   PR_BODY="${PR_BODY%?}"
+   case "$PR_BODY" in *$'\r'*) exit 1 ;; esac
+   printf '%s\n' "$PR_BODY" | grep -Eq "^Closes[[:space:]]+#${ISSUE_NUMBER}[[:space:]]*$"
+   test "$(sha256_text "$PR_TITLE")" = "$APPROVED_TITLE_SHA256"
+   test "$(sha256_text "$PR_BODY")" = "$APPROVED_BODY_SHA256"
+
    validate_canonical_origin
-   DEVEL_LINE="$(git ls-remote --heads origin refs/heads/devel)"
-   case "$DEVEL_LINE" in *$'\n'*) exit 1 ;; esac
-   IFS="$(printf '\t')" read -r DEVEL_OID DEVEL_REF DEVEL_EXTRA <<EOF
-$DEVEL_LINE
-EOF
-   test -z "${DEVEL_EXTRA:-}" && test "$DEVEL_REF" = "refs/heads/devel"
-   validate_oid "$DEVEL_OID"
-   test "$DEVEL_OID" = "$APPROVED_DEVEL_OID"
-    git fetch --no-tags origin +refs/heads/devel:refs/remotes/origin/devel
-   test "$(git rev-parse --verify refs/remotes/origin/devel^{commit})" = "$APPROVED_DEVEL_OID"
-   REMOTE_PUBLISH="$(git ls-remote --heads origin "refs/heads/$PUBLISH_BRANCH")"
-   if test -n "$REMOTE_PUBLISH"; then
-     case "$REMOTE_PUBLISH" in *$'\n'*) exit 1 ;; esac
-     IFS="$(printf '\t')" read -r REMOTE_OID REMOTE_REF REMOTE_EXTRA <<EOF
-$REMOTE_PUBLISH
-EOF
-     test -z "${REMOTE_EXTRA:-}" && test "$REMOTE_REF" = "refs/heads/$PUBLISH_BRANCH"
-     test "$REMOTE_OID" = "$APPROVED_FINAL_COMMIT_OID"
-   else
-     git push --porcelain --force-with-lease="refs/heads/$PUBLISH_BRANCH:" origin "$APPROVED_FINAL_COMMIT_OID:refs/heads/$PUBLISH_BRANCH"
+   read_validated_issue_title
+   test "$PR_TITLE" = "Task #${ISSUE_NUMBER}: ${ISSUE_TITLE}"
+   classify_publication
+   require_compatible_state
+
+   if test "$CURRENT_PUBLICATION_STATE" = "branch-absent-pr-absent"; then
+     git push --porcelain --force-with-lease="refs/heads/$APPROVED_PUBLISH_BRANCH:" origin "$APPROVED_FINAL_COMMIT_OID:refs/heads/$APPROVED_PUBLISH_BRANCH"
    fi
-   test "$(git ls-remote --heads origin "refs/heads/$PUBLISH_BRANCH" | cut -f1)" = "$APPROVED_FINAL_COMMIT_OID"
-   PR_NUMBERS="$(GH_HOST=github.com gh api --hostname github.com "repos/jinzer0/GPUWatch/pulls?state=open&base=devel&head=jinzer0%3A$PUBLISH_BRANCH&per_page=100" --jq '.[].number')"
-   if test -z "$PR_NUMBERS"; then
-     GH_HOST=github.com gh pr create --repo jinzer0/GPUWatch --base devel --head "$PUBLISH_BRANCH" --title "$PR_TITLE" --body "$PR_BODY"
-     PR_NUMBERS="$(GH_HOST=github.com gh api --hostname github.com "repos/jinzer0/GPUWatch/pulls?state=open&base=devel&head=jinzer0%3A$PUBLISH_BRANCH&per_page=100" --jq '.[].number')"
+
+   classify_publication
+   require_compatible_state
+   if test "$CURRENT_PUBLICATION_STATE" = "branch-exact-pr-absent"; then
+     GH_HOST=github.com gh api --hostname github.com --method POST repos/jinzer0/GPUWatch/pulls -f "title=$PR_TITLE" -f "head=$APPROVED_PUBLISH_BRANCH" -f "base=devel" -f "body=$PR_BODY" --jq .number >/dev/null
    fi
-   case "$PR_NUMBERS" in ""|*$'\n'*) exit 1 ;; esac
-   PR_TUPLE="$(GH_HOST=github.com gh pr view "$PR_NUMBERS" --repo jinzer0/GPUWatch --json state,isDraft,baseRefName,headRefName,headRepository,headRefOid --jq '[.state,.isDraft,.baseRefName,.headRefName,.headRepository.nameWithOwner,.headRefOid] | @tsv')"
-   IFS="$(printf '\t')" read -r PR_STATE PR_DRAFT PR_BASE PR_HEAD PR_HEAD_REPO PR_HEAD_OID PR_EXTRA <<EOF
-$PR_TUPLE
-EOF
-    test -z "${PR_EXTRA:-}" && test "$PR_STATE" = "OPEN" && test "$PR_DRAFT" = "false"
-    test "$PR_BASE" = "devel" && test "$PR_HEAD" = "$PUBLISH_BRANCH"
-    test "$PR_HEAD_REPO" = "jinzer0/GPUWatch" && test "$PR_HEAD_OID" = "$APPROVED_FINAL_COMMIT_OID"
-    PR_TITLE_BASE64="$(GH_HOST=github.com gh pr view "$PR_NUMBERS" --repo jinzer0/GPUWatch --json title --jq '.title | @base64')"
-    PR_BODY_BASE64="$(GH_HOST=github.com gh pr view "$PR_NUMBERS" --repo jinzer0/GPUWatch --json body --jq '.body | @base64')"
-    test "$PR_TITLE_BASE64" = "$(printf '%s' "$PR_TITLE" | base64 | tr -d '\n')"
-    test "$PR_BODY_BASE64" = "$(printf '%s' "$PR_BODY" | base64 | tr -d '\n')"
+
+   classify_publication
+   require_compatible_state
+   test "$CURRENT_PUBLICATION_STATE" = "branch-exact-pr-exact"
+   verify_open_pr_exact "$CURRENT_PR_NUMBER"
+   verify_closing_issue_evidence
+
+   PUBLICATION_SUCCEEDED=1
+   trap cleanup_after_success EXIT
+   trap on_signal HUP INT TERM
+   printf '%s\n' "pr_number=$CURRENT_PR_NUMBER" "pr_url=https://github.com/jinzer0/GPUWatch/pull/$CURRENT_PR_NUMBER"
    ```
-   - absent-ref lease와 push 뒤 remote OID 확인은 ref 경쟁을 감지한다. GitHub 서버 전체에 대한 원자성을 주장하지 않으며, mismatch 또는 둘 이상의 Open PR은 중단한다.
-   - execution fence의 `trap`은 성공·실패 모두 private temp directory만 제거한다. 승인 전에 중단하면 다음 명령으로 같은 범위만 정리한다.
+   - ref가 없을 때만 absent-ref lease로 approved final OID를 게시한다. 기존 ref는 절대 overwrite하지 않으며, ref가 있으면 final OID와 동일한 경우에만 진행한다. Open PR도 없을 때만 생성한다.
+   - execution은 승인 당시 상태에서 정상적으로 전진한 상태만 호환한다. `branch-absent-pr-absent`는 `branch-exact-pr-absent` 또는 exact PR 상태로, `branch-exact-pr-absent`는 exact PR 상태로 재시도할 수 있다. 승인된 `branch-exact-pr-exact`는 같은 PR 번호여야 한다. 그 밖의 상태, OID, hash, blob, title/body, PR REST 필드 불일치는 새 publication preparation과 두 번째 승인을 요구한다.
+   - push, `devel` 검증, REST PR 생성은 GitHub 전체에 대한 원자적 트랜잭션이 아니다. PR 생성 직전 `devel`과 publish ref를 다시 읽고, 생성 또는 재개 뒤 명시적 REST `GET /repos/jinzer0/GPUWatch/pulls/{number}`로 base/head SHA, refs, repository, non-draft open state, title/body를 정확히 검증한다. 경쟁으로 인한 불일치는 실패하고 재승인을 요구한다.
+   - 실패 또는 signal 시 title/body input은 자동 삭제하지 않아 exact-state retry가 가능하다. 성공한 정확한 검증 뒤에만 EXIT trap이 안전하게 private directory를 제거한다.
+8. publication input을 폐기하거나 재승인 전에 안전하게 정리해야 할 때만 다음 recovery cleanup을 실행한다.
    ```bash
-    set -euo pipefail
-    case "${ISSUE_NUMBER:-}" in ""|*[!0-9]*) exit 1 ;; esac
-    test -n "${PUBLICATION_DIR:-}"
-    TMP_PARENT="$(cd -P -- "${TMPDIR:-/tmp}" && pwd -P)"
-    test -d "$PUBLICATION_DIR" && test ! -L "$PUBLICATION_DIR"
-    PUBLICATION_DIR="$(cd -P -- "$PUBLICATION_DIR" && pwd -P)"
-    test "$(dirname -- "$PUBLICATION_DIR")" = "$TMP_PARENT"
-    case "$(basename -- "$PUBLICATION_DIR")" in
-      "gpuwatcher-task${ISSUE_NUMBER}-publication."??????) ;;
-      *) exit 1 ;;
-    esac
-    test "$(stat -f '%Su' "$PUBLICATION_DIR")" = "$(id -un)"
-    test "$(stat -f '%Lp' "$PUBLICATION_DIR")" = "700"
-    rm -rf -- "$PUBLICATION_DIR"
+   set -euo pipefail
+
+   case "${ISSUE_NUMBER:-}" in ""|*[!0-9]*) exit 1 ;; esac
+   test -n "${PUBLICATION_DIR:-}"
+   TMP_PARENT="$(cd -P -- "${TMPDIR:-/tmp}" && pwd -P)"
+   test -d "$PUBLICATION_DIR"
+   test ! -L "$PUBLICATION_DIR"
+   PUBLICATION_DIR="$(cd -P -- "$PUBLICATION_DIR" && pwd -P)"
+   test "$(dirname -- "$PUBLICATION_DIR")" = "$TMP_PARENT"
+   case "$(basename -- "$PUBLICATION_DIR")" in
+     "gpuwatcher-task${ISSUE_NUMBER}-publication."??????) ;;
+     *) exit 1 ;;
+   esac
+   test "$(stat -f '%Su' "$PUBLICATION_DIR")" = "$(id -un)"
+   test "$(stat -f '%Lp' "$PUBLICATION_DIR")" = "700"
+   rm -rf -- "$PUBLICATION_DIR"
+   test ! -e "$PUBLICATION_DIR"
    ```
-7. 작업지시자에게 검증된 PR 번호와 URL 전달, 리뷰·merge 승인 요청
+9. 작업지시자에게 검증된 PR 번호와 URL을 전달하고, 리뷰 및 merge 승인을 요청한다.
 
 ## PR 본문 규칙
 
+- title은 canonical target issue REST 응답에서 검증한 정확한 `Task #N: <issue title>` 한 줄이다. 다른 title, 사용자 입력 title, 줄바꿈 title은 허용하지 않는다.
 - `.github/pull_request_template.md`를 출발점으로 사용하고 최대 4개 요약 bullet, Stage별 한 줄 요약, 검증 결과, 남은 위험을 포함한다.
+- target issue를 닫는 `Closes #N` 독립 줄을 반드시 포함한다.
 - Stage 제목은 단계 보고서 URL로, 짧은 commit SHA는 commit URL로 링크한다.
 - 작업 문서는 final commit OID 기준 `https://github.com/jinzer0/GPUWatch/blob/{final_commit_oid}/mydocs/...` URL을 `[파일명](URL)` 형식으로 쓴다.
 - 상대 링크, `blob/publish/task{N}/...`, raw URL은 사용하지 않는다.
@@ -315,20 +765,25 @@ EOF
 
 ## 검증
 
-- 승인 구현 계획서 OID의 plan blob이 HEAD, index, working tree와 일치한 뒤 수용 기준을 실행함
-- final report/오늘할일 commit 뒤 working tree가 깨끗함
-- 승인 전 출력한 action, issue, plan OID, devel OID, final OID, publish branch, base, title/body digest tuple을 작업지시자가 같은 스레드에서 명시 승인함
-- canonical `github.com`, `jinzer0/GPUWatch`, repository ID `1256824919`, 모든 origin fetch/push URL을 remote 작업 전에 확인함
-- 승인 후 devel OID, final OID, plan blob, title/body digest, clean state를 다시 확인함
-- absent-ref lease로 exact final OID만 게시하고 remote publish OID가 같은 값을 반환함
-- canonical repository에 non-draft Open PR이 정확히 하나이며 `devel` <- `publish/task{N}`와 head OID가 승인 tuple과 일치함
+- 승인 구현 계획서 OID의 plan blob이 HEAD, index, working tree와 일치한 뒤 수용 기준을 실제 실행하고, acceptance evidence SHA-256을 첫 승인에 결박함
+- final report/orders commit 전 staged/untracked 변경을 거부하고, hook 전후 repository-wide index와 final commit 경로가 정확히 report/orders 두 파일임을 검증함
+- 첫 승인 tuple이 issue, plan OID, final commit OID, report/orders paths와 blob OIDs, acceptance evidence SHA-256을 정확히 결박하고 publication input 생성 전에 멈춤
+- 두 번째 승인 tuple이 canonical repository identity, exact plan/devel/final OIDs, first-approval artifacts, private title/body hashes, publish branch/base, 세 publication states와 PR number/none을 결박함
+- canonical `github.com`, `jinzer0/GPUWatch`, repository ID `1256824919`, 모든 origin fetch/push URL을 `ls-remote`, `fetch`, `push`, `gh api` 전에 확인함
+- 실행 시 원격 상태를 재분류하고, branch가 없을 때만 absent-ref lease와 approved final OID refspec으로 push하며, PR이 없을 때만 create함
+- 명시적 REST GET이 정확히 하나의 canonical non-draft Open PR의 `.base.sha == APPROVED_DEVEL_OID`, `.head.sha == APPROVED_FINAL_COMMIT_OID`, base/head refs와 repositories, title/body를 검증함
+- `Closes #N`를 본문에 요구하고, mandatory read-only GraphQL `closingIssuesReferences`가 canonical repository의 target issue 번호 하나만 반환하는지 검증함. GraphQL 오류 또는 불일치는 publication을 중단하며, 이 증거는 REST exact 검증을 대체하지 않음
+- 실패에는 input을 보존하고, 상태가 승인된 호환 전이 밖으로 벗어나면 새 preparation과 명시적 재승인을 요구하며, 성공 때만 private input을 정리함
 
 ## 절대 하지 말 것
 
-- 통합 검증 실패, 마지막 Stage 승인 전, 또는 tuple 명시 승인 없이 PR 생성·push
+- 통합 검증 실패, 마지막 Stage 승인 전, 첫 final report/evidence 승인 전, 또는 두 번째 publication tuple 명시 승인 없이 publication input 생성이나 원격 mutation(`push`, `gh api --method POST`, PR 생성 또는 재개)
 - moving `HEAD` 또는 `local/task{N}` ref를 refspec source로 사용하거나 approved final OID 이외의 commit 게시
 - `local/task{N}` 직접 원격 push, absent-ref lease 없는 publish ref 생성, 기존 publish ref overwrite
-- canonical identity/origin 검증 전 `ls-remote`, `fetch`, `push`, `gh` 원격 작업
+- 세 valid publication state 밖의 branch/PR 상태를 추정하거나 resume 처리
+- canonical identity/origin 검증 전 `ls-remote`, `fetch`, `push`, `gh api` 원격 작업
+- PR 생성 직전 base/head 재검증 또는 생성/재개 뒤 explicit REST GET exact 검증을 생략
+- 실패 시 publication input을 자동 삭제하거나, approval tuple 불일치/상태 불일치 뒤 기존 두 번째 승인을 재사용
 - Draft PR 생성, self-merge, `gh pr review`/`gh pr merge`의 무승인 실행
 
 ## 호출 방법
