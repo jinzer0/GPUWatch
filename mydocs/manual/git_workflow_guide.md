@@ -37,7 +37,7 @@ local/task{N} ── 커밋 · 커밋 · 커밋 ──→ publish/task{N} push
 병렬 task는 각각 독립적인 `local/task{N}` 브랜치로 위 흐름을 반복한다.
 
 - **타스크 브랜치**: `local/task{N}`에서 잘게 커밋. 작업 단위마다 커밋.
-- **원격 게시 브랜치**: `local/task{N}` 작업이 리뷰 가능한 상태가 되면 `publish/task{N}` 이름으로 원격에 push하고 `devel` 대상 PR을 생성한다.
+- **원격 게시 브랜치**: `local/task{N}` 작업이 리뷰 가능한 상태가 되면 [`task-final-report`](../skills/task-final-report/SKILL.md)의 두 승인 절차로 `publish/task{N}` exact OID 게시와 `devel` 대상 Open PR 생성 또는 재개를 수행한다.
 - **원격 push**: `local/task` 브랜치는 **로컬 유지 (원격 push 금지)**를 원칙으로 한다. 원격에는 `publish/task{N}`와 merge 결과 브랜치만 유지한다.
 - **`devel` 대상 PR**: 작업 단위 PR은 기본적으로 Open PR로 생성하고, 최종 보고와 검증 결과를 PR 본문에 반영한 상태에서 review/merge 한다.
 - **merge 전략**: `devel` 대상 PR은 merge commit 유지 또는 `--no-ff` 원칙을 기본으로 한다. squash merge는 단계별 커밋 의미가 사라질 수 있으므로 기본값으로 두지 않는다.
@@ -60,10 +60,11 @@ Hyper-Waterfall 최초 bootstrap을 `main`에 반영하는 PR은 app release가 
 
 이 절의 목적은 브랜치 흐름을 설명하는 것이며, GitHub 변경 명령을 복사해 실행하는 위치가 아니다. host, repository, remote ref, PR head는 승인 대기 중에도 변할 수 있으므로 ambient repository 또는 현재 `HEAD`를 기준으로 `gh` 명령을 실행하지 않는다.
 
-1. task PR의 publish와 Open PR 생성은 [`task-final-report`](../skills/task-final-report/SKILL.md)만 사용한다. 이 절차는 승인된 exact publication tuple, `github.com`, `jinzer0/GPUWatch`, repository ID `1256824919`, 모든 origin URL, `origin/devel` OID, final/publish OID를 검증한다.
-2. 리뷰 및 merge는 [`pr_process_guide.md`](pr_process_guide.md)의 승인 절차를 따른다. 이 매뉴얼에 `gh pr review`나 `gh pr merge`의 축약 예시를 두지 않는다. 직접 실행이 불가피한 자동화는 승인된 PR 번호, canonical repository, base/head tuple, head OID를 REST로 다시 읽고, merge REST 요청의 `sha`에 확인한 head OID를 넣어야 한다. 확인값이 하나라도 달라지면 review/merge하지 않는다.
-3. merged PR의 branch·worktree·issue 정리는 [`pr-merge-cleanup`](../skills/pr-merge-cleanup/SKILL.md)만 사용한다. 이 절차는 merged PR tuple과 head OID를 확인한 뒤 정리 순서를 고정한다.
-4. `devel -> main` release PR과 `main -> devel` 동기화 PR도 별도 작업지시자 승인과 위와 같은 canonical repository/PR tuple/head OID/REST `sha` precondition을 갖춘 절차로 수행한다. task PR의 승인이나 이전 release 승인을 재사용하지 않는다.
+1. task PR의 publish와 Open PR 생성은 [`task-final-report`](../skills/task-final-report/SKILL.md)만 사용한다. 이 절차는 final report/evidence 승인과 publication 승인을 분리한다. 첫 승인이 있기 전에는 publication input을 만들지 않고, 둘째 승인이 있기 전에는 원격 mutation(`push`, `gh api --method POST`, PR 생성 또는 재개)을 하지 않는다. Publication 준비 단계의 canonical identity, issue, ref, Open PR 상태 조회는 read-only로만 수행한다.
+2. task publication은 `branch-absent-pr-absent`, `branch-exact-pr-absent`, `branch-exact-pr-exact`만 유효 상태로 분류한다. 실행 시 원격 상태를 다시 분류하고, 승인 당시 상태에서 호환되는 전진만 재시도한다. publish ref가 다른 OID이거나 PR의 base/head/repository/title/body가 다르면 새 publication 준비와 새 승인이 필요하다.
+3. 리뷰 및 merge는 [`pr_process_guide.md`](pr_process_guide.md)의 승인 절차를 따른다. 이 매뉴얼에 `gh pr review`나 `gh pr merge`의 축약 예시를 두지 않는다. 직접 실행이 불가피한 자동화는 승인된 PR 번호, canonical repository, base/head tuple, head OID를 REST로 다시 읽고, merge REST 요청의 `sha`에 확인한 head OID를 넣어야 한다. 확인값이 하나라도 달라지면 review/merge하지 않는다.
+4. merged task PR의 branch, worktree, issue 정리는 [`pr-merge-cleanup`](../skills/pr-merge-cleanup/SKILL.md)만 사용한다. 이 절차는 read-only preflight에서 merged PR tuple과 issue 상태를 확인하고, 이슈가 `OPEN`이면 exact approval tuple을 요구한다. 삭제 직전과 close 직전에도 같은 PR/이슈 tuple을 다시 읽고, 그 경계에서 `OPEN`이면 같은 exact approval tuple 없이는 삭제 또는 close로 진행하지 않는다. 이전 관측에서 `CLOSED`였다는 이유만으로 현재 `OPEN` 이슈를 닫을 수 없다.
+5. `devel -> main` release PR과 `main -> devel` 동기화 PR은 승인된 release operation에 한해 별도 작업지시자 승인과 canonical repository/PR tuple/head OID/REST `sha` precondition을 갖춘 절차로 수행한다. 이 release 전용 직접 PR mechanics는 ordinary issue-based task PR의 우회로가 아니며, task PR의 승인이나 이전 release 승인을 재사용하지 않는다.
 
 ## 컨트리뷰터 워크플로우 (Fork 기반)
 
@@ -105,7 +106,7 @@ GH_HOST=github.com gh pr create --repo "$CANONICAL_REPOSITORY" --base devel --he
 
 ### merge 후에도 로컬 브랜치가 남아 있을 때
 
-PR이 `MERGED` 상태이고 base/head가 대상 task와 일치하는지 먼저 확인한다. 분리 task worktree에서 cleanup을 시작했다면 `git worktree list --porcelain`로 기본 worktree를 확인하고 그 경로로 이동한 뒤 `devel`로 복귀한다. local `devel`이 안전하게 fast-forward 가능할 때만 `origin/devel`로 갱신하고, unpublished commit 때문에 앞서거나 갈라졌으면 이력을 보존해 결과에 기록한다. 별도 task worktree는 기본 worktree에서 non-force로 제거하고, 원격 `publish/taskN`과 로컬 `local/taskN`을 정리한 뒤 마지막에 이슈를 close한다. 상세 명령과 중단 조건은 [`pr-merge-cleanup`](../skills/pr-merge-cleanup/SKILL.md)을 따른다.
+PR이 `MERGED` 상태이고 base/head가 대상 task와 일치하는지 read-only preflight로 먼저 확인한다. 분리 task worktree에서 cleanup을 시작했다면 `git worktree list --porcelain`로 기본 worktree를 확인하고 그 경로로 이동한 뒤 `devel`로 복귀한다. local `devel`이 안전하게 fast-forward 가능할 때만 `origin/devel`로 갱신하고, unpublished commit 때문에 앞서거나 갈라졌으면 이력을 보존해 결과에 기록한다. 별도 task worktree는 기본 worktree에서 non-force로 제거하고, 원격 `publish/taskN`과 로컬 `local/taskN`을 정리한 뒤 마지막에 이슈를 close한다. 단, 이슈 close는 삭제 직전과 close 직전 재검증에서 현재 `OPEN`으로 관측된 이슈에 대해 exact approval tuple이 있을 때만 가능하다. 상세 명령과 중단 조건은 [`pr-merge-cleanup`](../skills/pr-merge-cleanup/SKILL.md)을 따른다.
 
 ## 관련 매뉴얼
 

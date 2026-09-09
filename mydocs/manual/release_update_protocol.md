@@ -1,6 +1,6 @@
 # Release와 Update Protocol 가이드
 
-이 문서는 GPUWatch app release와 upstream Hyper-Waterfall framework release를 구분하고, 기존 적용 저장소 update protocol을 정의한다. 일반 task 브랜치 운용은 `git_workflow_guide.md`를 따른다.
+이 문서는 GPUWatch app release와 upstream Hyper-Waterfall framework release를 구분하고, 기존 적용 저장소 update protocol을 정의한다. 일반 issue-based task publication과 merge cleanup은 `git_workflow_guide.md`, `task-final-report`, `pr-merge-cleanup`을 따른다.
 
 ## Canonical 배포 기준
 
@@ -33,15 +33,11 @@ Release 준비 시 다음 항목을 확인한다.
 
 ## Release PR 흐름
 
-GPUWatch app 릴리즈 시점에는 `devel`에서 검증된 변경을 `main`로 승격하는 PR을 만든다.
+GPUWatch app 릴리즈 시점에는 승인된 release operation 안에서만 `devel`에서 검증된 변경을 `main`로 승격하는 PR을 만든다. 아래 직접 PR mechanics는 release 전용 예외이며, ordinary issue-based task PR이나 Hyper-Waterfall 버전 업데이트 PR의 publish/cleanup 우회로가 아니다.
 
-```bash
-gh pr create --base main --head devel --title "Release: {version}"
-# 현재 턴의 작업지시자 승인과 base/head/PR 번호를 다시 확인한 뒤 실행
-gh pr view {PR_NUMBER} --json number,baseRefName,headRefName,mergeable,mergeStateStatus
-gh pr review {PR_NUMBER} --approve
-gh pr merge {PR_NUMBER} --merge --delete-branch=false
-```
+Release PR의 read-only 준비에서는 canonical repository, base/head, PR 번호, head OID, merge 가능 상태를 먼저 다시 읽는다. 이 가이드는 release PR을 설명하지만, 그 자체로 원격 변경을 승인하거나 shortcut command sequence를 제공하지 않는다. Review, merge, tag 생성, GitHub Release 발행, `main` -> `devel` 동기화 같은 원격 mutation은 각각 승인된 release-specific plan/procedure가 exact immutable tuple과 mutation-time 재검증을 제공할 때만 실행한다.
+
+Release-specific plan/procedure는 최소한 `github.com`, `jinzer0/GPUWatch`, repository ID `1256824919`, exact base/head refs와 OID, 적용할 title/body 또는 hash, 생성 뒤 exact PR number, non-draft `OPEN` PR 상태, merge precondition으로 사용할 expected head OID를 결박해야 한다. 각 mutation 직전에는 canonical repository와 승인된 base/head/OID/title/body 또는 hash를 다시 읽어 승인 tuple과 비교하고, merge 요청은 확인된 head OID를 compare-and-swap precondition으로 사용해야 한다. 승인 전에 읽은 값이 mutation 직전 값과 하나라도 다르면 중단하고 새 release approval을 받는다.
 
 실제 tag 생성과 GitHub Release 발행은 별도 승인된 release 단계에서 수행한다.
 
@@ -61,7 +57,7 @@ gh pr merge {PR_NUMBER} --merge --delete-branch=false
 
 ## Hyper-Waterfall 버전 업데이트 PR
 
-Hyper-Waterfall 버전 업데이트 PR은 일반 task PR과 같은 브랜치 흐름을 사용한다. 차이는 PR의 입력과 본문이다.
+Hyper-Waterfall 버전 업데이트 PR은 일반 task PR과 같은 브랜치 흐름을 사용한다. 차이는 PR의 입력과 본문이다. 따라서 최종 게시에는 `task-final-report`의 final report/evidence 승인과 publication 승인을 모두 사용하고, merge 후 정리에는 `pr-merge-cleanup`의 issue-state race handling을 사용한다.
 
 - 입력: 기존 업데이트 판단 결과, upstream artifact와 설치본 diff, locale 관련 artifact diff, locale 보존/전환 판단
 - 본문: 목표 upstream artifact의 update PR 기준을 적용 저장소 `.github/pull_request_template.md` 설치본에 반영
@@ -73,7 +69,7 @@ Hyper-Waterfall 버전 업데이트 PR은 일반 task PR과 같은 브랜치 흐
 - 단계 커밋: `Task #{N} Stage {S}: Hyper-Waterfall 버전 업데이트 {내용}`
 - 최종 보고 커밋: `Task #{N}: 최종 보고서 작성과 오늘할일 완료 처리`
 
-Hyper-Waterfall 버전 업데이트 PR 브랜치를 별도 prefix로 만들지 않는 이유는 작업 추적 기준을 GitHub Issue와 하이퍼-워터폴 산출물로 유지하기 위해서다. CLI나 자동화가 PR 후보를 만들더라도 먼저 판단 결과를 출력하고, 승인된 이슈 번호를 받은 뒤 `local/task{N}` -> `publish/task{N}` -> `devel` 규칙을 따른다.
+Hyper-Waterfall 버전 업데이트 PR 브랜치를 별도 prefix로 만들지 않는 이유는 작업 추적 기준을 GitHub Issue와 하이퍼-워터폴 산출물로 유지하기 위해서다. CLI나 자동화가 PR 후보를 만들더라도 먼저 판단 결과를 출력하고, 승인된 이슈 번호를 받은 뒤 `local/task{N}` -> `publish/task{N}` -> `devel` 규칙을 따른다. Publication은 `branch-absent-pr-absent`, `branch-exact-pr-absent`, `branch-exact-pr-exact` 중 하나로 분류된 exact state에서만 재시도할 수 있으며, 호환 전이 밖이면 새 publication 준비와 승인이 필요하다.
 
 ## 관련 문서
 

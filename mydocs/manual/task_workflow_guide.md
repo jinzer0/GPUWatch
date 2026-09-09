@@ -35,7 +35,7 @@ Lifecycle 판단 결과가 승인되어 실제 파일 변경으로 넘어가면,
 - **milestone_name**: GitHub milestone title 그대로 사용하며 `^M[0-9]+x?$`에 맞아야 한다. 예: `M100`, `M05x`
 - **milestone_slug**: `milestone_name`의 앞 `M`만 소문자로 바꾸고 숫자와 선택적 `x`는 보존한다. 예: `M100` -> `m100`, `M05x` -> `m05x`
 - 새 타스크 등록: 이슈가 없는 작업은 [`task-register`](../skills/task-register/SKILL.md) Skill로 중복 이슈, milestone, label을 확인하고 생성 전 승인을 받은 뒤 GitHub Issue를 만든다.
-- 타스크 시작: 이미 생성된 이슈 번호가 있으면 [`task-start`](../skills/task-start/SKILL.md) Skill로 브랜치, 오늘할일, 수행계획서를 만든다.
+- 타스크 시작: 이미 생성된 이슈 번호가 있으면 [`task-start`](../skills/task-start/SKILL.md) Skill로 exact open non-PR issue, live open milestone, canonical origin, immutable `devel` OID를 검증한 뒤 브랜치, 오늘할일, 수행계획서를 만든다. 내부 PR 제목 데이터는 검증된 live issue title에서 정확히 `Task #N: <live issue title>`로 만든다.
 - 브랜치명: `local/task{issue번호}` (예: `local/task1`)
 - PR 생성용 원격 브랜치명: `publish/task{issue번호}` (예: `publish/task1`)
 - 커밋 메시지 규칙:
@@ -44,7 +44,7 @@ Lifecycle 판단 결과가 승인되어 실제 파일 변경으로 넘어가면,
   - 세부 하위 단계 허용: `Task #{issue번호} [Stage {N.M}]: 내용`
   - 최종 보고서 커밋: `Task #{issue번호}: 최종 보고서 작성과 오늘할일 완료 처리`
 - `mydocs/orders/`에서 `M100 #1` 형식으로 마일스톤+이슈 참조
-- 타스크 완료 시: PR merge 후 `pr-merge-cleanup`의 read-only preflight가 출력한 host, repository, repository ID, PR 번호, 이슈 번호, merged head OID, base/head refs, action `close-issue:completed` exact tuple을 같은 스레드에서 승인한 뒤 `gh issue close {번호} --reason completed` 실행. 이미 `CLOSED`인 이슈는 검증된 no-op으로 처리
+- 타스크 완료 시: PR merge 후 `pr-merge-cleanup`의 read-only preflight가 출력한 host, repository, repository ID, PR 번호, 이슈 번호, merged head OID, base/head refs, action `close-issue:completed` exact tuple을 같은 스레드에서 승인한 뒤 cleanup transaction을 실행한다. 이슈가 처음 `CLOSED`여도 삭제 직전 또는 close 직전 `OPEN`으로 관측되면 같은 exact tuple 승인이 필요하다. 이미 `CLOSED`인 이슈는 검증된 no-op으로 처리한다.
 
 ## 타스크 진행 절차
 
@@ -73,10 +73,11 @@ Lifecycle 판단 결과가 승인되어 실제 파일 변경으로 넘어가면,
 9. 마지막 단계 보고서 commit과 작업지시자 승인이 완료된 뒤 최종 결과보고서 작성·검증과 오늘할일 갱신을 수행한다. 마지막 Stage와 최종 보고서를 한 commit으로 합치지 않는다.
 10. **최종 결과보고서(`_report.md`)와 오늘할일(`orders/`) 갱신을 타스크 브랜치에서 커밋한다.**
 11. 커밋 직후 즉시 멈추고, 같은 스레드에서 커밋된 최종 보고서와 수용 기준 검증 근거 승인 요청. 이전 단계 승인이나 task-final-report 호출 지시는 이 승인으로 대체되지 않는다.
-12. 새 승인을 받은 뒤 `publish/task{issue번호}`로 원격 push 후 `devel` 대상 Open PR 생성. PR 생성 전 반드시 `git status`로 미커밋 파일이 없는지 확인한다.
-13. 승인 요청 시 작업지시자가 피드백 문서를 `mydocs/feedback/`에 등록
-14. 모든 테스트 통과 시 피드백 없음
-15. PR merge 확인 후 `pr-merge-cleanup`으로 read-only preflight를 실행한다. 이슈가 `OPEN`이면 host, repository, repository ID, PR 번호, 이슈 번호, merged head OID, base/head refs, action `close-issue:completed` exact tuple을 같은 스레드에서 승인받은 뒤 cleanup 실행 fence에 해당 scalar 값을 입력한다. cleanup은 mutation 전과 close 직전에 tuple을 재검증하고, merge 완료된 `publish/task{issue번호}` 원격 브랜치와 재생성 가능한 로컬 부산물을 정리한 다음 마지막에 `gh issue close {번호} --reason completed`를 실행해 `CLOSED`를 확인한다. 이미 `CLOSED`인 이슈는 승인 없이 검증된 no-op으로 처리한다.
+12. 첫 번째 final report/evidence 승인을 받은 뒤에만 `task-final-report`가 private publication input을 만들고 두 번째 publication approval tuple을 출력한다. publication 승인은 원격 `devel` OID, final commit OID, report/orders blob OID, acceptance evidence SHA-256, title/body SHA-256, base `devel`, head `publish/task{issue번호}`를 정확히 묶는다. 허용되는 publication state는 `branch-absent-pr-absent`, `branch-exact-pr-absent`, `branch-exact-pr-exact` 세 가지뿐이다.
+13. 두 번째 publication 승인을 받은 뒤에만 `task-final-report`가 approved final OID를 `publish/task{issue번호}`에 게시하거나 기존 exact branch/PR을 재개한다. 일반 내부 task에서 직접 `git push` 또는 `gh pr create`를 실행하지 않는다. PR 생성 또는 재개 뒤에는 REST `GET /repos/jinzer0/GPUWatch/pulls/{number}`로 base/head SHA, refs, repository, non-draft Open state, title/body를 검증하고, read-only GraphQL `closingIssuesReferences`로 `Closes #N` 연결을 확인한다. GitHub GraphQL 호출은 HTTP POST transport를 쓰지만 mutation이 아니라 read-only query다.
+14. 승인 요청 시 작업지시자가 피드백 문서를 `mydocs/feedback/`에 등록
+15. 모든 테스트 통과 시 피드백 없음
+16. PR merge 확인 후 `pr-merge-cleanup`으로 read-only preflight를 실행한다. 이슈가 `OPEN`이면 host, repository, repository ID, PR 번호, 이슈 번호, merged head OID, base/head refs, action `close-issue:completed` exact tuple을 같은 스레드에서 승인받은 뒤 cleanup 실행 fence에 해당 scalar 값을 입력한다. cleanup은 삭제 직전과 close 직전에 PR/이슈 tuple과 이슈 상태를 다시 읽고, 각 경계에서 `OPEN`이면 exact tuple 승인이 있어야만 계속한다. merge 완료된 `publish/task{issue번호}` 원격 브랜치와 재생성 가능한 로컬 부산물을 정리한 다음 마지막에 `gh issue close {번호} --reason completed`를 실행해 `CLOSED`를 확인한다. 이미 `CLOSED`인 이슈는 승인 없이 검증된 no-op으로 처리한다.
 
 ## 작업 규칙
 
@@ -124,9 +125,9 @@ Skill 목록이나 사용자-facing 요약 문서가 별도 승인된 task로 �
 
 문서 구조 정책 검토나 manual 문서 중립성 판단은 그 자체로 별도 SKILL 호출 표시 대상이 아니다. 그 판단 결과로 이슈 등록, 타스크 시작, 단계 종료 같은 core Skill 절차를 실행할 때만 해당 Skill 호출 표시를 사용한다.
 
-`task-final-report`는 최종 보고서뿐 아니라 위 PR 본문 검증 구조까지 맞춰 Open PR을 게시하는 절차다.
+`task-final-report`는 최종 보고서뿐 아니라 위 PR 본문 검증 구조까지 맞춰 Open PR을 게시하는 유일한 일반 내부 task publication 절차다. release-specific 예외는 release 문서에서 승인된 경우에만 별도로 따른다.
 
-최종 보고서와 오늘할일 커밋 뒤에는 반드시 멈춘다. 작업지시자가 같은 스레드에서 최종 보고서와 수용 기준 검증 근거를 승인한 뒤에만 원격 push와 PR 생성을 시작한다.
+최종 보고서와 오늘할일 커밋 뒤에는 반드시 멈춘다. 작업지시자가 같은 스레드에서 최종 보고서와 수용 기준 검증 근거를 승인한 뒤에도 바로 원격 push나 PR 생성을 하지 않는다. 그 승인은 publication input 작성까지만 허용하며, 원격 mutation은 별도 publication tuple 승인 뒤에만 가능하다.
 
 설치·업데이트 lifecycle 판단 자체는 별도 하이퍼-워터폴 절차 호출 표시 대상이 아니다. 다만 그 결과로 GitHub Issue를 등록하거나 타스크를 시작하면 `task-register`, `task-start` 등 실제로 적용하는 core Skill의 호출 표시 원칙을 따른다.
 
