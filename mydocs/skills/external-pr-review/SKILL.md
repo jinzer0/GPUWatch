@@ -29,6 +29,10 @@ canonical origin을 확인한 뒤 정확한 `devel`과 pull ref를 fetch해 immu
 ```bash
 set -euo pipefail
 fail() { printf '%s\n' "$1" >&2; exit 1; }
+GIT_CONFIG_COUNT=1
+GIT_CONFIG_KEY_0=core.hooksPath
+GIT_CONFIG_VALUE_0=/dev/null
+export GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0
 export GIT_NO_REPLACE_OBJECTS=1
 test -z "$(git for-each-ref --format='%(refname)' refs/replace/)" || fail 'refs/replace/* must be absent'
 
@@ -86,11 +90,48 @@ write_private() {
   chmod 600 "$path"
   validate_file "$1"
 }
+validate_snapshot_member() {
+  local artifact path
+  artifact=$1
+  path="$SNAPSHOT_ROOT/$artifact"
+  test -f "$path" && test ! -L "$path" || return 1
+  test "$(stat -f '%u' "$path")" = "$CURRENT_UID" && test "$(stat -f '%l' "$path")" = 1 && test "$(stat -f '%Sp' "$path")" = '-rw-------'
+}
+validate_present_snapshot_membership() {
+  local artifact present_count
+  present_count=0
+  for artifact in $SNAPSHOT_ARTIFACTS; do
+    if test -e "$SNAPSHOT_ROOT/$artifact" || test -L "$SNAPSHOT_ROOT/$artifact"; then
+      validate_snapshot_member "$artifact" || return 1
+      present_count=$((present_count + 1))
+    fi
+  done
+  test "$(find "$SNAPSHOT_ROOT" -mindepth 1 -maxdepth 1 -print | LC_ALL=C wc -l | tr -d '[:space:]')" = "$present_count"
+}
+validate_snapshot_membership() {
+  local expected_count
+  validate_present_snapshot_membership || return 1
+  expected_count="$(printf '%s\n' $SNAPSHOT_ARTIFACTS | LC_ALL=C wc -l | tr -d '[:space:]')" || return 1
+  test "$(find "$SNAPSHOT_ROOT" -mindepth 1 -maxdepth 1 -print | LC_ALL=C wc -l | tr -d '[:space:]')" = "$expected_count"
+}
+remove_validated_snapshot_members() {
+  local artifact
+  validate_present_snapshot_membership || return 1
+  for artifact in $SNAPSHOT_ARTIFACTS; do
+    if test -e "$SNAPSHOT_ROOT/$artifact"; then rm -- "$SNAPSHOT_ROOT/$artifact" || return 1; fi
+  done
+  rmdir -- "$SNAPSHOT_ROOT"
+}
+cleanup_snapshot_root() {
+  validate_snapshot_membership || return 1
+  remove_validated_snapshot_members
+}
 cleanup_root() {
   local root
   root=$1
   valid_root "$root" || return 1
-  rm -rf -- "$root" || return 1
+  SNAPSHOT_ROOT=$root
+  remove_validated_snapshot_members || return 1
   test ! -e "$root"
 }
 
@@ -118,13 +159,15 @@ delete_ref_cas() {
   ref=$1
   oid=$2
   test -n "$ref" || return 0
+  if git -C "$REPO_ROOT" symbolic-ref --quiet "$ref" >/dev/null; then return 1; fi
   if git -C "$REPO_ROOT" show-ref --verify --quiet "$ref"; then
     test -n "$oid" || return 1
     actual="$(git -C "$REPO_ROOT" rev-parse "${ref}^{commit}")" || return 1
     test "$actual" = "$oid" || return 1
-    git -C "$REPO_ROOT" update-ref -d "$ref" "$oid" || return 1
+    git -C "$REPO_ROOT" update-ref --no-deref -d "$ref" "$oid" || return 1
   fi
   ! git -C "$REPO_ROOT" show-ref --verify --quiet "$ref"
+  ! git -C "$REPO_ROOT" symbolic-ref --quiet "$ref" >/dev/null
 }
 cleanup_capture_refs() {
   local failed
@@ -231,6 +274,10 @@ Step 1에서 모든 capture ref는 CAS 삭제되어야 한다. Step 2의 재검�
 
 ```bash
 set -euo pipefail
+GIT_CONFIG_COUNT=1
+GIT_CONFIG_KEY_0=core.hooksPath
+GIT_CONFIG_VALUE_0=/dev/null
+export GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0
 export GIT_NO_REPLACE_OBJECTS=1
 case "${PR_NUMBER:-}" in ''|*[!0-9]*) exit 1 ;; esac
 case "${REVIEW_ROUND:-}" in ''|0|*[!0-9]*) exit 1 ;; esac
@@ -248,7 +295,27 @@ test -d "$SNAPSHOT_ROOT" && test ! -L "$SNAPSHOT_ROOT"
 test "$(stat -f '%u' "$SNAPSHOT_ROOT")" = "$CURRENT_UID" && test "$(stat -f '%Sp' "$SNAPSHOT_ROOT")" = 'drwx------'
 REF_PREFIX="refs/gpuwatcher-external-review/$PR_NUMBER/$REVIEW_ROUND/$NONCE/"
 test -z "$(git -C "$REPO_ROOT" for-each-ref --format='%(refname)' "$REF_PREFIX")"
-rm -rf -- "$SNAPSHOT_ROOT"
+SNAPSHOT_ARTIFACTS='before.repository.json before.pull.json before.issue-comments.json before.issue-timeline.json before.reviews.json before.review-comments.json before.review-threads.json before.check-runs.json before.statuses.json before.diff before.canonical.json after.repository.json after.pull.json after.issue-comments.json after.issue-timeline.json after.reviews.json after.review-comments.json after.review-threads.json after.check-runs.json after.statuses.json after.diff after.canonical.json'
+validate_snapshot_member() {
+  local artifact path
+  artifact=$1
+  path="$SNAPSHOT_ROOT/$artifact"
+  test -f "$path" && test ! -L "$path"
+  test "$(stat -f '%u' "$path")" = "$CURRENT_UID" && test "$(stat -f '%l' "$path")" = 1 && test "$(stat -f '%Sp' "$path")" = '-rw-------'
+}
+validate_snapshot_membership() {
+  local artifact expected_count
+  expected_count="$(printf '%s\n' $SNAPSHOT_ARTIFACTS | LC_ALL=C wc -l | tr -d '[:space:]')"
+  test "$(find "$SNAPSHOT_ROOT" -mindepth 1 -maxdepth 1 -print | LC_ALL=C wc -l | tr -d '[:space:]')" = "$expected_count"
+  for artifact in $SNAPSHOT_ARTIFACTS; do validate_snapshot_member "$artifact" || return 1; done
+}
+cleanup_snapshot_root() {
+  local artifact
+  validate_snapshot_membership || return 1
+  for artifact in $SNAPSHOT_ARTIFACTS; do rm -- "$SNAPSHOT_ROOT/$artifact" || return 1; done
+  rmdir -- "$SNAPSHOT_ROOT"
+}
+cleanup_snapshot_root
 test ! -e "$SNAPSHOT_ROOT"
 printf 'temporary_refs=absent\nsnapshot_root=removed\n'
 ```
@@ -260,6 +327,10 @@ archive는 local document 정리이며 GitHub와 무관하다. final report가 c
 ```bash
 set -euo pipefail
 fail() { printf '%s\n' "$1" >&2; exit 1; }
+GIT_CONFIG_COUNT=1
+GIT_CONFIG_KEY_0=core.hooksPath
+GIT_CONFIG_VALUE_0=/dev/null
+export GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0
 export GIT_NO_REPLACE_OBJECTS=1
 case "${PR_NUMBER:-}" in ''|*[!0-9]*) fail 'PR_NUMBER must be decimal digits' ;; esac
 case "${REVIEW_ROUND:-}" in ''|0|*[!0-9]*) fail 'REVIEW_ROUND must be positive digits' ;; esac
@@ -382,6 +453,10 @@ printf '%s\n' "$APPROVAL_TUPLE"
 set -euo pipefail
 fail() { printf '%s\n' "$1" >&2; exit 1; }
 : "${APPROVAL_TUPLE:?}"
+GIT_CONFIG_COUNT=1
+GIT_CONFIG_KEY_0=core.hooksPath
+GIT_CONFIG_VALUE_0=/dev/null
+export GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0
 export GIT_NO_REPLACE_OBJECTS=1
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 test -z "$(git -C "$REPO_ROOT" for-each-ref --format='%(refname)' refs/replace/)" || fail 'refs/replace/* must be absent'
@@ -609,7 +684,7 @@ git -C "$REPO_ROOT" diff --cached --check
 test "$(git -C "$REPO_ROOT" symbolic-ref --quiet --short HEAD)" = "$LOCAL_BRANCH" || fail 'local branch changed before commit'
 test "$(git -C "$REPO_ROOT" rev-parse 'HEAD^{commit}')" = "$PARENT_OID" || fail 'archive parent changed before commit'
 EXPECTED_TREE="$(git -C "$REPO_ROOT" write-tree)"
-git -C "$REPO_ROOT" -c core.hooksPath=/dev/null commit --only -m "$COMMIT_SUBJECT" -m "Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)" -m "Co-authored-by: Sisyphus <clio-agent@sisyphuslabs.ai>" -- "${INDEX_PATHS[@]}"
+git -C "$REPO_ROOT" commit --only -m "$COMMIT_SUBJECT" -m "Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)" -m "Co-authored-by: Sisyphus <clio-agent@sisyphuslabs.ai>" -- "${INDEX_PATHS[@]}"
 COMMIT_SUCCEEDED=1
 HEAD_COMMIT="$(git -C "$REPO_ROOT" rev-parse 'HEAD^{commit}')"
 test "$(git -C "$REPO_ROOT" symbolic-ref --quiet --short HEAD)" = "$LOCAL_BRANCH" || fail 'committed branch differs from approval'

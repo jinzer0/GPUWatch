@@ -16,7 +16,7 @@
 
 - `pr_{번호}_review.md`, 필요 시 `pr_{번호}_review_impl.md`, `pr_{번호}_report.md`
 - 완료 기록은 `archives/pr_{번호}_round{양의 정수}/`로 옮긴다. archive는 cleanup 확인과 final report 작성 후, content-bound approval tuple의 same-thread 승인을 받아 실행한다. tuple은 named local branch, exact parent OID와 `External PR #{번호} Round {round}: 검토 기록 보관` subject도 bind한다.
-- Round 1 untracked source는 archive destination addition만 stage한다. tracked source는 source와 destination을 stage해 exact rename으로 처리한다. review/report/optional implementation의 mixed tracked/untracked state는 tuple의 per-file state와 같아야 한다. commit 전후 exact tree/name-status와 destination `100644` mode/blob을 검증하고 hook 실행 뒤 index와 worktree가 clean이어야 한다.
+- Round 1 untracked source는 archive destination addition만 stage한다. tracked source는 source와 destination을 stage해 exact rename으로 처리한다. review/report/optional implementation의 mixed tracked/untracked state는 tuple의 per-file state와 같아야 한다. commit 전후 exact tree/name-status와 destination `100644` mode/blob을 검증하고 exported `GIT_CONFIG_COUNT=1`, `GIT_CONFIG_KEY_0=core.hooksPath`, `GIT_CONFIG_VALUE_0=/dev/null` tuple로 hooks를 비활성화한 index와 worktree가 clean이어야 한다.
 
 ## 사용 템플릿
 
