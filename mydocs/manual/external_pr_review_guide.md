@@ -64,8 +64,8 @@ snapshot_root=removed
 7. diff hash와 byte/line count를 cleanup 직전에 재검증한다. 실패하면 snapshot root를 삭제하지 않고 final report도 작성하지 않는다.
 8. temporary refs가 absent인지 확인하고 snapshot root를 제거한다. 두 결과가 확인된 뒤에만 `pr_{번호}_report.md`를 작성한다.
 9. final report에 같은 identity line, `temporary_refs=absent`, `snapshot_root=removed`, timeline completeness, 최종 권고를 기록한다.
-10. archive approval tuple을 생성한다. tuple은 immutable snapshot identity, destination path, 모든 present source의 path, tracked/untracked state, SHA-256, byte length, optional implementation presence를 bind한다.
-11. 작업지시자가 같은 스레드에서 approval tuple 전체를 승인한 뒤에만 archive commit을 수행한다. Round 1 untracked source는 archive destination addition만 stage하고 tracked source는 source와 destination을 stage해 exact rename으로 처리한다. mixed state는 per-file tuple state와 정확히 일치해야 한다.
+10. archive approval tuple을 생성한다. tuple은 immutable snapshot identity, named local branch, exact parent OID, `External PR #{번호} Round {round}: 검토 기록 보관` subject, archive destination, 모든 present source의 path, tracked/untracked state, SHA-256, byte length, optional implementation presence를 bind한다. tuple 생성 시 index와 tracked worktree는 clean이어야 하고 worktree에는 승인 대상 untracked source 외 변경이 없어야 한다.
+11. 작업지시자가 같은 스레드에서 approval tuple 전체를 승인한 뒤에만 archive commit을 수행한다. Round 1 untracked source는 archive destination addition만 stage하고 tracked source는 source와 destination을 stage해 exact rename으로 처리한다. mixed state는 per-file tuple state와 정확히 일치해야 한다. commit 전후 branch/parent/subject와 exact staged/committed tree, name-status, destination `100644` mode/blob을 검증하고 hook 실행 뒤 repository-wide index와 worktree가 clean인지 확인한다.
 
 ## 머지 전 체크
 

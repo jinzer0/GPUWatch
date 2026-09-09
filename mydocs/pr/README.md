@@ -15,8 +15,8 @@
 ## 허용 파일명과 archive
 
 - `pr_{번호}_review.md`, 필요 시 `pr_{번호}_review_impl.md`, `pr_{번호}_report.md`
-- 완료 기록은 `archives/pr_{번호}_round{양의 정수}/`로 옮긴다. archive는 cleanup 확인과 final report 작성 후, content-bound approval tuple의 same-thread 승인을 받아 실행한다.
-- Round 1 untracked source는 archive destination addition만 stage한다. tracked source는 source와 destination을 stage해 exact rename으로 처리한다. review/report/optional implementation의 mixed tracked/untracked state는 tuple의 per-file state와 같아야 한다.
+- 완료 기록은 `archives/pr_{번호}_round{양의 정수}/`로 옮긴다. archive는 cleanup 확인과 final report 작성 후, content-bound approval tuple의 same-thread 승인을 받아 실행한다. tuple은 named local branch, exact parent OID와 `External PR #{번호} Round {round}: 검토 기록 보관` subject도 bind한다.
+- Round 1 untracked source는 archive destination addition만 stage한다. tracked source는 source와 destination을 stage해 exact rename으로 처리한다. review/report/optional implementation의 mixed tracked/untracked state는 tuple의 per-file state와 같아야 한다. commit 전후 exact tree/name-status와 destination `100644` mode/blob을 검증하고 hook 실행 뒤 index와 worktree가 clean이어야 한다.
 
 ## 사용 템플릿
 
@@ -31,7 +31,7 @@
 - issue timeline에서 linked-issue와 closing-reference evidence를 확인하고, 그 맥락을 canonical equality와 review/report 기록에 포함한다.
 - GitHub 접근은 read-only다. REST는 explicit `--method GET`만 허용하고 GraphQL은 read-only `query` POST만 허용한다. GitHub review, request-changes, comment, approve, merge, close, label, issue mutation은 이 폴더와 external-pr-review Skill의 범위 밖이다.
 - 모든 present review/report/implementation 문서는 `snapshot_schema`, `repository_host`, `repository_name`, `repository_id`, `pr_number`, `review_round`, `base_oid`, `diff_base_oid`, `head_oid`, `snapshot_sha256`, `diff_sha256`, `diff_bytes`, `diff_lines`의 exact `key=value` line을 각 key마다 한 줄만 포함한다. report는 `temporary_refs=absent`와 `snapshot_root=removed`도 각 한 줄 포함한다.
-- archive approval tuple은 immutable snapshot identity, destination path, 모든 present source path, tracked/untracked state, SHA-256, byte length, optional implementation presence 또는 absence를 bind한다.
+- archive approval tuple은 immutable snapshot identity, named local branch, exact parent OID와 commit subject, destination path, 모든 present source path, tracked/untracked state, SHA-256, byte length, optional implementation presence 또는 absence를 bind한다. tuple 생성 시 승인 대상 untracked source 외 worktree 변경을 허용하지 않는다.
 
 ## 반드시 포함할 내용
 
