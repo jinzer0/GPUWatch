@@ -10,12 +10,13 @@
 
 ## 작성 시점
 
-외부 기여 PR의 snapshot 수집, 정적 diff 검토, 최종 권고 또는 재검토 기록이 필요할 때 작성한다.
+외부 기여 PR의 schema v2 snapshot 수집, 정적 diff 검토, cleanup 확인 뒤 최종 권고, 또는 재검토 기록이 필요할 때 작성한다.
 
 ## 허용 파일명과 archive
 
 - `pr_{번호}_review.md`, 필요 시 `pr_{번호}_review_impl.md`, `pr_{번호}_report.md`
-- 완료 기록은 `archives/pr_{번호}_round{양의 정수}/`로 옮긴다. archive는 clean index에서 시작하고 exact staged path만 허용하며 partial move는 rollback한다.
+- 완료 기록은 `archives/pr_{번호}_round{양의 정수}/`로 옮긴다. archive는 cleanup 확인과 final report 작성 후, content-bound approval tuple의 same-thread 승인을 받아 실행한다.
+- Round 1 untracked source는 archive destination addition만 stage한다. tracked source는 source와 destination을 stage해 exact rename으로 처리한다. review/report/optional implementation의 mixed tracked/untracked state는 tuple의 per-file state와 같아야 한다.
 
 ## 사용 템플릿
 
@@ -26,12 +27,15 @@
 ## 고정 검토 계약
 
 - 대상은 `github.com/jinzer0/GPUWatch`, ID `1256824919`의 `OPEN`, non-draft, `devel` 대상 direct external fork뿐이다.
-- 증거 형식은 `review snapshot schema v2`다. repository/fork/base/diff-base/head identity, title/body/author/state/draft/labels, `requestedReviewers`, complete paginated comments/reviews/replies/threads/checks/statuses, check-run `total_count` equality, immutable diff SHA-256/bytes/lines/full read range, before/after equality를 기록한다.
-- GitHub review, request-changes, comment, approve, merge, close는 이 폴더와 external-pr-review Skill의 범위 밖이다.
+- 증거 형식은 `review snapshot schema v2`다. repository/fork/base/diff-base/head identity, title/body/author/state/draft/labels, `requestedReviewers`, complete paginated issue comments/issue timeline/reviews/replies/threads/checks/statuses, check-run `total_count` equality, immutable diff SHA-256/bytes/lines/full read range, before/after equality를 기록한다.
+- issue timeline에서 linked-issue와 closing-reference evidence를 확인하고, 그 맥락을 canonical equality와 review/report 기록에 포함한다.
+- GitHub 접근은 read-only다. REST는 explicit `--method GET`만 허용하고 GraphQL은 read-only `query` POST만 허용한다. GitHub review, request-changes, comment, approve, merge, close, label, issue mutation은 이 폴더와 external-pr-review Skill의 범위 밖이다.
+- 모든 present review/report/implementation 문서는 `snapshot_schema`, `repository_host`, `repository_name`, `repository_id`, `pr_number`, `review_round`, `base_oid`, `diff_base_oid`, `head_oid`, `snapshot_sha256`, `diff_sha256`, `diff_bytes`, `diff_lines`의 exact `key=value` line을 각 key마다 한 줄만 포함한다. report는 `temporary_refs=absent`와 `snapshot_root=removed`도 각 한 줄 포함한다.
+- archive approval tuple은 immutable snapshot identity, destination path, 모든 present source path, tracked/untracked state, SHA-256, byte length, optional implementation presence 또는 absence를 bind한다.
 
 ## 반드시 포함할 내용
 
-- findings, 검증 한계, 권고, 선택적 제안 feedback text, physical temp root/ref cleanup 또는 abandonment 결과를 남긴다.
+- findings, 검증 한계, 권고, 선택적 제안 feedback text, temporary refs absence, snapshot root removal 결과를 남긴다.
 
 ## 두면 안 되는 내용
 
@@ -41,4 +45,4 @@
 
 ## 다음 세션 AI가 복원해야 할 맥락
 
-검토한 exact repository/PR/OID, snapshot schema와 digest, 전체 diff 읽기 결과, findings, 검증 한계, 최종 권고, archive round를 복원해야 한다.
+검토한 exact repository/PR/OID, snapshot schema와 digest, 전체 diff 읽기 결과, timeline-derived linked-issue evidence, findings, 검증 한계, cleanup 결과, 최종 권고, archive round를 복원해야 한다.
