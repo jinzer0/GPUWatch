@@ -14,6 +14,8 @@
 - PR title은 target issue REST 응답에서 검증한 live title로 만든 정확한 `Task #N: <live issue title>` 한 줄이다.
 - PR body에는 target issue를 닫는 독립 줄 `Closes #N`이 있어야 한다.
 - 상세 내용은 `변경 내역`의 Stage 링크와 작업 문서 링크로 참조한다.
+- approval tuple의 title/body hash와 publication 뒤 API 검증 결과는 PR body에 넣지 않는다. hash는 두 번째 approval tuple에만 남기고 closing linkage는 `task-final-report` 성공 출력으로만 남긴다.
+- no-PR publication은 exact absence를 생성 직전 다시 확인하고 draft로 생성한다. POST가 반환한 exact number/node ID의 draft를 REST로 검증한 뒤에만 같은 PR을 ready로 전환하고 exact non-draft와 closing linkage를 검증한다.
 
 ## 섹션 구성
 
@@ -47,7 +49,7 @@
 
 - target issue를 닫는 독립 줄 `Closes #N`을 적는다.
 - `N`은 `task-final-report`가 검증한 `ISSUE_NUMBER`와 같아야 한다.
-- publication 뒤 mandatory read-only GraphQL `closingIssuesReferences` query가 canonical repository의 같은 issue 번호를 반환해야 한다. 이 GraphQL 호출은 HTTP POST transport를 쓰지만 mutation이 아니다.
+- publication 뒤 mandatory read-only GraphQL `closingIssuesReferences` query가 canonical repository의 같은 issue 번호를 반환해야 한다. 이 결과는 PR body가 아니라 `task-final-report`의 성공 출력에만 남긴다. 이 GraphQL 호출은 HTTP POST transport를 쓰지만 mutation이 아니다.
 
 `변경 내역`:
 
@@ -171,7 +173,6 @@ Closes #22
 | 항목 | 결과 | 근거 |
 |------|------|------|
 | GitHub Checks | OK | run 링크 또는 확인 시점 |
-| Closing issue linkage | OK | read-only GraphQL `closingIssuesReferences` query가 #22 반환 |
 
 ### 검증 한계
 

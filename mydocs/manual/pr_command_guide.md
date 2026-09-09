@@ -8,12 +8,14 @@
 
 `task-final-report`는 두 번 멈춘다.
 
-- final report/evidence 승인: 최종 보고서와 오늘할일 commit, report/orders blob OID, acceptance evidence SHA-256을 묶는다. 이 승인 전에는 publication input을 만들지 않는다.
-- publication 승인: canonical repository, `devel` OID, final commit OID, `publish/task{번호}`, PR title/body hash, publication state를 묶는다. 이 승인 전에는 원격 mutation을 하지 않는다.
+- final report/evidence 승인: regular/non-symlink/single-link working-tree mode `0644`, index/commit mode `100644`인 최종 보고서와 오늘할일 commit, report/orders blob OID, acceptance evidence SHA-256을 묶는다. 이 승인 전에는 publication input을 만들지 않으며, 이 승인은 private publication input 준비만 허용한다.
+- publication 승인: canonical repository, approved issue number/plan OID, `devel` OID, final commit OID, `publish/task{번호}`, PR title/body hash, exact publication state와 기존 PR number/node ID를 묶는다. 이 별도 승인이 있기 전에는 원격 mutation을 하지 않는다.
 
-publication state는 `branch-absent-pr-absent`, `branch-exact-pr-absent`, `branch-exact-pr-exact`만 허용한다. 기존 publish branch가 다른 OID를 가리키거나, Open PR의 base/head/repository/title/body가 exact 값과 다르면 재승인이 필요하다.
+publication state는 `branch-absent-pr-absent`, `branch-exact-pr-absent`, `branch-exact-pr-draft`, `branch-exact-pr-ready`만 허용한다. 모든 state의 matching PR을 조회하므로 duplicate, closed, branch 없는 PR, 다른 OID의 branch, base/head/repository/title/body/draft 불일치는 모두 실패한다. 승인 state와 실행 시작 state는 exact하게 같아야 하며 no-PR 승인은 동시에 나타난 PR을 adopt하지 않는다.
 
-PR title은 target issue REST 응답에서 읽은 live title로 만든 정확한 `Task #N: <live issue title>` 한 줄이다. PR body에는 target issue를 닫는 독립 줄 `Closes #N`이 있어야 한다. 이 줄은 publication 뒤 mandatory read-only GraphQL `closingIssuesReferences` query로 다시 확인한다. GitHub GraphQL 호출은 HTTP POST transport를 쓰지만 mutation이 아니라 read-only query다.
+PR title은 target issue REST 응답에서 읽은 live title로 만든 정확한 `Task #N: <live issue title>` 한 줄이다. PR body에는 target issue를 닫는 독립 줄 `Closes #N`과 approved final OID 링크가 있어야 한다. title/body hash는 approval tuple에만 두고, PR body 자체 hash나 publication 뒤 closing linkage 결과는 본문에 넣지 않는다.
+
+no-PR 승인은 생성 직전 absence를 재검증하고 draft PR을 만든다. 같은 uninterrupted shell이 POST 반환 number/node ID를 결박하고 exact draft REST GET을 통과한 뒤에만 그 node를 ready로 전환한다. 이후 exact non-draft REST GET과 read-only GraphQL `closingIssuesReferences`를 검증하며 linkage는 성공 출력에만 기록한다. create/ready mutation 뒤 interruption, 잘못된 응답/GET, duplicate 또는 state drift는 fresh preparation과 replacement publication 승인을 요구하고 persistent manifest나 fuzzy adoption을 사용하지 않는다.
 
 ## PR 본문 문서 링크 규칙
 
@@ -48,4 +50,5 @@ Stage별 요약은 Stage 제목을 단계 보고서로, 짧은 commit SHA를 com
 - 상대 링크, `blob/publish/task{번호}/...`, raw URL
 - `--fill`을 기본 PR 본문 방식으로 사용
 - first final report/evidence 승인만으로 publication을 시작하는 행위
-- 세 publication state 밖의 branch/PR 상태를 추정해 재개하는 행위
+- 네 publication state 밖의 branch/PR 상태를 추정해 재개하는 행위
+- absent 승인으로 실행 중 나타난 PR을 adopt하거나, create/ready ambiguity 뒤 이전 승인을 재사용하는 행위

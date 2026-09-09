@@ -53,26 +53,6 @@ raw URL 대신 `[파일명](https://github.com/jinzer0/GPUWatch/blob/{final_comm
 - 구현 계획서: [task_{milestone_slug}_{issue}_impl.md](https://github.com/jinzer0/GPUWatch/blob/{final_commit_oid}/mydocs/plans/task_{milestone_slug}_{issue}_impl.md)
 - 최종 보고서: [task_{milestone_slug}_{issue}_report.md](https://github.com/jinzer0/GPUWatch/blob/{final_commit_oid}/mydocs/report/task_{milestone_slug}_{issue}_report.md)
 
-### Publication 승인 근거
-
-<!--
-task-final-report가 출력한 exact tuple 값을 요약합니다.
-GraphQL closingIssuesReferences 확인은 GitHub API의 HTTP POST transport를 쓰지만 mutation이 아니라 read-only query입니다.
--->
-
-- final commit OID: `{final_commit_oid}`
-- approved plan OID: `{approved_plan_oid}`
-- final report path: `mydocs/report/task_{milestone_slug}_{issue}_report.md`
-- final report blob OID: `{final_report_blob_oid}`
-- orders path: `mydocs/orders/{yyyymmdd}.md`
-- orders blob OID: `{orders_blob_oid}`
-- acceptance evidence SHA-256: `{acceptance_evidence_sha256}`
-- devel OID: `{devel_oid}`
-- title SHA-256: `{title_sha256}`
-- body SHA-256: `{body_sha256}`
-- publication state: `{branch-absent-pr-absent | branch-exact-pr-absent | branch-exact-pr-exact}`
-- closing issue evidence: read-only GraphQL `closingIssuesReferences` returned `#<target issue number>`
-
 ## 핵심 리뷰 포인트
 
 <!-- 필요한 경우만 유지합니다. 최대 3개, 코드 블록은 각 20줄 이하로 제한합니다. 해당 없으면 섹션을 삭제합니다. -->
