@@ -16,7 +16,10 @@
 
 - `pr_{번호}_review.md`, 필요 시 `pr_{번호}_review_impl.md`, `pr_{번호}_report.md`
 - 완료 기록은 `archives/pr_{번호}_round{양의 정수}/`로 옮긴다. archive는 cleanup 확인과 final report 작성 후, content-bound approval tuple의 same-thread 승인을 받아 실행한다. tuple은 named local branch, exact parent OID와 `External PR #{번호} Round {round}: 검토 기록 보관` subject도 bind한다.
+- archive 실행은 승인된 review, report, optional implementation만 소유 resource로 취급한다. source, destination, index entry, file identity, mode, link count, SHA-256, byte length를 publication 전에 캡처하고, move와 staging 후 세 source의 post-stage 상태를 다시 검증한다. filesystem SHA-256과 byte 읽기는 `$REPO_ROOT` 기준 absolute path로 수행하고, blob 읽기는 `git -C "$REPO_ROOT"`에 repository-relative destination을 넘긴다.
 - Round 1 untracked source는 archive destination addition만 stage한다. tracked source는 source와 destination을 stage해 exact rename으로 처리한다. review/report/optional implementation의 mixed tracked/untracked state는 tuple의 per-file state와 같아야 한다. commit 전후 exact tree/name-status와 destination `100644` mode/blob을 검증하고 exported `GIT_CONFIG_COUNT=1`, `GIT_CONFIG_KEY_0=core.hooksPath`, `GIT_CONFIG_VALUE_0=/dev/null` tuple로 hooks를 비활성화한 index와 worktree가 clean이어야 한다.
+- publication은 full OID가 일치하는 direct local branch에만 `update-ref --stdin`의 `option no-deref` exact-old transaction으로 게시한다. competing direct ref, symbolic ref, missing ref, unreadable ref, filesystem drift, index drift가 보이면 rollback이나 정리를 강행하지 않고 competing state를 보존한다. outer signal이나 postcondition 실패 뒤 ref가 exact-new로 확인될 때만 같은 no-deref exact-old transaction으로 parent에 되돌린다.
+- archive rollback은 captured owned destination과 owned index path가 모두 replay될 때만 source, destination, index를 되돌린다. owned-resource 검증이 하나라도 실패하면 승인된 path 외 filesystem과 index를 건드리지 않는다.
 
 ## 사용 템플릿
 
@@ -31,7 +34,7 @@
 - issue timeline에서 linked-issue와 closing-reference evidence를 확인하고, 그 맥락을 canonical equality와 review/report 기록에 포함한다.
 - GitHub 접근은 read-only다. REST는 explicit `--method GET`만 허용하고 GraphQL은 read-only `query` POST만 허용한다. GitHub review, request-changes, comment, approve, merge, close, label, issue mutation은 이 폴더와 external-pr-review Skill의 범위 밖이다.
 - 모든 present review/report/implementation 문서는 `snapshot_schema`, `repository_host`, `repository_name`, `repository_id`, `pr_number`, `review_round`, `base_oid`, `diff_base_oid`, `head_oid`, `snapshot_sha256`, `diff_sha256`, `diff_bytes`, `diff_lines`의 exact `key=value` line을 각 key마다 한 줄만 포함한다. report는 `temporary_refs=absent`와 `snapshot_root=removed`도 각 한 줄 포함한다.
-- archive approval tuple은 immutable snapshot identity, named local branch, exact parent OID와 commit subject, destination path, 모든 present source path, tracked/untracked state, SHA-256, byte length, optional implementation presence 또는 absence를 bind한다. tuple 생성 시 승인 대상 untracked source 외 worktree 변경을 허용하지 않는다.
+- archive approval tuple은 immutable snapshot identity, named local branch, exact parent OID와 commit subject, destination path, 모든 present source path, tracked/untracked state, SHA-256, byte length, optional implementation presence 또는 absence를 bind한다. tuple 생성과 실행은 source/destination/index identity를 재검증하며, filesystem SHA-256과 byte 읽기는 `$REPO_ROOT` absolute path를 쓰고 blob 읽기는 `git -C "$REPO_ROOT"`에 repository-relative destination을 넘긴다. 승인 대상 untracked source 외 worktree 변경은 허용하지 않는다.
 
 ## 반드시 포함할 내용
 

@@ -34,7 +34,8 @@ GIT_CONFIG_KEY_0=core.hooksPath
 GIT_CONFIG_VALUE_0=/dev/null
 export GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0
 export GIT_NO_REPLACE_OBJECTS=1
-test -z "$(git for-each-ref --format='%(refname)' refs/replace/)" || fail 'refs/replace/* must be absent'
+REPLACE_REFS="$(git for-each-ref --format='%(refname)' refs/replace/)" || fail 'refs/replace/* could not be read'
+test -z "$REPLACE_REFS" || fail 'refs/replace/* must be absent'
 
 BASE_HOST=github.com
 BASE_REPOSITORY=jinzer0/GPUWatch
@@ -67,6 +68,7 @@ require_root() { valid_root "$1" || fail 'root validation failed'; }
 new_root() {
   umask 077
   ROOT="$(mktemp -d "$TMP_PARENT/gpuwatcher-external-pr${PR_NUMBER}-round${REVIEW_ROUND}-${NONCE}.XXXXXXXX")" || fail 'mktemp failed'
+  SNAPSHOT_ROOT_ID="$(stat -f '%d:%i' -- "$ROOT")" || fail 'snapshot root identity failed'
   ROOT="$(cd -P -- "$ROOT" && pwd -P)" || fail 'root resolve failed'
   chmod 700 "$ROOT"
   require_root "$ROOT"
@@ -97,6 +99,30 @@ validate_snapshot_member() {
   test -f "$path" && test ! -L "$path" || return 1
   test "$(stat -f '%u' "$path")" = "$CURRENT_UID" && test "$(stat -f '%l' "$path")" = 1 && test "$(stat -f '%Sp' "$path")" = '-rw-------'
 }
+claim_snapshot_root_for_cleanup() {
+  local root_identity current_identity claim_identity original_root
+  original_root=$SNAPSHOT_ROOT
+  root_identity=${SNAPSHOT_ROOT_ID:-}
+  case "$root_identity" in ''|*:*:*|:*|*:|*[!0-9:]*) return 1 ;; esac
+  test -d "$original_root" && test ! -L "$original_root" || return 1
+  current_identity="$(stat -f '%d:%i' -- "$original_root")" || return 1
+  test "$current_identity" = "$root_identity" || return 1
+  SNAPSHOT_CLAIM_ROOT="$original_root.cleanup.$$.${RANDOM:-0}"
+  test ! -e "$SNAPSHOT_CLAIM_ROOT" && test ! -L "$SNAPSHOT_CLAIM_ROOT" || return 1
+  mv -- "$original_root" "$SNAPSHOT_CLAIM_ROOT" || return 1
+  claim_identity="$(stat -f '%d:%i' -- "$SNAPSHOT_CLAIM_ROOT")" || return 1
+  test "$claim_identity" = "$root_identity" || return 1
+  test -d "$SNAPSHOT_CLAIM_ROOT" && test ! -L "$SNAPSHOT_CLAIM_ROOT" || return 1
+  SNAPSHOT_CLAIM_ORIGINAL_ROOT=$original_root
+  SNAPSHOT_ROOT=$SNAPSHOT_CLAIM_ROOT
+  SNAPSHOT_CLAIM_IDENTITY=$claim_identity
+}
+restore_snapshot_root_after_cleanup_failure() {
+  test -n "${SNAPSHOT_CLAIM_ORIGINAL_ROOT:-}" || return 1
+  test ! -e "$SNAPSHOT_CLAIM_ORIGINAL_ROOT" && test ! -L "$SNAPSHOT_CLAIM_ORIGINAL_ROOT" || return 1
+  test "$(stat -f '%d:%i' -- "$SNAPSHOT_ROOT")" = "$SNAPSHOT_CLAIM_IDENTITY" || return 1
+  mv -- "$SNAPSHOT_ROOT" "$SNAPSHOT_CLAIM_ORIGINAL_ROOT"
+}
 validate_present_snapshot_membership() {
   local artifact present_count
   present_count=0
@@ -112,31 +138,112 @@ validate_snapshot_membership() {
   local expected_count
   validate_present_snapshot_membership || return 1
   expected_count="$(printf '%s\n' $SNAPSHOT_ARTIFACTS | LC_ALL=C wc -l | tr -d '[:space:]')" || return 1
-  test "$(find "$SNAPSHOT_ROOT" -mindepth 1 -maxdepth 1 -print | LC_ALL=C wc -l | tr -d '[:space:]')" = "$expected_count"
+  test "$(find "$SNAPSHOT_ROOT" -mindepth 1 -maxdepth 1 -print | LC_ALL=C wc -l | tr -d '[:space:]')" = "$expected_count" || return 1
+}
+restore_claimed_snapshot_members() {
+  local member_index claimed_artifact artifact_path artifact_identity
+  member_index=$((SNAPSHOT_MEMBER_CLAIM_COUNT - 1))
+  while test "$member_index" -ge 0; do
+    claimed_artifact=${SNAPSHOT_MEMBER_CLAIMS[$member_index]}
+    artifact_path=${SNAPSHOT_MEMBER_ORIGINAL_PATHS[$member_index]}
+    artifact_identity=${SNAPSHOT_MEMBER_CLAIM_IDENTITIES[$member_index]}
+    test "$(stat -f '%d:%i:%u:%l:%Sp' -- "$claimed_artifact")" = "$artifact_identity" || return 1
+    test ! -e "$artifact_path" && test ! -L "$artifact_path" || return 1
+    mv -- "$claimed_artifact" "$artifact_path" || return 1
+    member_index=$((member_index - 1))
+  done
 }
 remove_validated_snapshot_members() {
-  local artifact
-  validate_present_snapshot_membership || return 1
+  local artifact current_identity artifact_path artifact_identity claimed_artifact member_index
+  SNAPSHOT_UNLINK_STARTED=0
+  member_index=0
   for artifact in $SNAPSHOT_ARTIFACTS; do
-    if test -e "$SNAPSHOT_ROOT/$artifact"; then rm -- "$SNAPSHOT_ROOT/$artifact" || return 1; fi
+    current_identity="$(stat -f '%d:%i' -- "$SNAPSHOT_ROOT")" || return 1
+    test "$current_identity" = "$SNAPSHOT_CLAIM_IDENTITY" || return 1
+    if test -e "$SNAPSHOT_ROOT/$artifact" || test -L "$SNAPSHOT_ROOT/$artifact"; then
+      artifact_path="$SNAPSHOT_ROOT/$artifact"
+      artifact_identity="${SNAPSHOT_MEMBER_IDENTITIES[$member_index]:-}" || return 1
+      test "$(stat -f '%d:%i:%u:%l:%Sp' -- "$artifact_path")" = "$artifact_identity" || return 1
+      claimed_artifact="$artifact_path.cleanup.$$.${RANDOM:-0}"
+      mv -- "$artifact_path" "$claimed_artifact" || return 1
+      if test "$(stat -f '%d:%i:%u:%l:%Sp' -- "$claimed_artifact")" != "$artifact_identity"; then
+        mv -- "$claimed_artifact" "$artifact_path" 2>/dev/null || :
+        return 1
+      fi
+      SNAPSHOT_MEMBER_CLAIMS[$SNAPSHOT_MEMBER_CLAIM_COUNT]=$claimed_artifact
+      SNAPSHOT_MEMBER_ORIGINAL_PATHS[$SNAPSHOT_MEMBER_CLAIM_COUNT]=$artifact_path
+      SNAPSHOT_MEMBER_CLAIM_IDENTITIES[$SNAPSHOT_MEMBER_CLAIM_COUNT]=$artifact_identity
+      SNAPSHOT_MEMBER_CLAIM_COUNT=$((SNAPSHOT_MEMBER_CLAIM_COUNT + 1))
+    fi
+    member_index=$((member_index + 1))
   done
-  rmdir -- "$SNAPSHOT_ROOT"
+  SNAPSHOT_UNLINK_STARTED=1
+  for claimed_artifact in "${SNAPSHOT_MEMBER_CLAIMS[@]}"; do rm -- "$claimed_artifact" || return 1; done
+  rmdir -- "$SNAPSHOT_ROOT" || return 1
 }
 cleanup_snapshot_root() {
-  validate_snapshot_membership || return 1
-  remove_validated_snapshot_members
+  local artifact member_index
+  declare -a SNAPSHOT_MEMBER_IDENTITIES SNAPSHOT_MEMBER_CLAIMS SNAPSHOT_MEMBER_ORIGINAL_PATHS SNAPSHOT_MEMBER_CLAIM_IDENTITIES
+  SNAPSHOT_MEMBER_CLAIM_COUNT=0
+  member_index=0
+  for artifact in $SNAPSHOT_ARTIFACTS; do
+    if test -e "$SNAPSHOT_ROOT/$artifact" || test -L "$SNAPSHOT_ROOT/$artifact"; then
+      validate_snapshot_member "$artifact" || return 1
+      SNAPSHOT_MEMBER_IDENTITIES[$member_index]="$(stat -f '%d:%i:%u:%l:%Sp' -- "$SNAPSHOT_ROOT/$artifact")" || return 1
+    else SNAPSHOT_MEMBER_IDENTITIES[$member_index]=missing; fi
+    member_index=$((member_index + 1))
+  done
+  claim_snapshot_root_for_cleanup || return 1
+  validate_snapshot_membership || { restore_claimed_snapshot_members || :; restore_snapshot_root_after_cleanup_failure || :; return 1; }
+  member_index=0
+  for artifact in $SNAPSHOT_ARTIFACTS; do
+    test "${SNAPSHOT_MEMBER_IDENTITIES[$member_index]}" != missing || { restore_claimed_snapshot_members || :; restore_snapshot_root_after_cleanup_failure || :; return 1; }
+    test "$(stat -f '%d:%i:%u:%l:%Sp' -- "$SNAPSHOT_ROOT/$artifact")" = "${SNAPSHOT_MEMBER_IDENTITIES[$member_index]}" || { restore_claimed_snapshot_members || :; restore_snapshot_root_after_cleanup_failure || :; return 1; }
+    member_index=$((member_index + 1))
+  done
+  remove_validated_snapshot_members || {
+    test "${SNAPSHOT_UNLINK_STARTED:-0}" = 1 && return 1
+    restore_claimed_snapshot_members || :
+    restore_snapshot_root_after_cleanup_failure || :
+    return 1
+  }
 }
 cleanup_root() {
-  local root
+  local root artifact member_index
+  declare -a SNAPSHOT_MEMBER_IDENTITIES SNAPSHOT_MEMBER_CLAIMS SNAPSHOT_MEMBER_ORIGINAL_PATHS SNAPSHOT_MEMBER_CLAIM_IDENTITIES
+  SNAPSHOT_MEMBER_CLAIM_COUNT=0
   root=$1
-  valid_root "$root" || return 1
   SNAPSHOT_ROOT=$root
-  remove_validated_snapshot_members || return 1
-  test ! -e "$root"
+  valid_root "$root" || return 1
+  member_index=0
+  for artifact in $SNAPSHOT_ARTIFACTS; do
+    if test -e "$SNAPSHOT_ROOT/$artifact" || test -L "$SNAPSHOT_ROOT/$artifact"; then
+      validate_snapshot_member "$artifact" || return 1
+      SNAPSHOT_MEMBER_IDENTITIES[$member_index]="$(stat -f '%d:%i:%u:%l:%Sp' -- "$SNAPSHOT_ROOT/$artifact")" || return 1
+    else SNAPSHOT_MEMBER_IDENTITIES[$member_index]=missing; fi
+    member_index=$((member_index + 1))
+  done
+  claim_snapshot_root_for_cleanup || return 1
+  validate_present_snapshot_membership || { restore_claimed_snapshot_members || :; restore_snapshot_root_after_cleanup_failure || :; return 1; }
+  member_index=0
+  for artifact in $SNAPSHOT_ARTIFACTS; do
+    if test "${SNAPSHOT_MEMBER_IDENTITIES[$member_index]}" != missing; then
+      test "$(stat -f '%d:%i:%u:%l:%Sp' -- "$SNAPSHOT_ROOT/$artifact")" = "${SNAPSHOT_MEMBER_IDENTITIES[$member_index]}" || { restore_claimed_snapshot_members || :; restore_snapshot_root_after_cleanup_failure || :; return 1; }
+    fi
+    member_index=$((member_index + 1))
+  done
+  remove_validated_snapshot_members || {
+    test "${SNAPSHOT_UNLINK_STARTED:-0}" = 1 && return 1
+    restore_claimed_snapshot_members || :
+    restore_snapshot_root_after_cleanup_failure || :
+    return 1
+  }
+  test ! -e "$SNAPSHOT_ROOT"
 }
 
 REPO_ROOT="$(git rev-parse --show-toplevel)" || fail 'not a git checkout'
-case "$(git -C "$REPO_ROOT" remote get-url origin)" in
+ORIGIN_URL="$(git -C "$REPO_ROOT" remote get-url origin)" || fail 'origin could not be read'
+case "$ORIGIN_URL" in
   https://github.com/jinzer0/GPUWatch|https://github.com/jinzer0/GPUWatch.git|git@github.com:jinzer0/GPUWatch|git@github.com:jinzer0/GPUWatch.git|ssh://git@github.com/jinzer0/GPUWatch|ssh://git@github.com/jinzer0/GPUWatch.git) ;;
   *) fail 'origin is not canonical GPUWatch' ;;
 esac
@@ -155,11 +262,16 @@ FETCHED_HEAD_OID=
 PRESERVE_ROOT=0
 
 delete_ref_cas() {
-  local ref oid actual
+  local ref oid actual symbolic_status
   ref=$1
   oid=$2
   test -n "$ref" || return 0
-  if git -C "$REPO_ROOT" symbolic-ref --quiet "$ref" >/dev/null; then return 1; fi
+  if git -C "$REPO_ROOT" symbolic-ref --quiet "$ref" >/dev/null; then
+    return 1
+  else
+    symbolic_status=$?
+  fi
+  test "$symbolic_status" = 1 || return 1
   if git -C "$REPO_ROOT" show-ref --verify --quiet "$ref"; then
     test -n "$oid" || return 1
     actual="$(git -C "$REPO_ROOT" rev-parse "${ref}^{commit}")" || return 1
@@ -167,7 +279,12 @@ delete_ref_cas() {
     git -C "$REPO_ROOT" update-ref --no-deref -d "$ref" "$oid" || return 1
   fi
   ! git -C "$REPO_ROOT" show-ref --verify --quiet "$ref"
-  ! git -C "$REPO_ROOT" symbolic-ref --quiet "$ref" >/dev/null
+  if git -C "$REPO_ROOT" symbolic-ref --quiet "$ref" >/dev/null; then
+    return 1
+  else
+    symbolic_status=$?
+  fi
+  test "$symbolic_status" = 1
 }
 cleanup_capture_refs() {
   local failed
@@ -197,7 +314,7 @@ trap cleanup_all EXIT
 trap on_capture_signal HUP INT TERM
 
 capture() {
-  local prefix metadata diff canonical base_oid head_oid diff_base_oid diff_sha256 diff_bytes diff_lines
+  local prefix metadata diff canonical base_oid head_oid fetched_base_actual fetched_head_actual diff_base_oid diff_sha256 diff_bytes diff_lines
   prefix=$1
   metadata="$(child "$prefix.pull.json")"
   diff="$(child "$prefix.diff")"
@@ -213,7 +330,7 @@ capture() {
   gh api --method GET --hostname "$BASE_HOST" --paginate --slurp -H 'Accept: application/vnd.github+json' "repos/$BASE_REPOSITORY/issues/$PR_NUMBER/timeline?per_page=100" | write_private "$prefix.issue-timeline.json"
   gh api --method GET --hostname "$BASE_HOST" --paginate --slurp "repos/$BASE_REPOSITORY/pulls/$PR_NUMBER/reviews?per_page=100" | write_private "$prefix.reviews.json"
   gh api --method GET --hostname "$BASE_HOST" --paginate --slurp "repos/$BASE_REPOSITORY/pulls/$PR_NUMBER/comments?per_page=100" | write_private "$prefix.review-comments.json"
-  gh api --hostname "$BASE_HOST" graphql --paginate --slurp -F owner=jinzer0 -F name=GPUWatch -F number="$PR_NUMBER" -f query='query($owner:String!,$name:String!,$number:Int!,$endCursor:String){repository(owner:$owner,name:$name){pullRequest(number:$number){reviewThreads(first:100,after:$endCursor){nodes{id,isResolved,isOutdated,comments(first:1){nodes{databaseId}} pageInfo{hasNextPage,endCursor}}}}}' | write_private "$prefix.review-threads.json"
+  gh api --hostname "$BASE_HOST" graphql --paginate --slurp -F owner=jinzer0 -F name=GPUWatch -F number="$PR_NUMBER" -f query='query($owner:String!,$name:String!,$number:Int!,$endCursor:String){repository(owner:$owner,name:$name){pullRequest(number:$number){reviewThreads(first:100,after:$endCursor){nodes{id,isResolved,isOutdated,comments(first:1){nodes{databaseId}}} pageInfo{hasNextPage,endCursor}}}}}' | write_private "$prefix.review-threads.json"
   gh api --method GET --hostname "$BASE_HOST" --paginate --slurp "repos/$BASE_REPOSITORY/commits/$head_oid/check-runs?per_page=100&filter=all" | write_private "$prefix.check-runs.json"
   gh api --method GET --hostname "$BASE_HOST" --paginate --slurp "repos/$BASE_REPOSITORY/commits/$head_oid/statuses?per_page=100" | write_private "$prefix.statuses.json"
   jq -se 'length == 5 and all(.[]; type == "array" and length > 0 and all(.[]; type == "array"))' "$(child "$prefix.issue-comments.json")" "$(child "$prefix.issue-timeline.json")" "$(child "$prefix.reviews.json")" "$(child "$prefix.review-comments.json")" "$(child "$prefix.statuses.json")" >/dev/null
@@ -226,8 +343,10 @@ capture() {
   FETCHED_HEAD_OID=$head_oid
   ! git -C "$REPO_ROOT" show-ref --verify --quiet "$FETCH_BASE_REF" && ! git -C "$REPO_ROOT" show-ref --verify --quiet "$FETCH_HEAD_REF" || fail 'temporary ref already exists'
   git -C "$REPO_ROOT" fetch --no-tags --no-write-fetch-head origin "refs/heads/devel:$FETCH_BASE_REF" "refs/pull/$PR_NUMBER/head:$FETCH_HEAD_REF"
-  test "$base_oid" = "$(git -C "$REPO_ROOT" rev-parse "${FETCH_BASE_REF}^{commit}")" && test "$head_oid" = "$(git -C "$REPO_ROOT" rev-parse "${FETCH_HEAD_REF}^{commit}")" || fail 'fetched OID differs from API metadata'
-  diff_base_oid="$(git -C "$REPO_ROOT" merge-base "$FETCHED_BASE_OID" "$FETCHED_HEAD_OID")"
+  fetched_base_actual="$(git -C "$REPO_ROOT" rev-parse "${FETCH_BASE_REF}^{commit}")" || fail 'fetched base OID could not be read'
+  fetched_head_actual="$(git -C "$REPO_ROOT" rev-parse "${FETCH_HEAD_REF}^{commit}")" || fail 'fetched head OID could not be read'
+  test "$base_oid" = "$fetched_base_actual" && test "$head_oid" = "$fetched_head_actual" || fail 'fetched OID differs from API metadata'
+  diff_base_oid="$(git -C "$REPO_ROOT" merge-base "$FETCHED_BASE_OID" "$FETCHED_HEAD_OID")" || fail 'merge base could not be read'
   git -C "$REPO_ROOT" -c core.attributesfile=/dev/null diff --no-ext-diff --no-textconv --binary --full-index "$diff_base_oid" "$FETCHED_HEAD_OID" | write_private "$prefix.diff"
   diff_sha256="$(shasum -a 256 "$diff" | cut -d' ' -f1)"
   diff_bytes="$(wc -c < "$diff" | tr -d ' ')"
@@ -248,7 +367,7 @@ DIFF_SHA256="$(jq -er '.diff.sha256' "$(child before.canonical.json)")"
 DIFF_BYTES="$(jq -er '.diff.bytes' "$(child before.canonical.json)")"
 DIFF_LINES="$(jq -er '.diff.lines' "$(child before.canonical.json)")"
 PRESERVE_ROOT=1
-printf 'snapshot_schema=%s\nrepository_host=%s\nrepository_name=%s\nrepository_id=%s\npr_number=%s\nreview_round=%s\nbase_oid=%s\ndiff_base_oid=%s\nhead_oid=%s\nsnapshot_sha256=%s\ndiff_sha256=%s\ndiff_bytes=%s\ndiff_lines=%s\nnonce=%s\nsnapshot_root=%s\ndiff=%s\nartifact_set=%s\n' "$SNAPSHOT_SCHEMA" "$BASE_HOST" "$BASE_REPOSITORY" "$BASE_REPOSITORY_ID" "$PR_NUMBER" "$REVIEW_ROUND" "$BASE_OID" "$DIFF_BASE_OID" "$HEAD_OID" "$SNAPSHOT_SHA256" "$DIFF_SHA256" "$DIFF_BYTES" "$DIFF_LINES" "$NONCE" "$ROOT" "$(child before.diff)" "$SNAPSHOT_ARTIFACTS"
+printf 'snapshot_schema=%s\nrepository_host=%s\nrepository_name=%s\nrepository_id=%s\npr_number=%s\nreview_round=%s\nbase_oid=%s\ndiff_base_oid=%s\nhead_oid=%s\nsnapshot_sha256=%s\ndiff_sha256=%s\ndiff_bytes=%s\ndiff_lines=%s\nnonce=%s\nsnapshot_root=%s\nsnapshot_root_identity=%s\ndiff=%s\nartifact_set=%s\n' "$SNAPSHOT_SCHEMA" "$BASE_HOST" "$BASE_REPOSITORY" "$BASE_REPOSITORY_ID" "$PR_NUMBER" "$REVIEW_ROUND" "$BASE_OID" "$DIFF_BASE_OID" "$HEAD_OID" "$SNAPSHOT_SHA256" "$DIFF_SHA256" "$DIFF_BYTES" "$DIFF_LINES" "$NONCE" "$ROOT" "$SNAPSHOT_ROOT_ID" "$(child before.diff)" "$SNAPSHOT_ARTIFACTS"
 trap - EXIT HUP INT TERM
 ```
 
@@ -283,9 +402,11 @@ case "${PR_NUMBER:-}" in ''|*[!0-9]*) exit 1 ;; esac
 case "${REVIEW_ROUND:-}" in ''|0|*[!0-9]*) exit 1 ;; esac
 case "${NONCE:-}" in ''|*[!0-9a-f]*) exit 1 ;; esac
 test "${#NONCE}" -eq 32
-: "${SNAPSHOT_ROOT:?}"
-REPO_ROOT="$(git rev-parse --show-toplevel)"
-test -z "$(git -C "$REPO_ROOT" for-each-ref --format='%(refname)' refs/replace/)" || exit 1
+: "${SNAPSHOT_ROOT:?}" "${SNAPSHOT_ROOT_ID:?}"
+case "$SNAPSHOT_ROOT_ID" in ''|*:*:*|:*|*:|*[!0-9:]*) exit 1 ;; esac
+REPO_ROOT="$(git rev-parse --show-toplevel)" || exit 1
+REPLACE_REFS="$(git -C "$REPO_ROOT" for-each-ref --format='%(refname)' refs/replace/)" || exit 1
+test -z "$REPLACE_REFS" || exit 1
 TMP_PARENT="$(cd -P -- "${TMPDIR:-/tmp}" && pwd -P)"
 CURRENT_UID="$(id -u)"
 SNAPSHOT_ROOT="$(cd -P -- "$SNAPSHOT_ROOT" && pwd -P)"
@@ -293,8 +414,10 @@ test "$(dirname -- "$SNAPSHOT_ROOT")" = "$TMP_PARENT"
 case "$(basename -- "$SNAPSHOT_ROOT")" in "gpuwatcher-external-pr${PR_NUMBER}-round${REVIEW_ROUND}-${NONCE}."????????) ;; *) exit 1 ;; esac
 test -d "$SNAPSHOT_ROOT" && test ! -L "$SNAPSHOT_ROOT"
 test "$(stat -f '%u' "$SNAPSHOT_ROOT")" = "$CURRENT_UID" && test "$(stat -f '%Sp' "$SNAPSHOT_ROOT")" = 'drwx------'
+test "$(stat -f '%d:%i' -- "$SNAPSHOT_ROOT")" = "$SNAPSHOT_ROOT_ID"
 REF_PREFIX="refs/gpuwatcher-external-review/$PR_NUMBER/$REVIEW_ROUND/$NONCE/"
-test -z "$(git -C "$REPO_ROOT" for-each-ref --format='%(refname)' "$REF_PREFIX")"
+CAPTURE_REFS="$(git -C "$REPO_ROOT" for-each-ref --format='%(refname)' "$REF_PREFIX")" || exit 1
+test -z "$CAPTURE_REFS"
 SNAPSHOT_ARTIFACTS='before.repository.json before.pull.json before.issue-comments.json before.issue-timeline.json before.reviews.json before.review-comments.json before.review-threads.json before.check-runs.json before.statuses.json before.diff before.canonical.json after.repository.json after.pull.json after.issue-comments.json after.issue-timeline.json after.reviews.json after.review-comments.json after.review-threads.json after.check-runs.json after.statuses.json after.diff after.canonical.json'
 validate_snapshot_member() {
   local artifact path
@@ -303,17 +426,90 @@ validate_snapshot_member() {
   test -f "$path" && test ! -L "$path"
   test "$(stat -f '%u' "$path")" = "$CURRENT_UID" && test "$(stat -f '%l' "$path")" = 1 && test "$(stat -f '%Sp' "$path")" = '-rw-------'
 }
+claim_snapshot_root_for_cleanup() {
+  local root_identity current_identity claim_identity original_root
+  original_root=$SNAPSHOT_ROOT
+  root_identity=${SNAPSHOT_ROOT_ID:-}
+  case "$root_identity" in ''|*:*:*|:*|*:|*[!0-9:]*) return 1 ;; esac
+  test -d "$original_root" && test ! -L "$original_root" || return 1
+  current_identity="$(stat -f '%d:%i' -- "$original_root")" || return 1
+  test "$current_identity" = "$root_identity" || return 1
+  SNAPSHOT_CLAIM_ROOT="$original_root.cleanup.$$.${RANDOM:-0}"
+  test ! -e "$SNAPSHOT_CLAIM_ROOT" && test ! -L "$SNAPSHOT_CLAIM_ROOT" || return 1
+  mv -- "$original_root" "$SNAPSHOT_CLAIM_ROOT" || return 1
+  claim_identity="$(stat -f '%d:%i' -- "$SNAPSHOT_CLAIM_ROOT")" || return 1
+  test "$claim_identity" = "$root_identity" || return 1
+  test -d "$SNAPSHOT_CLAIM_ROOT" && test ! -L "$SNAPSHOT_CLAIM_ROOT" || return 1
+  SNAPSHOT_CLAIM_ORIGINAL_ROOT=$original_root
+  SNAPSHOT_ROOT=$SNAPSHOT_CLAIM_ROOT
+  SNAPSHOT_CLAIM_IDENTITY=$claim_identity
+}
+restore_snapshot_root_after_cleanup_failure() {
+  test -n "${SNAPSHOT_CLAIM_ORIGINAL_ROOT:-}" || return 1
+  test ! -e "$SNAPSHOT_CLAIM_ORIGINAL_ROOT" && test ! -L "$SNAPSHOT_CLAIM_ORIGINAL_ROOT" || return 1
+  test "$(stat -f '%d:%i' -- "$SNAPSHOT_ROOT")" = "$SNAPSHOT_CLAIM_IDENTITY" || return 1
+  mv -- "$SNAPSHOT_ROOT" "$SNAPSHOT_CLAIM_ORIGINAL_ROOT"
+}
 validate_snapshot_membership() {
   local artifact expected_count
   expected_count="$(printf '%s\n' $SNAPSHOT_ARTIFACTS | LC_ALL=C wc -l | tr -d '[:space:]')"
-  test "$(find "$SNAPSHOT_ROOT" -mindepth 1 -maxdepth 1 -print | LC_ALL=C wc -l | tr -d '[:space:]')" = "$expected_count"
+  test "$(find "$SNAPSHOT_ROOT" -mindepth 1 -maxdepth 1 -print | LC_ALL=C wc -l | tr -d '[:space:]')" = "$expected_count" || return 1
   for artifact in $SNAPSHOT_ARTIFACTS; do validate_snapshot_member "$artifact" || return 1; done
 }
+restore_claimed_snapshot_members() {
+  local member_index claimed_artifact artifact_path artifact_identity
+  member_index=$((SNAPSHOT_MEMBER_CLAIM_COUNT - 1))
+  while test "$member_index" -ge 0; do
+    claimed_artifact=${SNAPSHOT_MEMBER_CLAIMS[$member_index]}
+    artifact_path=${SNAPSHOT_MEMBER_ORIGINAL_PATHS[$member_index]}
+    artifact_identity=${SNAPSHOT_MEMBER_CLAIM_IDENTITIES[$member_index]}
+    test "$(stat -f '%d:%i:%u:%l:%Sp' -- "$claimed_artifact")" = "$artifact_identity" || return 1
+    test ! -e "$artifact_path" && test ! -L "$artifact_path" || return 1
+    mv -- "$claimed_artifact" "$artifact_path" || return 1
+    member_index=$((member_index - 1))
+  done
+}
 cleanup_snapshot_root() {
-  local artifact
-  validate_snapshot_membership || return 1
-  for artifact in $SNAPSHOT_ARTIFACTS; do rm -- "$SNAPSHOT_ROOT/$artifact" || return 1; done
-  rmdir -- "$SNAPSHOT_ROOT"
+  local artifact current_identity artifact_path artifact_identity claimed_artifact member_index
+  declare -a SNAPSHOT_MEMBER_IDENTITIES SNAPSHOT_MEMBER_CLAIMS SNAPSHOT_MEMBER_ORIGINAL_PATHS SNAPSHOT_MEMBER_CLAIM_IDENTITIES
+  SNAPSHOT_UNLINK_STARTED=0
+  SNAPSHOT_MEMBER_CLAIM_COUNT=0
+  member_index=0
+  for artifact in $SNAPSHOT_ARTIFACTS; do
+    validate_snapshot_member "$artifact" || return 1
+    SNAPSHOT_MEMBER_IDENTITIES[$member_index]="$(stat -f '%d:%i:%u:%l:%Sp' -- "$SNAPSHOT_ROOT/$artifact")" || return 1
+    member_index=$((member_index + 1))
+  done
+  claim_snapshot_root_for_cleanup || return 1
+  validate_snapshot_membership || { restore_claimed_snapshot_members || :; restore_snapshot_root_after_cleanup_failure || :; return 1; }
+  member_index=0
+  for artifact in $SNAPSHOT_ARTIFACTS; do
+    test "$(stat -f '%d:%i:%u:%l:%Sp' -- "$SNAPSHOT_ROOT/$artifact")" = "${SNAPSHOT_MEMBER_IDENTITIES[$member_index]}" || { restore_claimed_snapshot_members || :; restore_snapshot_root_after_cleanup_failure || :; return 1; }
+    member_index=$((member_index + 1))
+  done
+  member_index=0
+  for artifact in $SNAPSHOT_ARTIFACTS; do
+    current_identity="$(stat -f '%d:%i' -- "$SNAPSHOT_ROOT")" || return 1
+    test "$current_identity" = "$SNAPSHOT_CLAIM_IDENTITY" || return 1
+    artifact_path="$SNAPSHOT_ROOT/$artifact"
+    artifact_identity="${SNAPSHOT_MEMBER_IDENTITIES[$member_index]}"
+    claimed_artifact="$artifact_path.cleanup.$$.${RANDOM:-0}"
+    mv -- "$artifact_path" "$claimed_artifact" || { restore_claimed_snapshot_members || :; restore_snapshot_root_after_cleanup_failure || :; return 1; }
+    if test "$(stat -f '%d:%i:%u:%l:%Sp' -- "$claimed_artifact")" != "$artifact_identity"; then
+      mv -- "$claimed_artifact" "$artifact_path" 2>/dev/null || :
+      restore_claimed_snapshot_members || :
+      restore_snapshot_root_after_cleanup_failure || :
+      return 1
+    fi
+    SNAPSHOT_MEMBER_CLAIMS[$SNAPSHOT_MEMBER_CLAIM_COUNT]=$claimed_artifact
+    SNAPSHOT_MEMBER_ORIGINAL_PATHS[$SNAPSHOT_MEMBER_CLAIM_COUNT]=$artifact_path
+    SNAPSHOT_MEMBER_CLAIM_IDENTITIES[$SNAPSHOT_MEMBER_CLAIM_COUNT]=$artifact_identity
+    SNAPSHOT_MEMBER_CLAIM_COUNT=$((SNAPSHOT_MEMBER_CLAIM_COUNT + 1))
+    member_index=$((member_index + 1))
+  done
+  SNAPSHOT_UNLINK_STARTED=1
+  for claimed_artifact in "${SNAPSHOT_MEMBER_CLAIMS[@]}"; do rm -- "$claimed_artifact" || return 1; done
+  rmdir -- "$SNAPSHOT_ROOT" || return 1
 }
 cleanup_snapshot_root
 test ! -e "$SNAPSHOT_ROOT"
@@ -344,13 +540,14 @@ case "$BASE_OID:$DIFF_BASE_OID:$HEAD_OID" in *[!0-9a-f:]*|*::*) fail 'OID invali
 test "${#SNAPSHOT_SHA256}" = 64 && test "${#DIFF_SHA256}" = 64 && test "${#BASE_OID}" = 40 && test "${#DIFF_BASE_OID}" = 40 && test "${#HEAD_OID}" = 40 || fail 'identity length invalid'
 case "$DIFF_BYTES:$DIFF_LINES" in *[!0-9:]*|*::*) fail 'diff count invalid' ;; esac
 
-REPO_ROOT="$(git rev-parse --show-toplevel)"
-test -z "$(git -C "$REPO_ROOT" for-each-ref --format='%(refname)' refs/replace/)" || fail 'refs/replace/* must be absent'
+REPO_ROOT="$(git rev-parse --show-toplevel)" || fail 'not a git checkout'
+REPLACE_REFS="$(git -C "$REPO_ROOT" for-each-ref --format='%(refname)' refs/replace/)" || fail 'refs/replace/* could not be read'
+test -z "$REPLACE_REFS" || fail 'refs/replace/* must be absent'
 git -C "$REPO_ROOT" diff --cached --quiet || fail 'index is not clean'
 git -C "$REPO_ROOT" diff --quiet || fail 'tracked worktree is not clean'
 LOCAL_BRANCH="$(git -C "$REPO_ROOT" symbolic-ref --quiet --short HEAD)" || fail 'archive preparation requires a named local branch'
 test -n "$LOCAL_BRANCH" || fail 'local branch is empty'
-PARENT_OID="$(git -C "$REPO_ROOT" rev-parse 'HEAD^{commit}')"
+PARENT_OID="$(git -C "$REPO_ROOT" rev-parse 'HEAD^{commit}')" || fail 'parent OID could not be read'
 case "$PARENT_OID" in *[!0-9a-f]*|'') fail 'parent OID invalid' ;; esac
 test "${#PARENT_OID}" = 40 || fail 'parent OID length invalid'
 COMMIT_SUBJECT="External PR #${PR_NUMBER} Round ${REVIEW_ROUND}: 검토 기록 보관"
@@ -398,12 +595,15 @@ require_report_cleanup() {
   require_exact_line "$1" 'snapshot_root=removed'
 }
 source_state() {
-  if git -C "$REPO_ROOT" ls-files --error-unmatch -- "$1" >/dev/null 2>&1; then
+  local tracked_entry untracked_path
+  tracked_entry="$(git -C "$REPO_ROOT" ls-files --stage -- "$1")" || return 1
+  if test -n "$tracked_entry"; then
     git -C "$REPO_ROOT" diff --quiet -- "$1" || fail 'tracked source has unstaged changes'
     git -C "$REPO_ROOT" diff --cached --quiet -- "$1" || fail 'tracked source has staged changes'
     printf '%s\n' tracked
   else
-    test "$(git -C "$REPO_ROOT" ls-files --others --exclude-standard -- "$1")" = "$1" || fail 'source is not an untracked file'
+    untracked_path="$(git -C "$REPO_ROOT" ls-files --others --exclude-standard -- "$1")" || return 1
+    test "$untracked_path" = "$1" || return 1
     printf '%s\n' untracked
   fi
 }
@@ -437,7 +637,7 @@ for source_tuple_json in "$REVIEW_TUPLE" "$REPORT_TUPLE" "$IMPLEMENTATION_TUPLE"
     EXPECTED_WORKTREE="${EXPECTED_WORKTREE}?? ${source_path}\n"
   fi
 done
-ACTUAL_WORKTREE="$(git -C "$REPO_ROOT" status --porcelain=v1 --untracked-files=all | LC_ALL=C sort)"
+ACTUAL_WORKTREE="$(git -C "$REPO_ROOT" status --porcelain=v1 --untracked-files=all | LC_ALL=C sort)" || fail 'worktree status could not be read'
 EXPECTED_WORKTREE="$(printf '%b' "$EXPECTED_WORKTREE" | LC_ALL=C sort)"
 test "$ACTUAL_WORKTREE" = "$EXPECTED_WORKTREE" || fail 'worktree contains changes outside approved sources'
 
@@ -447,7 +647,7 @@ printf '%s\n' "$APPROVAL_TUPLE"
 
 ### 5. Archive 실행
 
-`APPROVAL_TUPLE`에는 Step 4에서 출력되고 같은 스레드에서 승인된 JSON byte를 변경 없이 넣는다. 이 block은 tuple schema, branch/parent/subject identity, optional-file presence, every source path/state/hash/byte count와 destination을 move 전과 commit 후 다시 검증한다. Round 1의 untracked source는 archive destination additions만 stage한다. tracked source는 source와 destination을 stage하여 exact `R100` rename만 허용한다. mixed state는 tuple의 per-file state와 정확히 일치해야 한다. staging 후 expected tree와 `100644` destination blob을 고정하고, hooks를 비활성화한 commit 뒤에도 exact branch/parent/subject/tree/name-status/mode/blob과 clean index/worktree를 확인한다.
+`APPROVAL_TUPLE`에는 Step 4에서 출력되고 같은 스레드에서 승인된 JSON byte를 변경 없이 넣는다. 이 block은 tuple schema, branch/parent/subject identity, optional-file presence, every source path/state/hash/byte count와 destination을 move 전과 commit 후 다시 검증한다. Round 1의 untracked source는 archive destination additions만 stage한다. tracked source는 source와 destination을 stage하여 exact `R100` rename만 허용한다. mixed state는 tuple의 per-file state와 정확히 일치해야 한다. staging 후 expected tree와 `100644` destination blob을 고정하고, `commit-tree`로 만든 commit을 exact-old `update-ref --stdin` no-deref transaction으로만 branch에 게시한다. ref advance 뒤에는 이미 stage된 index가 새 HEAD와 일치하는지 확인하고 branch/parent/subject/tree/name-status/mode/blob과 clean index/worktree를 확인한다.
 
 ```bash
 set -euo pipefail
@@ -458,8 +658,9 @@ GIT_CONFIG_KEY_0=core.hooksPath
 GIT_CONFIG_VALUE_0=/dev/null
 export GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0
 export GIT_NO_REPLACE_OBJECTS=1
-REPO_ROOT="$(git rev-parse --show-toplevel)"
-test -z "$(git -C "$REPO_ROOT" for-each-ref --format='%(refname)' refs/replace/)" || fail 'refs/replace/* must be absent'
+REPO_ROOT="$(git rev-parse --show-toplevel)" || fail 'not a git checkout'
+REPLACE_REFS="$(git -C "$REPO_ROOT" for-each-ref --format='%(refname)' refs/replace/)" || fail 'refs/replace/* could not be read'
+test -z "$REPLACE_REFS" || fail 'refs/replace/* must be absent'
 git -C "$REPO_ROOT" diff --cached --quiet || fail 'index is not clean'
 git -C "$REPO_ROOT" diff --quiet || fail 'tracked worktree is not clean'
 
@@ -506,7 +707,8 @@ REPORT_DESTINATION="$(tuple '.sources.report.destination')"
 IMPLEMENTATION_DESTINATION="$(tuple '.sources.implementation.destination')"
 CURRENT_BRANCH="$(git -C "$REPO_ROOT" symbolic-ref --quiet --short HEAD)" || fail 'archive execution requires a named local branch'
 test "$CURRENT_BRANCH" = "$LOCAL_BRANCH" || fail 'local branch differs from approval'
-test "$(git -C "$REPO_ROOT" rev-parse 'HEAD^{commit}')" = "$PARENT_OID" || fail 'archive parent differs from approval'
+CURRENT_PARENT="$(git -C "$REPO_ROOT" rev-parse 'HEAD^{commit}')" || fail 'archive parent could not be read'
+test "$CURRENT_PARENT" = "$PARENT_OID" || fail 'archive parent differs from approval'
 test ! -e "$REPO_ROOT/$ARCHIVE" || fail 'archive already exists'
 
 require_exact_line() {
@@ -541,7 +743,7 @@ require_report_cleanup() {
 }
 
 validate_approved_source() {
-  local role path destination expected_path expected_destination expected_state expected_sha expected_bytes actual_state actual_sha actual_bytes
+  local role path destination expected_path expected_destination expected_state expected_sha expected_bytes actual_state actual_sha actual_bytes tracked_entry untracked_path
   role=$1
   path=$2
   destination=$3
@@ -552,12 +754,14 @@ validate_approved_source() {
   test "$(tuple ".sources.$role.present")" = true || fail 'required source is absent from tuple'
   test -f "$REPO_ROOT/$path" && test ! -L "$REPO_ROOT/$path" && test "$(stat -f '%l' "$REPO_ROOT/$path")" = 1 || fail 'source is not a private regular file'
   require_document_identity "$path"
-  if git -C "$REPO_ROOT" ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
+  tracked_entry="$(git -C "$REPO_ROOT" ls-files --stage -- "$path")" || return 1
+  if test -n "$tracked_entry"; then
     git -C "$REPO_ROOT" diff --quiet -- "$path" || fail 'tracked source changed'
     git -C "$REPO_ROOT" diff --cached --quiet -- "$path" || fail 'tracked source staged'
     actual_state=tracked
   else
-    test "$(git -C "$REPO_ROOT" ls-files --others --exclude-standard -- "$path")" = "$path" || fail 'untracked source changed state'
+    untracked_path="$(git -C "$REPO_ROOT" ls-files --others --exclude-standard -- "$path")" || return 1
+    test "$untracked_path" = "$path" || return 1
     actual_state=untracked
   fi
   expected_state="$(tuple ".sources.$role.state")"
@@ -590,9 +794,262 @@ for role in review report implementation; do
     EXPECTED_WORKTREE="${EXPECTED_WORKTREE}?? ${source_path}\n"
   fi
 done
-ACTUAL_WORKTREE="$(git -C "$REPO_ROOT" status --porcelain=v1 --untracked-files=all | LC_ALL=C sort)"
+ACTUAL_WORKTREE="$(git -C "$REPO_ROOT" status --porcelain=v1 --untracked-files=all | LC_ALL=C sort)" || fail 'worktree status could not be read'
 EXPECTED_WORKTREE="$(printf '%b' "$EXPECTED_WORKTREE" | LC_ALL=C sort)"
 test "$ACTUAL_WORKTREE" = "$EXPECTED_WORKTREE" || fail 'worktree differs from approved source state'
+
+ARCHIVE_BRANCH_REF="refs/heads/$LOCAL_BRANCH"
+archive_validate_direct_branch_ref() {
+  local expected_oid symbolic_status ref_record
+  expected_oid=$1
+  if git -C "$REPO_ROOT" symbolic-ref --quiet "$ARCHIVE_BRANCH_REF" >/dev/null; then
+    return 1
+  else
+    symbolic_status=$?
+  fi
+  test "$symbolic_status" = 1 || return 1
+  ref_record="$(git -C "$REPO_ROOT" for-each-ref --format='%(refname) %(objectname) symref=%(symref)' "$ARCHIVE_BRANCH_REF")" || return 1
+  test "$ref_record" = "$ARCHIVE_BRANCH_REF $expected_oid symref="
+}
+archive_update_branch_ref_transaction() {
+  (
+  local new_oid=$1 old_oid=$2
+   archive_validate_direct_branch_ref "$old_oid" || return 1
+   ARCHIVE_TRANSACTION_DIR="$(mktemp -d "${TMPDIR:-/tmp}/gpuwatcher-ref-transaction.XXXXXX")" || return 1
+   ARCHIVE_TRANSACTION_FINALIZED=0
+   trap archive_finish_ref_transaction EXIT
+   trap archive_signal_cleanup_ref_transaction HUP INT TERM
+   ARCHIVE_TRANSACTION_DIR_UID="$(id -u)" || return 1
+  case "$ARCHIVE_TRANSACTION_DIR_UID" in *[!0-9]*|'') return 1 ;; esac
+  chmod 700 "$ARCHIVE_TRANSACTION_DIR" || return 1
+  ARCHIVE_TRANSACTION_DIR_IDENTITY="$(stat -f '%d:%i' -- "$ARCHIVE_TRANSACTION_DIR")" || return 1
+  ARCHIVE_TRANSACTION_INPUT_PIPE="$ARCHIVE_TRANSACTION_DIR/input"
+  ARCHIVE_TRANSACTION_RESPONSE_FILE="$ARCHIVE_TRANSACTION_DIR/response"
+  ARCHIVE_TRANSACTION_ERROR_FILE="$ARCHIVE_TRANSACTION_DIR/error"
+  ARCHIVE_TRANSACTION_GIT="$(type -P git)" || return 1
+  test -n "$ARCHIVE_TRANSACTION_GIT" && test -x "$ARCHIVE_TRANSACTION_GIT" || return 1
+  archive_validate_ref_transaction_directory() {
+    local transaction_dir=$1 directory_metadata
+    test -n "${ARCHIVE_TRANSACTION_DIR_IDENTITY:-}" || return 1
+    test -n "${ARCHIVE_TRANSACTION_DIR_UID:-}" || return 1
+    test -d "$transaction_dir" && test ! -L "$transaction_dir" || return 1
+    directory_metadata="$(stat -f '%d:%i:%u:%Lp' -- "$transaction_dir")" || return 1
+    test "$directory_metadata" = "$ARCHIVE_TRANSACTION_DIR_IDENTITY:$ARCHIVE_TRANSACTION_DIR_UID:700"
+  }
+  archive_validate_ref_transaction_members() {
+    local transaction_dir=$1 member member_identity
+    local transaction_members=()
+    archive_validate_ref_transaction_directory "$transaction_dir" || return 1
+    shopt -s nullglob dotglob
+    transaction_members=("$transaction_dir"/*)
+    test "${#transaction_members[@]}" = 3 || return 1
+    for member in "${transaction_members[@]}"; do
+      case "$member" in
+        "$transaction_dir/input"|"$transaction_dir/response"|"$transaction_dir/error") ;;
+        *) return 1 ;;
+      esac
+    done
+    test -p "$transaction_dir/input" && test ! -L "$transaction_dir/input" || return 1
+    member_identity="$(stat -f '%d:%i:%u:%Lp:%l' -- "$transaction_dir/input")" || return 1
+    test "$member_identity" = "$ARCHIVE_TRANSACTION_INPUT_IDENTITY" || return 1
+    test -f "$transaction_dir/response" && test ! -L "$transaction_dir/response" || return 1
+    member_identity="$(stat -f '%d:%i:%u:%Lp:%l' -- "$transaction_dir/response")" || return 1
+    test "$member_identity" = "$ARCHIVE_TRANSACTION_RESPONSE_IDENTITY" || return 1
+    test -f "$transaction_dir/error" && test ! -L "$transaction_dir/error" || return 1
+    member_identity="$(stat -f '%d:%i:%u:%Lp:%l' -- "$transaction_dir/error")" || return 1
+    test "$member_identity" = "$ARCHIVE_TRANSACTION_ERROR_IDENTITY"
+  }
+  archive_validate_transaction_process_identity() {
+    case "${ARCHIVE_TRANSACTION_PID:-}" in *[!0-9]*|'') return 1 ;; esac
+    case "${ARCHIVE_TRANSACTION_PGID:-}" in *[!0-9]*|'') return 1 ;; esac
+    case "${ARCHIVE_TRANSACTION_PARENT_PGID:-}" in *[!0-9]*|'') return 1 ;; esac
+    test "$ARCHIVE_TRANSACTION_PID" = "$ARCHIVE_TRANSACTION_PGID" || return 1
+    test "$ARCHIVE_TRANSACTION_PGID" != "$ARCHIVE_TRANSACTION_PARENT_PGID"
+  }
+  archive_transaction_child_reapable() {
+    local child_state
+    child_state="$(ps -p "$ARCHIVE_TRANSACTION_PID" -o state= 2>/dev/null | tr -d '[:space:]')" || child_state=
+    case "$child_state" in ""|Z*) return 0 ;; *) return 1 ;; esac
+  }
+  archive_transaction_group_snapshot() {
+    local group_snapshot group_status snapshot_line member_pid member_pgid member_state member_extra
+    archive_validate_transaction_process_identity || return 1
+    if archive_transaction_child_reapable; then
+      ARCHIVE_TRANSACTION_LEADER_REAPABLE=1
+    else
+      ARCHIVE_TRANSACTION_LEADER_REAPABLE=0
+    fi
+    ARCHIVE_TRANSACTION_GROUP_LIVE=0
+    group_snapshot="$(LC_ALL=C ps -g "$ARCHIVE_TRANSACTION_PGID" -o pid=,pgid=,state= 2>/dev/null)"
+    group_status=$?
+    if test "$group_status" != 0; then
+      test -z "$group_snapshot" && test "$ARCHIVE_TRANSACTION_LEADER_REAPABLE" = 1 || return 1
+    fi
+    while IFS= read -r snapshot_line; do
+      test -n "$snapshot_line" || continue
+      IFS=$' \t' read -r member_pid member_pgid member_state member_extra <<< "$snapshot_line"
+      test -n "$member_pid" && test -n "$member_pgid" && test -n "$member_state" && test -z "$member_extra" || return 1
+      case "$member_pid" in *[!0-9]*|'') return 1 ;; esac
+      case "$member_pgid" in *[!0-9]*|'') return 1 ;; esac
+      case "$member_state" in *[!A-Za-z+]*|'') return 1 ;; esac
+      test "$member_pgid" = "$ARCHIVE_TRANSACTION_PGID" || continue
+      case "$member_state" in Z*) ;; *) ARCHIVE_TRANSACTION_GROUP_LIVE=1 ;; esac
+    done <<< "$group_snapshot"
+    return 0
+  }
+  archive_reap_transaction_child() {
+    local attempt wait_status
+    test -n "${ARCHIVE_TRANSACTION_PID:-}" || return 0
+    archive_validate_transaction_process_identity || return 1
+    archive_transaction_group_snapshot || return 1
+    if test "$ARCHIVE_TRANSACTION_GROUP_LIVE" = 1; then
+      kill -TERM -- "-$ARCHIVE_TRANSACTION_PGID" 2>/dev/null || :
+      /bin/sleep 0.05 || return 1
+      archive_transaction_group_snapshot || return 1
+      if test "$ARCHIVE_TRANSACTION_GROUP_LIVE" = 1; then
+        kill -KILL -- "-$ARCHIVE_TRANSACTION_PGID" 2>/dev/null || :
+        /bin/sleep 0.10 || return 1
+        archive_transaction_group_snapshot || return 1
+      fi
+    fi
+    test "$ARCHIVE_TRANSACTION_GROUP_LIVE" = 0 || return 1
+    wait "$ARCHIVE_TRANSACTION_PID" 2>/dev/null
+    wait_status=$?
+    ARCHIVE_TRANSACTION_WAIT_STATUS=$wait_status
+    ARCHIVE_TRANSACTION_PID=
+    ARCHIVE_TRANSACTION_PGID=
+    ARCHIVE_TRANSACTION_PARENT_PGID=
+    return 0
+  }
+  archive_restore_claimed_ref_transaction_directory() {
+    test -n "${ARCHIVE_TRANSACTION_CLEANUP_DIR:-}" || return 1
+    test ! -e "$ARCHIVE_TRANSACTION_DIR" && test ! -L "$ARCHIVE_TRANSACTION_DIR" || return 1
+    mv -- "$ARCHIVE_TRANSACTION_CLEANUP_DIR" "$ARCHIVE_TRANSACTION_DIR"
+  }
+  archive_cleanup_ref_transaction_directory() {
+    local cleanup_identity
+    test -n "${ARCHIVE_TRANSACTION_DIR:-}" || return 0
+    archive_validate_ref_transaction_directory "$ARCHIVE_TRANSACTION_DIR" || return 1
+    archive_validate_ref_transaction_members "$ARCHIVE_TRANSACTION_DIR" || return 1
+    ARCHIVE_TRANSACTION_CLEANUP_DIR="$ARCHIVE_TRANSACTION_DIR.cleanup.$$.${RANDOM:-0}"
+    test ! -e "$ARCHIVE_TRANSACTION_CLEANUP_DIR" && test ! -L "$ARCHIVE_TRANSACTION_CLEANUP_DIR" || return 1
+    mv -- "$ARCHIVE_TRANSACTION_DIR" "$ARCHIVE_TRANSACTION_CLEANUP_DIR" 2>/dev/null || return 1
+    cleanup_identity="$(stat -f '%d:%i' -- "$ARCHIVE_TRANSACTION_CLEANUP_DIR")" || { archive_restore_claimed_ref_transaction_directory || :; return 1; }
+    if test "$cleanup_identity" != "$ARCHIVE_TRANSACTION_DIR_IDENTITY"; then
+      archive_restore_claimed_ref_transaction_directory || :
+      return 1
+    fi
+    archive_validate_ref_transaction_members "$ARCHIVE_TRANSACTION_CLEANUP_DIR" || { archive_restore_claimed_ref_transaction_directory || :; return 1; }
+    rm -- "$ARCHIVE_TRANSACTION_CLEANUP_DIR/input" "$ARCHIVE_TRANSACTION_CLEANUP_DIR/response" "$ARCHIVE_TRANSACTION_CLEANUP_DIR/error" || return 1
+    rmdir -- "$ARCHIVE_TRANSACTION_CLEANUP_DIR" || return 1
+    ARCHIVE_TRANSACTION_DIR=
+    ARCHIVE_TRANSACTION_CLEANUP_DIR=
+  }
+   archive_finish_ref_transaction() {
+     local original_status=$? cleanup_status=0
+     trap - EXIT HUP INT TERM
+     if test "${ARCHIVE_TRANSACTION_FINALIZED:-0}" = 1; then exit "$original_status"; fi
+     ARCHIVE_TRANSACTION_FINALIZED=1
+     exec 3>&- 2>/dev/null || :
+    exec 8>&- 2>/dev/null || :
+    if archive_reap_transaction_child; then
+      archive_cleanup_ref_transaction_directory || cleanup_status=1
+    else
+      cleanup_status=1
+    fi
+    if test "$original_status" = 0 && test "$cleanup_status" != 0; then
+      exit 1
+    fi
+    exit "$original_status"
+   }
+   archive_signal_cleanup_ref_transaction() { exit 1; }
+  mkfifo "$ARCHIVE_TRANSACTION_INPUT_PIPE" || return 1
+  test -p "$ARCHIVE_TRANSACTION_INPUT_PIPE" && test ! -L "$ARCHIVE_TRANSACTION_INPUT_PIPE" || return 1
+  : > "$ARCHIVE_TRANSACTION_RESPONSE_FILE" && chmod 600 "$ARCHIVE_TRANSACTION_RESPONSE_FILE" || return 1
+  : > "$ARCHIVE_TRANSACTION_ERROR_FILE" && chmod 600 "$ARCHIVE_TRANSACTION_ERROR_FILE" || return 1
+  ARCHIVE_TRANSACTION_INPUT_IDENTITY="$(stat -f '%d:%i:%u:%Lp:%l' -- "$ARCHIVE_TRANSACTION_INPUT_PIPE")" || return 1
+  ARCHIVE_TRANSACTION_RESPONSE_IDENTITY="$(stat -f '%d:%i:%u:%Lp:%l' -- "$ARCHIVE_TRANSACTION_RESPONSE_FILE")" || return 1
+  ARCHIVE_TRANSACTION_ERROR_IDENTITY="$(stat -f '%d:%i:%u:%Lp:%l' -- "$ARCHIVE_TRANSACTION_ERROR_FILE")" || return 1
+  archive_validate_ref_transaction_members "$ARCHIVE_TRANSACTION_DIR" || return 1
+  ARCHIVE_TRANSACTION_PARENT_PGID="$(ps -p "$$" -o pgid= | tr -d '[:space:]')" || return 1
+  case "$ARCHIVE_TRANSACTION_PARENT_PGID" in *[!0-9]*|'') return 1 ;; esac
+  set -m
+  exec 8<> "$ARCHIVE_TRANSACTION_INPUT_PIPE"
+  (
+    set +m
+    cd "$REPO_ROOT" || exit 1
+    exec 3>&- 2>/dev/null || :
+    exec 8>&-
+    exec "$ARCHIVE_TRANSACTION_GIT" update-ref --stdin < "$ARCHIVE_TRANSACTION_INPUT_PIPE" > "$ARCHIVE_TRANSACTION_RESPONSE_FILE" 2> "$ARCHIVE_TRANSACTION_ERROR_FILE"
+  ) &
+  ARCHIVE_TRANSACTION_PID=$!
+  ARCHIVE_TRANSACTION_PGID="$(ps -p "$ARCHIVE_TRANSACTION_PID" -o pgid= | tr -d '[:space:]')" || return 1
+  set +m
+  case "$ARCHIVE_TRANSACTION_PGID" in *[!0-9]*|'') return 1 ;; esac
+  test "$ARCHIVE_TRANSACTION_PGID" = "$ARCHIVE_TRANSACTION_PID" || return 1
+  test "$ARCHIVE_TRANSACTION_PGID" != "$ARCHIVE_TRANSACTION_PARENT_PGID" || return 1
+  exec 3> "$ARCHIVE_TRANSACTION_INPUT_PIPE"
+  exec 8>&-
+  archive_wait_transaction_lines() {
+    local expected_lines=$1 expected_output=$2 attempt line_count
+    attempt=0
+    while test "$attempt" -lt 5; do
+      line_count="$(wc -l < "$ARCHIVE_TRANSACTION_RESPONSE_FILE" | tr -d '[:space:]')" || return 1
+      if test "$line_count" = "$expected_lines"; then
+        ARCHIVE_TRANSACTION_OUTPUT="$(cat "$ARCHIVE_TRANSACTION_RESPONSE_FILE")" || return 1
+        test "$ARCHIVE_TRANSACTION_OUTPUT" = "$expected_output" && return 0
+        return 1
+      fi
+      kill -0 "$ARCHIVE_TRANSACTION_PID" 2>/dev/null || return 1
+      /bin/sleep 0.05
+      attempt=$((attempt + 1))
+    done
+    return 1
+  }
+  (trap '' PIPE; printf 'start\noption no-deref\nupdate %s %s %s\nprepare\n' "$ARCHIVE_BRANCH_REF" "$new_oid" "$old_oid" >&3) || { exec 3>&-; archive_reap_transaction_child || return 1; archive_validate_direct_branch_ref "$old_oid" || return 1; return 1; }
+  if ! archive_wait_transaction_lines 2 $'start: ok\nprepare: ok' || ! (exec 3>&-; archive_validate_direct_branch_ref "$old_oid"); then
+    (trap '' PIPE; printf 'abort\n' >&3) || :
+    exec 3>&-
+    archive_wait_transaction_lines 3 $'start: ok\nprepare: ok\nabort: ok' || :
+    archive_reap_transaction_child || return 1
+    (exec 3>&-; archive_validate_direct_branch_ref "$old_oid") || return 1
+    return 1
+  fi
+  (trap '' PIPE; printf 'commit\n' >&3) || { exec 3>&-; archive_reap_transaction_child || return 1; archive_validate_direct_branch_ref "$old_oid" || return 1; return 1; }
+  exec 3>&-
+  archive_wait_transaction_lines 3 $'start: ok\nprepare: ok\ncommit: ok'
+  ARCHIVE_TRANSACTION_TRANSCRIPT_STATUS=$?
+  archive_reap_transaction_child
+  ARCHIVE_TRANSACTION_REAP_STATUS=$?
+  ARCHIVE_TRANSACTION_FINAL_TRANSCRIPT="$(cat "$ARCHIVE_TRANSACTION_RESPONSE_FILE")" || return 1
+  if test "$ARCHIVE_TRANSACTION_TRANSCRIPT_STATUS" = 0 && test "$ARCHIVE_TRANSACTION_FINAL_TRANSCRIPT" = $'start: ok\nprepare: ok\ncommit: ok' && test "$ARCHIVE_TRANSACTION_WAIT_STATUS" = 0 && test "$ARCHIVE_TRANSACTION_REAP_STATUS" = 0 && test ! -s "$ARCHIVE_TRANSACTION_ERROR_FILE" && archive_validate_direct_branch_ref "$new_oid"; then return 0; fi
+  test "$ARCHIVE_TRANSACTION_TRANSCRIPT_STATUS" != 0 && test "$ARCHIVE_TRANSACTION_FINAL_TRANSCRIPT" = $'start: ok\nprepare: ok' && test "$ARCHIVE_TRANSACTION_WAIT_STATUS" -ge 1 && test "$ARCHIVE_TRANSACTION_WAIT_STATUS" -le 127 && test "$ARCHIVE_TRANSACTION_REAP_STATUS" = 0 && test -s "$ARCHIVE_TRANSACTION_ERROR_FILE" && archive_validate_direct_branch_ref "$new_oid" && return 0
+  archive_validate_direct_branch_ref "$old_oid" && return 1
+  return 1
+  )
+}
+archive_classify_transaction_ref() {
+  local new_oid=$1 old_oid=$2 ref_record symbolic_status
+  if ARCHIVE_BRANCH_SYMBOLIC_TARGET="$(git -C "$REPO_ROOT" symbolic-ref --quiet "$ARCHIVE_BRANCH_REF")"; then
+    ARCHIVE_REF_CLASS=symbolic
+    return 0
+  else
+    symbolic_status=$?
+  fi
+  if test "$symbolic_status" != 1; then
+    ARCHIVE_REF_CLASS=unreadable
+    return 0
+  fi
+  ref_record="$(git -C "$REPO_ROOT" for-each-ref --format='%(refname) %(objectname) symref=%(symref)' "$ARCHIVE_BRANCH_REF")" || { ARCHIVE_REF_CLASS=unreadable; return 0; }
+  case "$ref_record" in
+    "$ARCHIVE_BRANCH_REF $new_oid symref=") ARCHIVE_REF_CLASS=exact-new ;;
+    "$ARCHIVE_BRANCH_REF $old_oid symref=") ARCHIVE_REF_CLASS=exact-old ;;
+    '') ARCHIVE_REF_CLASS=missing ;;
+    "$ARCHIVE_BRANCH_REF "*' symref=') ARCHIVE_REF_CLASS=competing-direct ;;
+    "$ARCHIVE_BRANCH_REF "*' symref='*) ARCHIVE_REF_CLASS=symbolic ;;
+    *) ARCHIVE_REF_CLASS=unreadable ;;
+  esac
+}
 
 SOURCES=("$REVIEW" "$REPORT")
 ROLES=(review report)
@@ -603,32 +1060,369 @@ if test "$HAS_IMPL" = true; then
   DESTINATIONS+=("$IMPLEMENTATION_DESTINATION")
 fi
 MOVED=(0 0 0)
+OWNERSHIP_CAPTURED=(0 0 0)
+POST_STAGE_OWNERSHIP=(0 0 0)
+POST_STAGE_INDEX_OWNERSHIP=(0 0 0)
+CURRENT_DESTINATION_MODES=()
 ORIGINAL_MODES=()
 INDEX_BLOBS=()
 INDEX_PATHS=()
+SOURCE_DEVICE_INODES=()
+SOURCE_UIDS=()
+SOURCE_LINKS=()
+SOURCE_SHA256=()
+SOURCE_BYTES=()
+PRE_SOURCE_INDEX_ENTRIES=()
+PRE_DESTINATION_INDEX_ENTRIES=()
+PRE_SOURCE_INDEX_CAPTURED=(0 0 0)
+PRE_DESTINATION_INDEX_CAPTURED=(0 0 0)
+OWNED_DESTINATION_SHA256=()
+OWNED_DESTINATION_BYTES=()
+OWNED_DESTINATION_MODES=()
+OWNED_DESTINATION_LINKS=()
+OWNED_DESTINATION_INDEX_ENTRIES=()
+OWNED_SOURCE_INDEX_ENTRIES=()
+SOURCE_STATES=()
 COMMIT_SUCCEEDED=0
+REF_ADVANCED=0
+REF_ROLLED_BACK=0
+ROLLBACK_COMPLETED=0
+HEAD_COMMIT=
 ARCHIVE_CREATED=0
+ARCHIVE_ROOT_IDENTITY=
+ARCHIVE_ROOT_UID=
+ARCHIVE_ROOT_MODE=
+ARCHIVE_ROOT_OWNERSHIP_CAPTURED=0
+
+archive_replay_archive_root_ownership() {
+  local expected_members actual_members i destination
+  if test "${ARCHIVE_CREATED:-1}" != 0; then test "$ARCHIVE_ROOT_OWNERSHIP_CAPTURED" = 1 || return 1; fi
+  test -d "$REPO_ROOT/$ARCHIVE" && test ! -L "$REPO_ROOT/$ARCHIVE" || return 1
+  test "$(stat -f '%d:%i' -- "$REPO_ROOT/$ARCHIVE")" = "$ARCHIVE_ROOT_IDENTITY" || return 1
+  test "$(stat -f '%u' -- "$REPO_ROOT/$ARCHIVE")" = "$ARCHIVE_ROOT_UID" || return 1
+  test "$(stat -f '%Lp' -- "$REPO_ROOT/$ARCHIVE")" = "$ARCHIVE_ROOT_MODE" || return 1
+  expected_members=
+  i=0
+  while test "$i" -lt "${#SOURCES[@]}"; do
+    if test "${MOVED[$i]:-0}" = 1; then
+      destination="${DESTINATIONS[$i]}"
+      expected_members="${expected_members}${REPO_ROOT}/${destination}\n"
+    fi
+    i=$((i + 1))
+  done
+  actual_members="$(find "$REPO_ROOT/$ARCHIVE" -mindepth 1 -print | LC_ALL=C sort)" || return 1
+  expected_members="$(printf '%b' "$expected_members" | LC_ALL=C sort)" || return 1
+  test "$actual_members" = "$expected_members"
+}
+
+archive_capture_source_ownership() {
+  local i=$1 source=$2 destination=$3 role=$4 source_path destination_path source_entry destination_entry source_state source_sha source_bytes untracked_path
+  source_path="$REPO_ROOT/$source"
+  destination_path="$REPO_ROOT/$destination"
+  test "${OWNERSHIP_CAPTURED[$i]:-0}" = 0 || return 1
+  archive_replay_archive_root_ownership || return 1
+  test -f "$source_path" && test ! -L "$source_path" || return 1
+  test "$(stat -f '%l' -- "$source_path")" = 1 || return 1
+  source_entry="$(git -C "$REPO_ROOT" ls-files --stage -- "$source")" || return 1
+  destination_entry="$(git -C "$REPO_ROOT" ls-files --stage -- "$destination")" || return 1
+  test ! -e "$destination_path" && test ! -L "$destination_path" && test -z "$destination_entry" || return 1
+  source_state="$(tuple ".sources.$role.state")" || return 1
+  case "$source_state" in
+    tracked)
+      test -n "$source_entry" || return 1
+      git -C "$REPO_ROOT" diff --quiet -- "$source" || return 1
+      git -C "$REPO_ROOT" diff --cached --quiet -- "$source" || return 1
+      ;;
+    untracked)
+      test -z "$source_entry" || return 1
+      untracked_path="$(git -C "$REPO_ROOT" ls-files --others --exclude-standard -- "$source")" || return 1
+      test "$untracked_path" = "$source" || return 1
+      ;;
+    *) return 1 ;;
+  esac
+  require_document_identity "$source" || return 1
+  source_sha="$(shasum -a 256 "$source_path" | cut -d' ' -f1)" || return 1
+  source_bytes="$(wc -c < "$source_path" | tr -d ' ')" || return 1
+  test "$source_sha" = "$(tuple ".sources.$role.sha256")" && test "$source_bytes" = "$(tuple ".sources.$role.bytes")" || return 1
+  SOURCE_DEVICE_INODES[$i]="$(stat -f '%d:%i' -- "$source_path")" || return 1
+  SOURCE_UIDS[$i]="$(stat -f '%u' -- "$source_path")" || return 1
+  SOURCE_LINKS[$i]="$(stat -f '%l' -- "$source_path")" || return 1
+  ORIGINAL_MODES[$i]="$(stat -f '%Lp' -- "$source_path")" || return 1
+  SOURCE_SHA256[$i]=$source_sha
+  SOURCE_BYTES[$i]=$source_bytes
+  SOURCE_STATES[$i]=$source_state
+  PRE_SOURCE_INDEX_ENTRIES[$i]=$source_entry
+  PRE_DESTINATION_INDEX_ENTRIES[$i]=$destination_entry
+  PRE_SOURCE_INDEX_CAPTURED[$i]=1
+  PRE_DESTINATION_INDEX_CAPTURED[$i]=1
+  OWNERSHIP_CAPTURED[$i]=1
+}
+
+archive_replay_source_move_preconditions() {
+  local i=$1 source=$2 destination=$3 source_path destination_path source_entry destination_entry source_sha source_bytes
+  source_path="$REPO_ROOT/$source"
+  destination_path="$REPO_ROOT/$destination"
+  test "${OWNERSHIP_CAPTURED[$i]:-0}" = 1 || return 1
+  archive_replay_archive_root_ownership || return 1
+  test -f "$source_path" && test ! -L "$source_path" || return 1
+  test "$(stat -f '%d:%i' -- "$source_path")" = "${SOURCE_DEVICE_INODES[$i]}" || return 1
+  test "$(stat -f '%u' -- "$source_path")" = "${SOURCE_UIDS[$i]}" || return 1
+  test "$(stat -f '%l' -- "$source_path")" = "${SOURCE_LINKS[$i]}" || return 1
+  test "$(stat -f '%Lp' -- "$source_path")" = "${ORIGINAL_MODES[$i]}" || return 1
+  source_sha="$(shasum -a 256 "$source_path" | cut -d' ' -f1)" || return 1
+  source_bytes="$(wc -c < "$source_path" | tr -d ' ')" || return 1
+  test "$source_sha" = "${SOURCE_SHA256[$i]}" && test "$source_bytes" = "${SOURCE_BYTES[$i]}" || return 1
+  source_entry="$(git -C "$REPO_ROOT" ls-files --stage -- "$source")" || return 1
+  destination_entry="$(git -C "$REPO_ROOT" ls-files --stage -- "$destination")" || return 1
+  test "$source_entry" = "${PRE_SOURCE_INDEX_ENTRIES[$i]}" || return 1
+  test "$destination_entry" = "${PRE_DESTINATION_INDEX_ENTRIES[$i]}" || return 1
+  test ! -e "$destination_path" && test ! -L "$destination_path"
+}
+
+validate_archive_rollback_state() {
+  local i source destination destination_path source_path destination_entry source_entry destination_identity destination_uid destination_links destination_mode destination_sha destination_bytes post_stage post_stage_index expected_members actual_members
+  if test "${ARCHIVE_CREATED:-1}" != 0; then
+    test "$ARCHIVE_ROOT_OWNERSHIP_CAPTURED" = 1 || return 1
+    test -d "$REPO_ROOT/$ARCHIVE" && test ! -L "$REPO_ROOT/$ARCHIVE" || return 1
+    test "$(stat -f '%d:%i' -- "$REPO_ROOT/$ARCHIVE")" = "$ARCHIVE_ROOT_IDENTITY" || return 1
+    test "$(stat -f '%u' -- "$REPO_ROOT/$ARCHIVE")" = "$ARCHIVE_ROOT_UID" || return 1
+    test "$(stat -f '%Lp' -- "$REPO_ROOT/$ARCHIVE")" = "$ARCHIVE_ROOT_MODE" || return 1
+  fi
+  i=0
+  while test "$i" -lt "${#SOURCES[@]}"; do
+    source="${SOURCES[$i]}"
+    destination="${DESTINATIONS[$i]}"
+    source_path="$REPO_ROOT/$source"
+    destination_path="$REPO_ROOT/$destination"
+    if test "${MOVED[$i]:-0}" = 1; then
+      test "${OWNERSHIP_CAPTURED[$i]:-0}" = 1 && test "${PRE_SOURCE_INDEX_CAPTURED[$i]:-0}" = 1 && test "${PRE_DESTINATION_INDEX_CAPTURED[$i]:-0}" = 1 || return 1
+      test ! -e "$source_path" && test ! -L "$source_path" || return 1
+      test -f "$destination_path" && test ! -L "$destination_path" || return 1
+      destination_identity="$(stat -f '%d:%i' -- "$destination_path")" || return 1
+      destination_uid="$(stat -f '%u' -- "$destination_path")" || return 1
+      destination_links="$(stat -f '%l' -- "$destination_path")" || return 1
+      destination_mode="$(stat -f '%Lp' -- "$destination_path")" || return 1
+      destination_sha="$(shasum -a 256 "$destination_path" | cut -d' ' -f1)" || return 1
+      destination_bytes="$(wc -c < "$destination_path" | tr -d ' ')" || return 1
+      test "$destination_identity" = "${SOURCE_DEVICE_INODES[$i]}" || return 1
+      test "$destination_uid" = "${SOURCE_UIDS[$i]}" || return 1
+      test "$destination_links" = "${SOURCE_LINKS[$i]}" || return 1
+      test "$destination_sha" = "${SOURCE_SHA256[$i]}" && test "$destination_bytes" = "${SOURCE_BYTES[$i]}" || return 1
+      post_stage="${POST_STAGE_OWNERSHIP[$i]:-1}"
+      post_stage_index="${POST_STAGE_INDEX_OWNERSHIP[$i]:-$post_stage}"
+      destination_entry="$(git -C "$REPO_ROOT" ls-files --stage -- "$destination")" || return 1
+      source_entry="$(git -C "$REPO_ROOT" ls-files --stage -- "$source")" || return 1
+      if test "$post_stage_index" = 1; then
+        test "$destination_mode" = "${OWNED_DESTINATION_MODES[$i]}" || return 1
+        test "$destination_entry" = "${OWNED_DESTINATION_INDEX_ENTRIES[$i]}" || return 1
+        test "$source_entry" = "${OWNED_SOURCE_INDEX_ENTRIES[$i]}" || return 1
+      else
+        test "$destination_mode" = "${CURRENT_DESTINATION_MODES[$i]}" || return 1
+        test "$source_entry" = "${PRE_SOURCE_INDEX_ENTRIES[$i]:-}" || return 1
+        test "$destination_entry" = "${PRE_DESTINATION_INDEX_ENTRIES[$i]:-}" || return 1
+      fi
+    fi
+    i=$((i + 1))
+  done
+  expected_members=
+  i=0
+  while test "$i" -lt "${#SOURCES[@]}"; do
+    if test "${MOVED[$i]:-0}" = 1; then expected_members="${expected_members}${REPO_ROOT}/${DESTINATIONS[$i]}\n"; fi
+    i=$((i + 1))
+  done
+  actual_members="$(find "$REPO_ROOT/$ARCHIVE" -mindepth 1 -print | LC_ALL=C sort)" || return 1
+  expected_members="$(printf '%b' "$expected_members" | LC_ALL=C sort)" || return 1
+  test "$actual_members" = "$expected_members"
+}
+archive_reset_owned_index_paths() {
+  local i owned_path source destination source_entry destination_entry expected_entry matched probe_path
+  probe_path="$ARCHIVE/.archive-ownership-probe-$$-${RANDOM:-0}"
+  test ! -e "$REPO_ROOT/$probe_path" && test ! -L "$REPO_ROOT/$probe_path" || return 1
+  git -C "$REPO_ROOT" reset -q -- "$probe_path" || return 1
+  test ! -e "$REPO_ROOT/$probe_path" && test ! -L "$REPO_ROOT/$probe_path" || return 1
+  i=0
+  while test "$i" -lt "${#SOURCES[@]}"; do
+    if test "${MOVED[$i]:-0}" = 1; then
+      source="${SOURCES[$i]}"
+      destination="${DESTINATIONS[$i]}"
+      test "${PRE_SOURCE_INDEX_CAPTURED[$i]:-0}" = 1 && test "${PRE_DESTINATION_INDEX_CAPTURED[$i]:-0}" = 1 && test "${POST_STAGE_INDEX_OWNERSHIP[$i]:-0}" = 1 || return 1
+      source_entry="$(git -C "$REPO_ROOT" ls-files --stage -- "$source")" || return 1
+      destination_entry="$(git -C "$REPO_ROOT" ls-files --stage -- "$destination")" || return 1
+      test "$source_entry" = "${OWNED_SOURCE_INDEX_ENTRIES[$i]}" || return 1
+      test "$destination_entry" = "${OWNED_DESTINATION_INDEX_ENTRIES[$i]}" || return 1
+    fi
+    i=$((i + 1))
+  done
+  for owned_path in "${INDEX_PATHS[@]}"; do
+    matched=0
+    i=0
+    while test "$i" -lt "${#SOURCES[@]}"; do
+      if test "${MOVED[$i]:-0}" = 1 && test "$owned_path" = "${SOURCES[$i]}"; then
+        expected_entry="${PRE_SOURCE_INDEX_ENTRIES[$i]}"
+        source_entry="${OWNED_SOURCE_INDEX_ENTRIES[$i]}"
+        matched=1
+      fi
+      if test "${MOVED[$i]:-0}" = 1 && test "$owned_path" = "${DESTINATIONS[$i]}"; then
+        expected_entry="${PRE_DESTINATION_INDEX_ENTRIES[$i]}"
+        source_entry="${OWNED_DESTINATION_INDEX_ENTRIES[$i]}"
+        matched=1
+      fi
+      i=$((i + 1))
+    done
+    test "$matched" = 1 || return 1
+    destination_entry="$(git -C "$REPO_ROOT" ls-files --stage -- "$owned_path")" || return 1
+    test "$destination_entry" = "$source_entry" || return 1
+    git -C "$REPO_ROOT" reset -q -- "$owned_path" || return 1
+    destination_entry="$(git -C "$REPO_ROOT" ls-files --stage -- "$owned_path")" || return 1
+    test "$destination_entry" = "$expected_entry" || return 1
+  done
+}
+archive_restore_owned_destination() {
+  local source_path=$1 claim_path=$2 mode=$3 expected_identity=$4 expected_uid=$5 expected_links=$6 expected_sha=$7 expected_bytes=$8
+  test ! -e "$source_path" && test ! -L "$source_path" || return 1
+  test -f "$claim_path" && test ! -L "$claim_path" || return 1
+  test "$(stat -f '%d:%i' -- "$claim_path")" = "$expected_identity" || return 1
+  test "$(stat -f '%u' -- "$claim_path")" = "$expected_uid" || return 1
+  test "$(stat -f '%l' -- "$claim_path")" = "$expected_links" || return 1
+  test "$(shasum -a 256 "$claim_path" | cut -d' ' -f1)" = "$expected_sha" || return 1
+  test "$(wc -c < "$claim_path" | tr -d ' ')" = "$expected_bytes" || return 1
+  chmod "$mode" "$claim_path" || return 1
+  test "$(stat -f '%Lp' -- "$claim_path")" = "$mode" || return 1
+  mv -- "$claim_path" "$source_path" || return 1
+  test -f "$source_path" && test ! -L "$source_path" || return 1
+  test "$(stat -f '%d:%i' -- "$source_path")" = "$expected_identity" || return 1
+  test "$(stat -f '%u' -- "$source_path")" = "$expected_uid" || return 1
+  test "$(stat -f '%l' -- "$source_path")" = "$expected_links" || return 1
+  test "$(stat -f '%Lp' -- "$source_path")" = "$mode" || return 1
+  test "$(shasum -a 256 "$source_path" | cut -d' ' -f1)" = "$expected_sha" || return 1
+  test "$(wc -c < "$source_path" | tr -d ' ')" = "$expected_bytes"
+}
 rollback_archive() {
-  local exit_status=$? rollback_failed i source destination
+  local exit_status=$? rollback_failed i j source destination source_path destination_path claim_path post_stage post_stage_index post_stage_index_kind actual_identity actual_members rollback_retains_destination compensation_failed
+  local -a ROLLBACK_CLAIMS ROLLBACK_CLAIM_DESTINATIONS ROLLBACK_CLAIM_IDENTITIES ROLLBACK_CLAIM_SOURCES ROLLBACK_CLAIM_SOURCE_INDEXES ROLLBACK_RESTORED_SOURCES
+  local rollback_claim_count=0
   trap - EXIT HUP INT TERM
   set +e
   rollback_failed=0
-  if test "$COMMIT_SUCCEEDED" = 0; then
-    if test "${#INDEX_PATHS[@]}" -gt 0; then git -C "$REPO_ROOT" reset -q -- "${INDEX_PATHS[@]}" || rollback_failed=1; fi
-    i=$((${#SOURCES[@]} - 1))
-    while test "$i" -ge 0; do
+  rollback_retains_destination=0
+  compensation_failed=0
+  if test "$COMMIT_SUCCEEDED" = 0 && test "$REF_ROLLED_BACK" = 0 && test -n "$HEAD_COMMIT"; then
+    archive_classify_transaction_ref "$HEAD_COMMIT" "$PARENT_OID" || rollback_failed=1
+    case "${ARCHIVE_REF_CLASS:-unreadable}" in
+      exact-new)
+        REF_ADVANCED=1
+        validate_archive_rollback_state || rollback_failed=1
+        if test "$rollback_failed" = 0; then archive_validate_direct_branch_ref "$HEAD_COMMIT" || rollback_failed=1; fi
+        if test "$rollback_failed" = 0; then archive_update_branch_ref_transaction "$PARENT_OID" "$HEAD_COMMIT" || rollback_failed=1; fi
+        if test "$rollback_failed" = 0; then archive_validate_direct_branch_ref "$PARENT_OID" || rollback_failed=1; fi
+        test "$rollback_failed" != 0 || REF_ROLLED_BACK=1
+        ;;
+      exact-old)
+        validate_archive_rollback_state || rollback_failed=1
+        REF_ADVANCED=0
+        ;;
+      competing-direct|symbolic|missing|unreadable) rollback_failed=1 ;;
+      *) rollback_failed=1 ;;
+    esac
+  fi
+  if test "$ROLLBACK_COMPLETED" = 0 && test "$COMMIT_SUCCEEDED" = 0 && test "$rollback_failed" = 0; then
+    validate_archive_rollback_state || rollback_failed=1
+    post_stage_index_kind=
+    i=0
+    while test "$rollback_failed" = 0 && test "$i" -lt "${#SOURCES[@]}"; do
+      if test "${MOVED[$i]:-0}" = 1; then
+        post_stage="${POST_STAGE_OWNERSHIP[$i]:-1}"
+        post_stage_index="${POST_STAGE_INDEX_OWNERSHIP[$i]:-$post_stage}"
+        if test -z "$post_stage_index_kind"; then post_stage_index_kind=$post_stage_index; elif test "$post_stage_index_kind" != "$post_stage_index"; then rollback_failed=1; fi
+      fi
+      i=$((i + 1))
+    done
+    if test "$rollback_failed" = 0 && test "$post_stage_index_kind" = 1 && test "${#INDEX_PATHS[@]}" -gt 0; then archive_reset_owned_index_paths || rollback_failed=1; fi
+    i=0
+    while test "$rollback_failed" = 0 && test "$i" -lt "${#SOURCES[@]}"; do
       source="${SOURCES[$i]}"
       destination="${DESTINATIONS[$i]}"
-      if test "${MOVED[$i]}" = 1; then
-        if test -f "$REPO_ROOT/$destination" && test ! -e "$REPO_ROOT/$source" && test ! -L "$REPO_ROOT/$source"; then
-          mv -- "$REPO_ROOT/$destination" "$REPO_ROOT/$source" && chmod "${ORIGINAL_MODES[$i]}" "$REPO_ROOT/$source" || rollback_failed=1
-        else
-          rollback_failed=1
+      source_path="$REPO_ROOT/$source"
+      destination_path="$REPO_ROOT/$destination"
+      if test "${MOVED[$i]:-0}" = 1; then
+        post_stage="${POST_STAGE_OWNERSHIP[$i]:-1}"
+        post_stage_index="${POST_STAGE_INDEX_OWNERSHIP[$i]:-$post_stage}"
+        if test "$post_stage_index" = 1 && test "$post_stage" = 0; then
+          rollback_retains_destination=1
+          i=$((i + 1))
+          continue
+        fi
+        claim_path="$destination_path.rollback.$$.${RANDOM:-0}"
+        test ! -e "$claim_path" && test ! -L "$claim_path" || rollback_failed=1
+        if test "$rollback_failed" = 0; then mv -- "$destination_path" "$claim_path" || rollback_failed=1; fi
+        if test "$rollback_failed" = 0; then
+          if test -f "$claim_path" && test ! -L "$claim_path" && test "$(stat -f '%d:%i' -- "$claim_path")" = "${SOURCE_DEVICE_INODES[$i]}" && test "$(stat -f '%u' -- "$claim_path")" = "${SOURCE_UIDS[$i]}" && test "$(stat -f '%l' -- "$claim_path")" = "${SOURCE_LINKS[$i]}" && test "$(shasum -a 256 "$claim_path" | cut -d' ' -f1)" = "${SOURCE_SHA256[$i]}" && test "$(wc -c < "$claim_path" | tr -d ' ')" = "${SOURCE_BYTES[$i]}"; then
+            ROLLBACK_CLAIMS[$rollback_claim_count]=$claim_path
+            ROLLBACK_CLAIM_DESTINATIONS[$rollback_claim_count]=$destination_path
+            ROLLBACK_CLAIM_SOURCES[$rollback_claim_count]=$source_path
+            ROLLBACK_CLAIM_IDENTITIES[$rollback_claim_count]="${SOURCE_DEVICE_INODES[$i]}"
+            ROLLBACK_CLAIM_SOURCE_INDEXES[$rollback_claim_count]=$i
+            rollback_claim_count=$((rollback_claim_count + 1))
+          else
+            if test ! -e "$destination_path" && test ! -L "$destination_path" && { test -e "$claim_path" || test -L "$claim_path"; }; then mv -- "$claim_path" "$destination_path" || :; fi
+            rollback_failed=1
+          fi
         fi
       fi
+      i=$((i + 1))
+    done
+    i=0
+    while test "$rollback_failed" = 0 && test "$i" -lt "$rollback_claim_count"; do
+      claim_path="${ROLLBACK_CLAIMS[$i]}"
+      source_path="${ROLLBACK_CLAIM_SOURCES[$i]}"
+      j="${ROLLBACK_CLAIM_SOURCE_INDEXES[$i]}"
+      test ! -e "$source_path" && test ! -L "$source_path" || rollback_failed=1
+      test -f "$claim_path" && test ! -L "$claim_path" && test "$(stat -f '%d:%i' -- "$claim_path")" = "${ROLLBACK_CLAIM_IDENTITIES[$i]}" && test "$(shasum -a 256 "$claim_path" | cut -d' ' -f1)" = "${SOURCE_SHA256[$j]}" && test "$(wc -c < "$claim_path" | tr -d ' ')" = "${SOURCE_BYTES[$j]}" || rollback_failed=1
+      i=$((i + 1))
+    done
+    i=$(($rollback_claim_count - 1))
+    while test "$rollback_failed" = 0 && test "$i" -ge 0; do
+      source_path="${ROLLBACK_CLAIM_SOURCES[$i]}"
+      claim_path="${ROLLBACK_CLAIMS[$i]}"
+      j="${ROLLBACK_CLAIM_SOURCE_INDEXES[$i]}"
+      archive_restore_owned_destination "$source_path" "$claim_path" "${ORIGINAL_MODES[$j]}" "${SOURCE_DEVICE_INODES[$j]}" "${SOURCE_UIDS[$j]}" "${SOURCE_LINKS[$j]}" "${SOURCE_SHA256[$j]}" "${SOURCE_BYTES[$j]}" || rollback_failed=1
+      test "$rollback_failed" != 0 || ROLLBACK_RESTORED_SOURCES[$i]=1
       i=$((i - 1))
     done
-    if test "$ARCHIVE_CREATED" = 1; then rmdir "$REPO_ROOT/$ARCHIVE" 2>/dev/null || rollback_failed=1; fi
+    if test "$rollback_failed" = 0 && test "$ARCHIVE_CREATED" = 1 && test "$rollback_retains_destination" = 0; then
+      test -d "$REPO_ROOT/$ARCHIVE" && test ! -L "$REPO_ROOT/$ARCHIVE" || rollback_failed=1
+      test "$(stat -f '%d:%i' -- "$REPO_ROOT/$ARCHIVE")" = "$ARCHIVE_ROOT_IDENTITY" || rollback_failed=1
+      actual_members="$(find "$REPO_ROOT/$ARCHIVE" -mindepth 1 -print)" || rollback_failed=1
+      test -z "$actual_members" || rollback_failed=1
+      if test "$rollback_failed" = 0; then rmdir "$REPO_ROOT/$ARCHIVE" || rollback_failed=1; fi
+    fi
+    if test "$rollback_failed" != 0; then
+      j=$(($rollback_claim_count - 1))
+      while test "$rollback_failed" != 0 && test "$j" -ge 0; do
+        if test "${ROLLBACK_RESTORED_SOURCES[$j]:-0}" = 1; then
+          source_path="${ROLLBACK_CLAIM_SOURCES[$j]}"
+          claim_path="${ROLLBACK_CLAIMS[$j]}"
+          source="${SOURCES[${ROLLBACK_CLAIM_SOURCE_INDEXES[$j]}]}"
+          test ! -e "$claim_path" && test ! -L "$claim_path" && test -f "$source_path" && test ! -L "$source_path" && test "$(stat -f '%d:%i' -- "$source_path")" = "${ROLLBACK_CLAIM_IDENTITIES[$j]}" && test "$(stat -f '%u' -- "$source_path")" = "${SOURCE_UIDS[${ROLLBACK_CLAIM_SOURCE_INDEXES[$j]}]}" && test "$(stat -f '%l' -- "$source_path")" = "${SOURCE_LINKS[${ROLLBACK_CLAIM_SOURCE_INDEXES[$j]}]}" && test "$(shasum -a 256 "$source_path" | cut -d' ' -f1)" = "${SOURCE_SHA256[${ROLLBACK_CLAIM_SOURCE_INDEXES[$j]}]}" && test "$(wc -c < "$source_path" | tr -d ' ')" = "${SOURCE_BYTES[${ROLLBACK_CLAIM_SOURCE_INDEXES[$j]}]}" || { compensation_failed=1; break; }
+          mv -- "$source_path" "$claim_path" || { compensation_failed=1; break; }
+          test -f "$claim_path" && test ! -L "$claim_path" && test "$(stat -f '%d:%i' -- "$claim_path")" = "${ROLLBACK_CLAIM_IDENTITIES[$j]}" && test "$(stat -f '%u' -- "$claim_path")" = "${SOURCE_UIDS[${ROLLBACK_CLAIM_SOURCE_INDEXES[$j]}]}" && test "$(stat -f '%l' -- "$claim_path")" = "${SOURCE_LINKS[${ROLLBACK_CLAIM_SOURCE_INDEXES[$j]}]}" && test "$(shasum -a 256 "$claim_path" | cut -d' ' -f1)" = "${SOURCE_SHA256[${ROLLBACK_CLAIM_SOURCE_INDEXES[$j]}]}" && test "$(wc -c < "$claim_path" | tr -d ' ')" = "${SOURCE_BYTES[${ROLLBACK_CLAIM_SOURCE_INDEXES[$j]}]}" || { compensation_failed=1; break; }
+          ROLLBACK_RESTORED_SOURCES[$j]=0
+        fi
+        j=$((j - 1))
+      done
+      if test "$compensation_failed" = 0; then
+        j=$(($rollback_claim_count - 1))
+        while test "$j" -ge 0; do
+          claim_path="${ROLLBACK_CLAIMS[$j]}"
+          destination_path="${ROLLBACK_CLAIM_DESTINATIONS[$j]}"
+          test ! -e "$destination_path" && test ! -L "$destination_path" && test -f "$claim_path" && test ! -L "$claim_path" && test "$(stat -f '%d:%i' -- "$claim_path")" = "${ROLLBACK_CLAIM_IDENTITIES[$j]}" && test "$(stat -f '%u' -- "$claim_path")" = "${SOURCE_UIDS[${ROLLBACK_CLAIM_SOURCE_INDEXES[$j]}]}" && test "$(stat -f '%l' -- "$claim_path")" = "${SOURCE_LINKS[${ROLLBACK_CLAIM_SOURCE_INDEXES[$j]}]}" && test "$(shasum -a 256 "$claim_path" | cut -d' ' -f1)" = "${SOURCE_SHA256[${ROLLBACK_CLAIM_SOURCE_INDEXES[$j]}]}" && test "$(wc -c < "$claim_path" | tr -d ' ')" = "${SOURCE_BYTES[${ROLLBACK_CLAIM_SOURCE_INDEXES[$j]}]}" || { compensation_failed=1; break; }
+          mv -- "$claim_path" "$destination_path" || { compensation_failed=1; break; }
+          test -f "$destination_path" && test ! -L "$destination_path" && test "$(stat -f '%d:%i' -- "$destination_path")" = "${ROLLBACK_CLAIM_IDENTITIES[$j]}" && test "$(stat -f '%u' -- "$destination_path")" = "${SOURCE_UIDS[${ROLLBACK_CLAIM_SOURCE_INDEXES[$j]}]}" && test "$(stat -f '%l' -- "$destination_path")" = "${SOURCE_LINKS[${ROLLBACK_CLAIM_SOURCE_INDEXES[$j]}]}" && test "$(shasum -a 256 "$destination_path" | cut -d' ' -f1)" = "${SOURCE_SHA256[${ROLLBACK_CLAIM_SOURCE_INDEXES[$j]}]}" && test "$(wc -c < "$destination_path" | tr -d ' ')" = "${SOURCE_BYTES[${ROLLBACK_CLAIM_SOURCE_INDEXES[$j]}]}" || { compensation_failed=1; break; }
+          j=$((j - 1))
+        done
+      fi
+    fi
+    test "$rollback_failed" != 0 || ROLLBACK_COMPLETED=1
   fi
   if test "$rollback_failed" -ne 0; then exit_status=1; fi
   exit "$exit_status"
@@ -639,28 +1433,63 @@ trap on_archive_signal HUP INT TERM
 
 mkdir -- "$REPO_ROOT/$ARCHIVE"
 ARCHIVE_CREATED=1
+ARCHIVE_ROOT_IDENTITY="$(stat -f '%d:%i' -- "$REPO_ROOT/$ARCHIVE")" || fail 'archive root identity could not be read'
+ARCHIVE_ROOT_UID="$(stat -f '%u' -- "$REPO_ROOT/$ARCHIVE")" || fail 'archive root owner could not be read'
+ARCHIVE_ROOT_MODE="$(stat -f '%Lp' -- "$REPO_ROOT/$ARCHIVE")" || fail 'archive root mode could not be read'
+test -d "$REPO_ROOT/$ARCHIVE" && test ! -L "$REPO_ROOT/$ARCHIVE" || fail 'archive root is not physical'
+ARCHIVE_ROOT_OWNERSHIP_CAPTURED=1
 i=0
 while test "$i" -lt "${#SOURCES[@]}"; do
   source="${SOURCES[$i]}"
   destination="${DESTINATIONS[$i]}"
   role="${ROLES[$i]}"
-  ORIGINAL_MODES+=("$(stat -f '%Lp' "$REPO_ROOT/$source")")
+  archive_capture_source_ownership "$i" "$source" "$destination" "$role" || fail 'source ownership snapshot failed'
+  archive_replay_source_move_preconditions "$i" "$source" "$destination" || fail 'source ownership changed before move'
   mv -- "$REPO_ROOT/$source" "$REPO_ROOT/$destination"
   MOVED[$i]=1
+  test -f "$REPO_ROOT/$destination" && test ! -L "$REPO_ROOT/$destination" || fail 'destination is not a regular file after move'
+  test "$(stat -f '%d:%i' -- "$REPO_ROOT/$destination")" = "${SOURCE_DEVICE_INODES[$i]}" || fail 'destination identity differs after move'
+  test "$(stat -f '%u' -- "$REPO_ROOT/$destination")" = "${SOURCE_UIDS[$i]}" && test "$(stat -f '%l' -- "$REPO_ROOT/$destination")" = "${SOURCE_LINKS[$i]}" || fail 'destination ownership differs after move'
+  CURRENT_DESTINATION_MODES[$i]="$(stat -f '%Lp' -- "$REPO_ROOT/$destination")" || fail 'destination mode could not be captured after move'
   chmod 644 "$REPO_ROOT/$destination"
-  expected_sha="$(tuple ".sources.$role.sha256")"
-  expected_bytes="$(tuple ".sources.$role.bytes")"
-  test "$(shasum -a 256 "$REPO_ROOT/$destination" | cut -d' ' -f1)" = "$expected_sha" && test "$(wc -c < "$REPO_ROOT/$destination" | tr -d ' ')" = "$expected_bytes" || fail 'destination content differs from approval'
-  if git -C "$REPO_ROOT" ls-files --error-unmatch -- "$source" >/dev/null 2>&1; then
-    git -C "$REPO_ROOT" add -A -- "$source" "$destination"
+  CURRENT_DESTINATION_MODES[$i]="$(stat -f '%Lp' -- "$REPO_ROOT/$destination")" || fail 'destination mode could not be captured after chmod'
+  test "$(stat -f '%d:%i' -- "$REPO_ROOT/$destination")" = "${SOURCE_DEVICE_INODES[$i]}" && test "$(stat -f '%u' -- "$REPO_ROOT/$destination")" = "${SOURCE_UIDS[$i]}" && test "$(stat -f '%l' -- "$REPO_ROOT/$destination")" = "${SOURCE_LINKS[$i]}" && test "$(stat -f '%Lp' -- "$REPO_ROOT/$destination")" = 644 || fail 'destination identity changed after chmod'
+  test "$(shasum -a 256 "$REPO_ROOT/$destination" | cut -d' ' -f1)" = "${SOURCE_SHA256[$i]}" && test "$(wc -c < "$REPO_ROOT/$destination" | tr -d ' ')" = "${SOURCE_BYTES[$i]}" || fail 'destination content differs from approval'
+  expected_blob="$(git -C "$REPO_ROOT" hash-object -- "$REPO_ROOT/$destination")" || fail 'destination blob could not be read before staging'
+  INDEX_BLOBS[$i]=$expected_blob
+  OWNED_DESTINATION_INDEX_ENTRIES[$i]="100644 $expected_blob 0$(printf '\t')$destination"
+  OWNED_SOURCE_INDEX_ENTRIES[$i]=
+  OWNED_DESTINATION_MODES[$i]="${CURRENT_DESTINATION_MODES[$i]}"
+  OWNED_DESTINATION_LINKS[$i]="${SOURCE_LINKS[$i]}"
+  OWNED_DESTINATION_SHA256[$i]="${SOURCE_SHA256[$i]}"
+  OWNED_DESTINATION_BYTES[$i]="${SOURCE_BYTES[$i]}"
+  if test "${SOURCE_STATES[$i]}" = tracked; then
+    git -C "$REPO_ROOT" add -A -- "$source" "$destination" || fail 'tracked source staging failed'
     INDEX_PATHS+=("$source" "$destination")
   else
-    git -C "$REPO_ROOT" add -- "$destination"
+    git -C "$REPO_ROOT" add -- "$destination" || fail 'untracked destination staging failed'
     INDEX_PATHS+=("$destination")
   fi
-  expected_blob="$(git -C "$REPO_ROOT" hash-object -- "$REPO_ROOT/$destination")"
-  INDEX_BLOBS+=("$expected_blob")
-  test "$(git -C "$REPO_ROOT" ls-files --stage -- "$destination")" = "100644 $expected_blob 0$(printf '\t')$destination" || fail 'staged destination mode or blob differs'
+  POST_STAGE_INDEX_OWNERSHIP[$i]=1
+  POST_STAGE_OWNERSHIP[$i]=1
+  STAGED_DESTINATION_ENTRY="$(git -C "$REPO_ROOT" ls-files --stage -- "$destination")" || fail 'staged destination entry could not be read'
+  OWNED_SOURCE_ENTRY="$(git -C "$REPO_ROOT" ls-files --stage -- "$source")" || fail 'owned source index entry could not be read'
+  test "$STAGED_DESTINATION_ENTRY" = "${OWNED_DESTINATION_INDEX_ENTRIES[$i]}" || fail 'staged destination mode or blob differs'
+  test "$OWNED_SOURCE_ENTRY" = "${OWNED_SOURCE_INDEX_ENTRIES[$i]}" || fail 'staged source entry differs'
+  staged_destination_entry_replay="$(git -C "$REPO_ROOT" ls-files --stage -- "$destination")" || fail 'staged destination entry replay could not be read'
+  test "$staged_destination_entry_replay" = "${OWNED_DESTINATION_INDEX_ENTRIES[$i]}" || fail 'staged destination entry replay differs'
+  post_stage_blob="$(git -C "$REPO_ROOT" hash-object -- "$destination")" || fail 'staged destination blob could not be read'
+  test "$post_stage_blob" = "${INDEX_BLOBS[$i]}" || fail 'staged destination blob differs'
+  post_stage_blob_replay="$(git -C "$REPO_ROOT" hash-object -- "$destination")" || fail 'staged destination blob replay could not be read'
+  test "$post_stage_blob_replay" = "${INDEX_BLOBS[$i]}" || fail 'staged destination blob replay differs'
+  post_stage_sha="$(shasum -a 256 "$REPO_ROOT/$destination" | cut -d' ' -f1)" || fail 'staged destination digest could not be read'
+  test "$post_stage_sha" = "${OWNED_DESTINATION_SHA256[$i]}" || fail 'staged destination digest differs'
+  post_stage_sha_replay="$(shasum -a 256 "$REPO_ROOT/$destination" | cut -d' ' -f1)" || fail 'staged destination digest replay could not be read'
+  test "$post_stage_sha_replay" = "${OWNED_DESTINATION_SHA256[$i]}" || fail 'staged destination digest replay differs'
+  post_stage_bytes="$(wc -c < "$REPO_ROOT/$destination" | tr -d ' ')" || fail 'staged destination bytes could not be read'
+  test "$post_stage_bytes" = "${OWNED_DESTINATION_BYTES[$i]}" || fail 'staged destination bytes differ'
+  post_stage_bytes_replay="$(wc -c < "$REPO_ROOT/$destination" | tr -d ' ')" || fail 'staged destination bytes replay could not be read'
+  test "$post_stage_bytes_replay" = "${OWNED_DESTINATION_BYTES[$i]}" || fail 'staged destination bytes replay differs'
   i=$((i + 1))
 done
 
@@ -677,21 +1506,46 @@ while test "$i" -lt "${#SOURCES[@]}"; do
   fi
   i=$((i + 1))
 done
-ACTUAL_STATUS="$(git -C "$REPO_ROOT" diff --cached --name-status --find-renames=100% | LC_ALL=C sort)"
+ACTUAL_STATUS="$(git -C "$REPO_ROOT" diff --cached --name-status --find-renames=100% | LC_ALL=C sort)" || fail 'staged name-status could not be read'
 EXPECTED_STATUS="$(printf '%b' "$EXPECTED_STATUS" | LC_ALL=C sort)"
 test "$ACTUAL_STATUS" = "$EXPECTED_STATUS" || fail 'staged name-status is not exactly approved'
 git -C "$REPO_ROOT" diff --cached --check
-test "$(git -C "$REPO_ROOT" symbolic-ref --quiet --short HEAD)" = "$LOCAL_BRANCH" || fail 'local branch changed before commit'
-test "$(git -C "$REPO_ROOT" rev-parse 'HEAD^{commit}')" = "$PARENT_OID" || fail 'archive parent changed before commit'
-EXPECTED_TREE="$(git -C "$REPO_ROOT" write-tree)"
-git -C "$REPO_ROOT" commit --only -m "$COMMIT_SUBJECT" -m "Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)" -m "Co-authored-by: Sisyphus <clio-agent@sisyphuslabs.ai>" -- "${INDEX_PATHS[@]}"
-COMMIT_SUCCEEDED=1
-HEAD_COMMIT="$(git -C "$REPO_ROOT" rev-parse 'HEAD^{commit}')"
-test "$(git -C "$REPO_ROOT" symbolic-ref --quiet --short HEAD)" = "$LOCAL_BRANCH" || fail 'committed branch differs from approval'
-test "$(git -C "$REPO_ROOT" rev-list --parents -n 1 "$HEAD_COMMIT")" = "$HEAD_COMMIT $PARENT_OID" || fail 'committed parent differs from approval'
-test "$(git -C "$REPO_ROOT" log -1 --format=%s "$HEAD_COMMIT")" = "$COMMIT_SUBJECT" || fail 'commit subject differs from approval'
-test "$(git -C "$REPO_ROOT" rev-parse "$HEAD_COMMIT^{tree}")" = "$EXPECTED_TREE" || fail 'committed tree differs from staged tree'
-ACTUAL_COMMIT_STATUS="$(git -C "$REPO_ROOT" diff-tree --no-commit-id --name-status -r --find-renames=100% "$PARENT_OID" "$HEAD_COMMIT" | LC_ALL=C sort)"
+CURRENT_BRANCH="$(git -C "$REPO_ROOT" symbolic-ref --quiet --short HEAD)" || fail 'local branch could not be read before commit'
+test "$CURRENT_BRANCH" = "$LOCAL_BRANCH" || fail 'local branch changed before commit'
+CURRENT_PARENT="$(git -C "$REPO_ROOT" rev-parse 'HEAD^{commit}')" || fail 'archive parent could not be read before commit'
+test "$CURRENT_PARENT" = "$PARENT_OID" || fail 'archive parent changed before commit'
+EXPECTED_TREE="$(git -C "$REPO_ROOT" write-tree)" || fail 'staged tree could not be written'
+validate_archive_rollback_state || fail 'archive staged ownership drifted before commit'
+archive_validate_direct_branch_ref "$PARENT_OID" || fail 'archive branch ref changed before commit'
+CREATED_COMMIT_OID="$(git -C "$REPO_ROOT" commit-tree "$EXPECTED_TREE" -p "$PARENT_OID" -m "$COMMIT_SUBJECT" -m "Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)" -m "Co-authored-by: Sisyphus <clio-agent@sisyphuslabs.ai>")" || fail 'archive commit creation failed'
+HEAD_COMMIT="$(git -C "$REPO_ROOT" rev-parse --verify "$CREATED_COMMIT_OID^{commit}")" || fail 'archive commit identity invalid'
+archive_validate_direct_branch_ref "$PARENT_OID" || fail 'archive branch ref changed before publication'
+ARCHIVE_TRANSACTION_STATUS=0
+if archive_update_branch_ref_transaction "$HEAD_COMMIT" "$PARENT_OID"; then
+  ARCHIVE_TRANSACTION_STATUS=0
+else
+  ARCHIVE_TRANSACTION_STATUS=$?
+fi
+archive_classify_transaction_ref "$HEAD_COMMIT" "$PARENT_OID"
+case "$ARCHIVE_REF_CLASS" in
+  exact-new) REF_ADVANCED=1 ;;
+  exact-old|competing-direct|symbolic|missing|unreadable) ;;
+  *) fail 'archive branch ref state unreadable after publication' ;;
+esac
+test "$ARCHIVE_TRANSACTION_STATUS" = 0 || fail 'archive branch transaction failed'
+archive_validate_direct_branch_ref "$HEAD_COMMIT" || fail 'archive branch ref changed after publication'
+validate_archive_rollback_state || fail 'archive staged ownership drifted after publication'
+git -C "$REPO_ROOT" diff --cached --quiet || fail 'archive index differs from committed tree'
+CURRENT_BRANCH="$(git -C "$REPO_ROOT" symbolic-ref --quiet --short HEAD)" || fail 'committed branch could not be read'
+test "$CURRENT_BRANCH" = "$LOCAL_BRANCH" || fail 'committed branch differs from approval'
+COMMITTED_PARENT_RECORD="$(git -C "$REPO_ROOT" rev-list --parents -n 1 "$HEAD_COMMIT")" || fail 'committed parent could not be read'
+test "$COMMITTED_PARENT_RECORD" = "$HEAD_COMMIT $PARENT_OID" || fail 'committed parent differs from approval'
+COMMITTED_SUBJECT="$(git -C "$REPO_ROOT" log -1 --format=%s "$HEAD_COMMIT")" || fail 'commit subject could not be read'
+test "$COMMITTED_SUBJECT" = "$COMMIT_SUBJECT" || fail 'commit subject differs from approval'
+COMMITTED_TREE="$(git -C "$REPO_ROOT" rev-parse "$HEAD_COMMIT^{tree}")" || fail 'committed tree could not be read'
+test "$COMMITTED_TREE" = "$EXPECTED_TREE" || fail 'committed tree differs from staged tree'
+archive_validate_direct_branch_ref "$HEAD_COMMIT" || fail 'archive branch ref changed before success'
+ACTUAL_COMMIT_STATUS="$(git -C "$REPO_ROOT" diff-tree --no-commit-id --name-status -r --find-renames=100% "$PARENT_OID" "$HEAD_COMMIT" | LC_ALL=C sort)" || fail 'committed name-status could not be read'
 test "$ACTUAL_COMMIT_STATUS" = "$EXPECTED_STATUS" || fail 'committed name-status is not exactly approved'
 i=0
 while test "$i" -lt "${#SOURCES[@]}"; do
@@ -701,27 +1555,32 @@ while test "$i" -lt "${#SOURCES[@]}"; do
   expected_blob="${INDEX_BLOBS[$i]}"
   test -f "$REPO_ROOT/$destination" && test ! -L "$REPO_ROOT/$destination" && test "$(stat -f '%l' "$REPO_ROOT/$destination")" = 1 && test "$(stat -f '%Lp' "$REPO_ROOT/$destination")" = 644 || fail 'destination file mode or links differ'
   test "$(shasum -a 256 "$REPO_ROOT/$destination" | cut -d' ' -f1)" = "$(tuple ".sources.$role.sha256")" && test "$(wc -c < "$REPO_ROOT/$destination" | tr -d ' ')" = "$(tuple ".sources.$role.bytes")" || fail 'committed destination differs from approval'
-  test "$(git -C "$REPO_ROOT" ls-tree "$HEAD_COMMIT" -- "$destination")" = "100644 blob $expected_blob$(printf '\t')$destination" || fail 'committed destination mode or blob differs'
-  test "$(git -C "$REPO_ROOT" show "$HEAD_COMMIT:$destination" | shasum -a 256 | cut -d' ' -f1)" = "$(tuple ".sources.$role.sha256")" && test "$(git -C "$REPO_ROOT" show "$HEAD_COMMIT:$destination" | wc -c | tr -d ' ')" = "$(tuple ".sources.$role.bytes")" || fail 'committed blob differs from approval'
+  COMMITTED_DESTINATION_ENTRY="$(git -C "$REPO_ROOT" ls-tree "$HEAD_COMMIT" -- "$destination")" || fail 'committed destination entry could not be read'
+  test "$COMMITTED_DESTINATION_ENTRY" = "100644 blob $expected_blob$(printf '\t')$destination" || fail 'committed destination mode or blob differs'
+  COMMITTED_BLOB_SHA="$(git -C "$REPO_ROOT" show "$HEAD_COMMIT:$destination" | shasum -a 256 | cut -d' ' -f1)" || fail 'committed blob digest could not be read'
+  COMMITTED_BLOB_BYTES="$(git -C "$REPO_ROOT" show "$HEAD_COMMIT:$destination" | wc -c | tr -d ' ')" || fail 'committed blob size could not be read'
+  test "$COMMITTED_BLOB_SHA" = "$(tuple ".sources.$role.sha256")" && test "$COMMITTED_BLOB_BYTES" = "$(tuple ".sources.$role.bytes")" || fail 'committed blob differs from approval'
   test ! -e "$REPO_ROOT/$source" && test ! -L "$REPO_ROOT/$source" || fail 'source remains in worktree'
   if test "$(tuple ".sources.$role.state")" = tracked; then ! git -C "$REPO_ROOT" cat-file -e "$HEAD_COMMIT:$source" 2>/dev/null || fail 'tracked source remains in committed tree'; fi
   i=$((i + 1))
 done
 git -C "$REPO_ROOT" diff --cached --quiet || fail 'commit left staged residue anywhere in repository'
 git -C "$REPO_ROOT" diff --quiet || fail 'commit left tracked worktree residue'
-test -z "$(git -C "$REPO_ROOT" status --porcelain=v1 --untracked-files=all)" || fail 'commit left unexpected worktree residue'
+FINAL_STATUS="$(git -C "$REPO_ROOT" status --porcelain=v1 --untracked-files=all)" || fail 'final worktree status could not be read'
+test -z "$FINAL_STATUS" || fail 'commit left unexpected worktree residue'
+COMMIT_SUCCEEDED=1
 trap - EXIT HUP INT TERM
 ```
 
-Commit failure rolls back only the approved, successfully moved files, their original modes, and only the index pathspecs that this block staged. If the commit leaves identity or index/worktree residue after a successful commit, the block fails without attempting a destructive rollback of the durable commit; preserve the repository for manual recovery.
+Commit failure rollback은 move 시 기록한 destination SHA-256/bytes/mode/link count와 source/destination stage entry를 모두 replay하고 source 부재까지 확인한 뒤에만 승인된 exact index path와 successfully moved file을 원래 mode로 되돌린다. 하나라도 drift하면 reset, move, ref rollback을 하지 않고 competing state를 보존한다. ref advance 뒤 postcondition이 실패하면 branch가 created OID direct ref인 경우에만 같은 no-deref exact-old transaction으로 parent에 CAS rollback하고, symref 또는 competing OID면 repository를 보존한 채 실패한다.
 
 ## 검증
 
 - required `트리거`, `사전 조건`, `절차`, `검증`, `절대 하지 말 것`, `호출 방법` heading이 있고 capture, evidence, cleanup, archive blocks는 `절차` 아래에 있다.
 - canonical origin은 six exact HTTPS, SCP-style SSH, `ssh://` allowlist form(`.git` 유무 포함)만 허용한다. 모든 REST `gh api` 호출은 explicit `--method GET`이고 GraphQL은 read-only query POST만 사용한다.
 - canonical before/after snapshot은 fixed repository host/name/ID, direct-fork gate, paginated issue timeline, comments/reviews/threads/checks/statuses, every-page integer `total_count` equality와 flattened/unique check-run ID count, API base OID와 immutable fetched-object diff를 포함하고 byte-identical하다.
-- review draft와 full-diff/hash revalidation이 root cleanup보다 먼저, actual temporary-ref absence/root removal이 final report보다 먼저 일어난다.
-- archive approval tuple은 schema, repository host/name/ID, PR/round, base/diff-base/head OID, snapshot/diff identity/action, named local branch, parent OID, exact subject, every source path/destination/state/SHA-256/byte count, optional implementation presence를 bind한다. tuple 생성 전과 execution move 전에는 모든 present source의 identical exact identity lines, report cleanup lines, clean approved worktree를 재검증하고, execution은 staged tree와 `100644` blobs 및 hook-disabled branch/parent/subject/tree/name-status/index/worktree를 검증한다.
+- review draft와 full-diff/hash revalidation이 root cleanup보다 먼저, Step 1 output의 device:inode scalar와 일치하는 snapshot root를 unique sibling claim으로 atomic rename한 뒤 claimed root의 exact private member만 삭제한다. root identity mismatch, replacement, unknown member는 replacement/original root를 보존하고 실패하며 actual temporary-ref absence/root removal이 final report보다 먼저 일어난다.
+- archive approval tuple은 schema, repository host/name/ID, PR/round, base/diff-base/head OID, snapshot/diff identity/action, named local branch, parent OID, exact subject, every source path/destination/state/SHA-256/byte count, optional implementation presence를 bind한다. tuple 생성 전과 execution move 전에는 모든 present source의 identical exact identity lines, report cleanup lines, clean approved worktree를 재검증하고, execution은 staged tree와 `100644` blobs, `commit-tree`, FIFO-backed `start`/`option no-deref`/`prepare`/`commit` exact-old ref transaction, post-advance staged-index-to-new-HEAD equality, hook-disabled branch/parent/subject/tree/name-status/index/worktree를 검증한다. rollback은 owned destination identity와 staged ownership replay를 통과할 때만 exact path를 mutate한다.
 - Bash 3.2에서만 사용하는 indexed arrays, `local`, `read`-free POSIX-like control flow를 사용한다. associative arrays, `mapfile`, `readarray`, `wait -n`은 사용하지 않는다.
 
 ## 절대 하지 말 것
