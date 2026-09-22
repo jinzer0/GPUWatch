@@ -57,6 +57,8 @@ const getRequiredElement = (container: HTMLElement, selector: string): HTMLEleme
 describe('Shell density mode', () => {
   beforeEach(() => {
     window.localStorage.clear();
+    delete window.gpuwatcher;
+    delete window.gpuWatcherElectron;
     useUiStore.setState(useUiStore.getInitialState(), true);
   });
 
@@ -133,11 +135,29 @@ describe('Shell density mode', () => {
     const titlebar = getRequiredElement(view.container, '.window-titlebar');
 
     expect(within(titlebar).getByText('GPUWatcher')).toBeDefined();
-    expect(within(titlebar).getByText('Fleet')).toBeDefined();
+    expect(within(titlebar).getAllByText('Fleet')).toHaveLength(2);
+    expect(within(titlebar).getByText('GPU Activity Monitor')).toBeDefined();
 
     fireEvent.click(screen.getByRole('button', { name: 'History' }));
 
     expect(within(titlebar).getByText('History')).toBeDefined();
+  });
+
+  it('identifies browser fallback and desktop backend runtime states without changing the Shell API', () => {
+    const fallbackView = renderShell();
+    const fallbackStatus = within(getRequiredElement(fallbackView.container, '.titlebar-status'));
+
+    expect(fallbackStatus.getByText('Runtime')).toBeDefined();
+    expect(fallbackStatus.getByText('Browser fallback')).toBeDefined();
+
+    fallbackView.unmount();
+    window.gpuwatcher = {};
+    window.gpuWatcherElectron = { isElectron: true, platform: 'darwin', versions: {} };
+
+    const desktopView = renderShell();
+    const desktopStatus = within(getRequiredElement(desktopView.container, '.titlebar-status'));
+
+    expect(desktopStatus.getByText('Desktop backend')).toBeDefined();
   });
 
   it('renders unknown server counts when overview data has not loaded', () => {

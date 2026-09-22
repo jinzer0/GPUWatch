@@ -24,6 +24,14 @@ const densityOptions: ReadonlyArray<{ readonly id: DensityMode; readonly label: 
   { id: 'compact', label: 'Compact' }
 ];
 
+const getRuntimeStatusLabel = () => {
+  if (typeof window !== 'undefined' && window.gpuWatcherElectron?.isElectron && window.gpuwatcher) {
+    return 'Desktop backend';
+  }
+
+  return 'Browser fallback';
+};
+
 export const Shell = ({ children, overview }: { children: ReactNode; overview: ServerOverviewDto[] | null }) => {
   const activeTab = useUiStore((state) => state.activeTab);
   const densityMode = useUiStore((state) => state.densityMode);
@@ -32,6 +40,7 @@ export const Shell = ({ children, overview }: { children: ReactNode; overview: S
   const onlineCount = overview?.filter((server) => server.status.toLowerCase() === 'online').length ?? null;
   const serverCountLabel = overview === null ? 'unknown' : `${overview.length} ${overview.length === 1 ? 'server' : 'servers'}`;
   const onlineCountLabel = onlineCount === null ? 'unknown' : `${onlineCount} online`;
+  const runtimeStatusLabel = getRuntimeStatusLabel();
 
   return (
     <div className="app-shell" data-density={densityMode}>
@@ -41,10 +50,23 @@ export const Shell = ({ children, overview }: { children: ReactNode; overview: S
           <div className="app-name">GPUWatcher</div>
         </div>
         <div className="titlebar-main">
-          <div className="titlebar-page-title">{tabLabels[activeTab]}</div>
+          <div className="titlebar-heading">
+            <div className="titlebar-page-title">{tabLabels[activeTab]}</div>
+            <div className="titlebar-page-context">GPU Activity Monitor</div>
+          </div>
           <div aria-label="Fleet status" className="titlebar-status">
-            <span>{serverCountLabel}</span>
-            <span>{onlineCountLabel}</span>
+            <span className="titlebar-status-item">
+              <span className="titlebar-status-label">Fleet</span>
+              <span>{serverCountLabel}</span>
+            </span>
+            <span className="titlebar-status-item">
+              <span className="titlebar-status-label">Online</span>
+              <span>{onlineCountLabel}</span>
+            </span>
+            <span className="titlebar-status-item">
+              <span className="titlebar-status-label">Runtime</span>
+              <span>{runtimeStatusLabel}</span>
+            </span>
           </div>
         </div>
       </header>

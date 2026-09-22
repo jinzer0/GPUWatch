@@ -77,6 +77,13 @@
     padding: 0 var(--density-space-5);
   }
 
+  .titlebar-heading {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 0.05rem;
+  }
+
   .titlebar-page-title {
     overflow: hidden;
     color: var(--color-text);
@@ -86,13 +93,45 @@
     white-space: nowrap;
   }
 
+  .titlebar-page-context {
+    overflow: hidden;
+    color: var(--color-text-tertiary);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
   .titlebar-status {
     display: flex;
     flex: 0 0 auto;
-    gap: var(--density-space-3);
-    color: var(--color-text-tertiary);
-    font-size: 0.75rem;
+    align-items: center;
+    gap: var(--density-space-2);
+    color: var(--color-text-secondary);
+    font-size: 0.72rem;
     font-weight: 700;
+  }
+
+  .titlebar-status-item {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--density-space-1);
+    min-height: 1.5rem;
+    border: 1px solid var(--color-line);
+    border-radius: 999px;
+    background: var(--color-panel);
+    padding: 0 var(--density-space-2);
+    white-space: nowrap;
+  }
+
+  .titlebar-status-label {
+    color: var(--color-text-tertiary);
+    font-size: 0.66rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
   }
 
   .app-sidebar {
