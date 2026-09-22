@@ -23,17 +23,17 @@ const refreshServerMock = vi.mocked(refreshServer);
 const renderProcessTable = () => renderWithQueryClient(<ProcessTableScreen />);
 const processLedgerSummary = () => screen.getByRole('region', { name: 'Process ledger summary' });
 const processSortReachability = {
-  command: { defaultAriaSort: 'ascending', initialState: 'not sorted', label: 'Command preview' },
+  command: { defaultAriaSort: 'ascending', initialState: 'not sorted', label: 'Process' },
   cpuPercent: { defaultAriaSort: 'descending', initialState: 'not sorted', label: 'CPU' },
-  gpuIndex: { defaultAriaSort: 'ascending', initialState: 'not sorted', label: 'Context / GPU' },
-  gpuMemoryUsedMiB: { defaultAriaSort: 'descending', initialState: 'descending', label: 'GPU memory' },
+  gpuIndex: { defaultAriaSort: 'ascending', initialState: 'not sorted', label: 'GPU' },
+  gpuMemoryUsedMiB: { defaultAriaSort: 'descending', initialState: 'descending', label: 'VRAM' },
   gpuMemoryUtilizationPercent: { defaultAriaSort: 'descending', initialState: 'not sorted', label: 'Memory util' },
   gpuSmUtilizationPercent: { defaultAriaSort: 'descending', initialState: 'not sorted', label: 'SM util' },
-  gpuUtilizationPercent: { defaultAriaSort: 'descending', initialState: 'not sorted', label: 'GPU util' },
+  gpuUtilizationPercent: { defaultAriaSort: 'descending', initialState: 'not sorted', label: 'GPU %' },
   hostMemoryUsedMiB: { defaultAriaSort: 'descending', initialState: 'not sorted', label: 'Host memory' },
-  pid: { defaultAriaSort: 'ascending', initialState: 'not sorted', label: 'Process / PID' },
+  pid: { defaultAriaSort: 'ascending', initialState: 'not sorted', label: 'PID' },
   runtimeSeconds: { defaultAriaSort: 'descending', initialState: 'not sorted', label: 'Runtime' },
-  serverName: { defaultAriaSort: 'ascending', initialState: 'not sorted', label: 'Context / Server' },
+  serverName: { defaultAriaSort: 'ascending', initialState: 'not sorted', label: 'Server' },
   username: { defaultAriaSort: 'ascending', initialState: 'not sorted', label: 'User' }
 } satisfies Record<
   ProcessTableSortKey,
@@ -85,7 +85,9 @@ describe('ProcessTableScreen', () => {
 
     expect(screen.getByText('Process Table')).toBeDefined();
     expect(screen.getByText('GPU memory ledger')).toBeDefined();
+    expect(await screen.findByRole('alert', { name: 'Desktop backend unavailable' })).toBeDefined();
     expect(await screen.findByText('GPUWatcher backend is unavailable. Launch the desktop app to use this action.')).toBeDefined();
+    expect(screen.getByText('Screen identity, filters, and read-only table controls remain available; no process actions are exposed.')).toBeDefined();
   });
 
   it('keeps the screen identity visible while loading process rows', () => {
@@ -104,7 +106,9 @@ describe('ProcessTableScreen', () => {
     renderProcessTable();
 
     expect(screen.getByText('Process Table')).toBeDefined();
-    expect(await screen.findByText('No processes')).toBeDefined();
+    expect(await screen.findByRole('status', { name: 'No process rows available' })).toBeDefined();
+    expect(screen.getByText('No processes')).toBeDefined();
+    expect(screen.getByText('GPU Activity Monitor remains read-only until the backend records successful process snapshots.')).toBeDefined();
   });
 
   it('renders process rows sorted by GPU memory below the persistent header', async () => {
@@ -191,15 +195,15 @@ describe('ProcessTableScreen', () => {
     expect(screen.getByText('Low memory host / carol')).toBeDefined();
     expect(visibleTableBodyRows()).toEqual([
       'Batch host / drew1 process',
-      'sleep 30PID 4004staleBatch hostGPU 3 · GPU-batch-3drew0s256 MiB3.0%GPU 31.0%2.0%1.0%512 MiBsleep 30',
+      'GPU 3GPU-batch-3PID 4004staledrewsleep 303.0%256 MiB0sBatch hostGPU 3 · GPU-batch-31.0%2.0%1.0%512 MiB',
       'High memory host / unknown user1 process',
-      'unknownPID 1001staleHigh memory hostGPU 0 · GPU-high-0unknownunknown4,096 MiBunknownGPU 0unknownunknownunknownunknownunknown',
+      'GPU 0GPU-high-0PID 1001staleunknownunknownunknown4,096 MiBunknownHigh memory hostGPU 0 · GPU-high-0unknownunknownunknownunknown',
       'Low memory host / bob1 process',
-      'python worker.pyPID 2002currentLow memory hostGPU 1 · GPU-low-1bob1h 2m 3s512 MiB35.0%GPU 128.0%16.0%8.5%1,024 MiBpython worker.py',
+      'GPU 1GPU-low-1PID 2002currentbobpython worker.py35.0%512 MiB1h 2m 3sLow memory hostGPU 1 · GPU-low-128.0%16.0%8.5%1,024 MiB',
       'Low memory host / carol1 process',
-      'python trainer.py --token=[redacted]PID 3003Parent PID 2002currentLow memory hostGPU 0 · GPU-low-0carol1h 1m 1s1,024 MiB48.0%GPU 047.0%24.0%14.0%2,048 MiBpython trainer.py --token=[redacted]',
+      'GPU 0GPU-low-0PID 3003Parent PID 2002currentcarolpython trainer.py --token=[redacted]48.0%1,024 MiB1h 1m 1sLow memory hostGPU 0 · GPU-low-047.0%24.0%14.0%2,048 MiB',
       'Render host / ada1 process',
-      'blender --background scene.blendPID 1500Parent PID 1499currentRender hostGPU 2 · GPU-render-2ada59s2,048 MiB82.0%GPU 277.0%63.0%22.5%4,096 MiBblender --background scene.blend'
+      'GPU 2GPU-render-2PID 1500Parent PID 1499currentadablender --background scene.blend82.0%2,048 MiB59sRender hostGPU 2 · GPU-render-277.0%63.0%22.5%4,096 MiB'
     ]);
 
     const sectionHeader = screen.getByText('High memory host / unknown user').closest('tr');
@@ -212,7 +216,7 @@ describe('ProcessTableScreen', () => {
     fireEvent.click(sectionHeader);
     expect(screen.queryByRole('dialog', { name: 'Process details' })).toBeNull();
 
-    fireEvent.click(screen.getByRole('row', { name: /open process details for pid 1001/i }));
+    fireEvent.click(screen.getByRole('row', { name: /pid 1001/i }));
     expect(screen.getByRole('dialog', { name: 'Process details' }).textContent).toContain('PID 1001');
     fireEvent.click(screen.getByRole('button', { name: 'Close drawer' }));
 
@@ -243,7 +247,7 @@ describe('ProcessTableScreen', () => {
     fireEvent.change(kindSelect, { target: { value: 'compute' } });
     fireEvent.change(staleSelect, { target: { value: 'current' } });
     fireEvent.change(viewSelect, { target: { value: 'userGrouped' } });
-    fireEvent.click(screen.getByRole('button', { name: /sort process \/ pid not sorted/i }));
+    fireEvent.click(screen.getByRole('button', { name: /sort pid not sorted/i }));
 
     await expectProcessLedgerSummary('Showing 1 of 5 process rows');
     expect(screen.getAllByRole('row', { name: /open process details/i })).toHaveLength(1);
@@ -260,7 +264,7 @@ describe('ProcessTableScreen', () => {
     expect(staleSelect).toHaveProperty('value', 'all');
     expect(viewSelect).toHaveProperty('value', 'flat');
     expect(screen.getByRole('columnheader', { name: /pid/i }).getAttribute('aria-sort')).toBe('none');
-    expect(screen.getByRole('columnheader', { name: /gpu memory/i }).getAttribute('aria-sort')).toBe('descending');
+    expect(screen.getByRole('columnheader', { name: /vram/i }).getAttribute('aria-sort')).toBe('descending');
   });
 
   it('clears vanished server and GPU filter state so reintroduced options do not reactivate', async () => {
@@ -351,7 +355,7 @@ describe('ProcessTableScreen', () => {
     fireEvent.change(kindSelect, { target: { value: 'compute' } });
     fireEvent.change(staleSelect, { target: { value: 'current' } });
     fireEvent.change(viewSelect, { target: { value: 'parentGrouped' } });
-    fireEvent.click(screen.getByRole('button', { name: /sort process \/ pid not sorted/i }));
+    fireEvent.click(screen.getByRole('button', { name: /sort pid not sorted/i }));
     await expectProcessLedgerSummary('Showing 1 of 5 process rows');
 
     fireEvent.click(screen.getByRole('button', { name: 'Refresh process rows' }));
@@ -428,6 +432,7 @@ describe('ProcessTableScreen', () => {
     fireEvent.change(await screen.findByRole('textbox', { name: 'Search' }), { target: { value: 'supersecret' } });
 
     await expectProcessLedgerSummary('Showing 0 of 5 process rows');
+    expect(screen.getByRole('status', { name: 'Filtered process rows empty' })).toBeDefined();
     expect(screen.getByText('No processes match filters')).toBeDefined();
     expect(screen.queryByText('No processes')).toBeNull();
     const resetButtons = screen.getAllByRole('button', { name: 'Reset filters' });
@@ -445,7 +450,7 @@ describe('ProcessTableScreen', () => {
 
     renderProcessTable();
 
-    const trainerRow = await screen.findByRole('row', { name: /open process details for pid 3003/i });
+    const trainerRow = await screen.findByRole('row', { name: /pid 3003/i });
     fireEvent.click(trainerRow);
 
     const drawer = screen.getByRole('dialog', { name: 'Process details' });
@@ -495,7 +500,7 @@ describe('ProcessTableScreen', () => {
 
     renderProcessTable();
 
-    fireEvent.click(await screen.findByRole('row', { name: /open process details for pid 9100/i }));
+    fireEvent.click(await screen.findByRole('row', { name: /pid 9100/i }));
 
     const drawer = screen.getByRole('dialog', { name: 'Process details' });
     expect(drawer.textContent).toContain('PID 9100');
@@ -510,7 +515,7 @@ describe('ProcessTableScreen', () => {
     expect(drawer.textContent).not.toContain('/Users/alice/.ssh/id_ed25519');
     expect(within(drawer).queryByRole('button', { name: /kill|terminate|signal|interrupt|restart|refresh|copy/i })).toBeNull();
 
-    fireEvent.click(screen.getByRole('row', { name: /open process details for pid 9200/i }));
+    fireEvent.click(screen.getByRole('row', { name: /pid 9200/i }));
 
     expect(screen.getByRole('dialog', { name: 'Process details' }).textContent).toContain('PID 9100');
     expect(screen.getByRole('dialog', { name: 'Process details' }).textContent).not.toContain('PID 9200');
@@ -521,7 +526,7 @@ describe('ProcessTableScreen', () => {
 
     renderProcessTable();
 
-    const highMemoryRow = await screen.findByRole('row', { name: /open process details for pid 1001/i });
+    const highMemoryRow = await screen.findByRole('row', { name: /pid 1001/i });
     fireEvent.keyDown(highMemoryRow, { key: 'Enter' });
 
     const drawer = screen.getByRole('dialog', { name: 'Process details' });
@@ -540,8 +545,8 @@ describe('ProcessTableScreen', () => {
     renderProcessTable();
 
     await expectProcessLedgerSummary('Showing 5 of 5 process rows');
-    const firstRow = screen.getByRole('row', { name: /open process details for pid 1001/i });
-    const secondRow = screen.getByRole('row', { name: /open process details for pid 1500/i });
+    const firstRow = screen.getByRole('row', { name: /pid 1001/i });
+    const secondRow = screen.getByRole('row', { name: /pid 1500/i });
 
     firstRow.focus();
     fireEvent.keyDown(firstRow, { key: 'ArrowDown' });
@@ -588,7 +593,7 @@ describe('ProcessTableScreen', () => {
     listProcessesMock.mockResolvedValueOnce(processLedgerCollisionRows).mockResolvedValueOnce(refreshedRows);
     renderProcessTable();
 
-    const betaRow = await screen.findByRole('row', { name: 'Open process details for PID 700 on Beta Node' });
+    const betaRow = await screen.findByRole('row', { name: /gpu 2, pid 700.*beta node/i });
     betaRow.focus();
     fireEvent.click(betaRow);
     expect(screen.getByRole('dialog', { name: 'Process details' }).textContent).toContain('GPU-repeated');
@@ -601,7 +606,7 @@ describe('ProcessTableScreen', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Refresh process rows' }));
 
     expect(await screen.findByText('Refresh rows loaded 4 local rows.')).toBeDefined();
-    const refreshedBetaRow = screen.getByRole('row', { name: 'Open process details for PID 700 on Beta Node' });
+    const refreshedBetaRow = screen.getByRole('row', { name: /gpu 2, pid 700.*beta node/i });
     fireEvent.click(refreshedBetaRow);
     expect(screen.getByRole('dialog', { name: 'Process details' }).textContent).toContain('python beta.py refreshed');
   });
@@ -611,7 +616,7 @@ describe('ProcessTableScreen', () => {
     listProcessesMock.mockResolvedValueOnce(processRows).mockResolvedValueOnce(refreshedRows);
     renderProcessTable();
 
-    fireEvent.click(await screen.findByRole('row', { name: /open process details for pid 3003/i }));
+    fireEvent.click(await screen.findByRole('row', { name: /pid 3003/i }));
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Close drawer' }));
     fireEvent.click(screen.getByRole('button', { name: 'Refresh process rows' }));
 
@@ -626,8 +631,8 @@ describe('ProcessTableScreen', () => {
     renderProcessTable();
 
     await expectProcessLedgerSummary('Showing 5 of 5 process rows');
-    const firstRow = screen.getByRole('row', { name: /open process details for pid 1001/i });
-    const secondRow = screen.getByRole('row', { name: /open process details for pid 1500/i });
+    const firstRow = screen.getByRole('row', { name: /pid 1001/i });
+    const secondRow = screen.getByRole('row', { name: /pid 1500/i });
 
     secondRow.focus();
     fireEvent.keyDown(secondRow, { key: 'ArrowUp' });
@@ -642,7 +647,7 @@ describe('ProcessTableScreen', () => {
 
     renderProcessTable();
 
-    fireEvent.click(await screen.findByRole('row', { name: /open process details for pid 3003/i }));
+    fireEvent.click(await screen.findByRole('row', { name: /pid 3003/i }));
     expect(screen.getByRole('dialog', { name: 'Process details' })).toBeDefined();
 
     fireEvent.change(screen.getByRole('textbox', { name: 'Search' }), { target: { value: 'blender' } });
@@ -658,7 +663,9 @@ describe('ProcessTableScreen', () => {
     renderProcessTable();
 
     await expectProcessLedgerSummary('Showing 5 of 5 process rows');
-    expect(sortHeaderLabels().slice(0, 6)).toEqual(['Process / PID', 'Context / Server', 'User', 'Runtime', 'GPU memory', 'GPU util']);
+    expect(sortHeaderLabels().slice(0, 6)).toEqual(['GPU', 'PID', 'User', 'Process', 'GPU %', 'VRAM']);
+    expect(screen.getByRole('region', { name: 'Process rows ledger' }).getAttribute('tabindex')).toBe('0');
+    expect(screen.getByText('Scroll horizontally to review all process metrics. Activate a row to open read-only process details.')).toBeDefined();
 
     for (const sortCase of processSortReachabilityCases) {
       const header = getColumnHeaderForSortButton(sortCase.label, sortCase.initialState);
@@ -677,25 +684,25 @@ describe('ProcessTableScreen', () => {
     await expectProcessLedgerSummary('Showing 5 of 5 process rows');
     expect(visibleTableBodyRows()[0]).toContain('High memory host');
 
-    fireEvent.click(getUniqueSortButton('Process / PID', 'not sorted'));
-    expect(getColumnHeaderForSortButton('Process / PID', 'ascending').getAttribute('aria-sort')).toBe('ascending');
+    fireEvent.click(getUniqueSortButton('PID', 'not sorted'));
+    expect(getColumnHeaderForSortButton('PID', 'ascending').getAttribute('aria-sort')).toBe('ascending');
     expect(visibleTableBodyRows()[0]).toContain('High memory host');
 
-    fireEvent.click(getUniqueSortButton('Process / PID', 'ascending'));
-    expect(getColumnHeaderForSortButton('Process / PID', 'descending').getAttribute('aria-sort')).toBe('descending');
+    fireEvent.click(getUniqueSortButton('PID', 'ascending'));
+    expect(getColumnHeaderForSortButton('PID', 'descending').getAttribute('aria-sort')).toBe('descending');
     expect(visibleTableBodyRows()[0]).toContain('Batch host');
 
-    fireEvent.click(getUniqueSortButton('Context / Server', 'not sorted'));
-    expect(getColumnHeaderForSortButton('Context / Server', 'ascending').getAttribute('aria-sort')).toBe('ascending');
+    fireEvent.click(getUniqueSortButton('Server', 'not sorted'));
+    expect(getColumnHeaderForSortButton('Server', 'ascending').getAttribute('aria-sort')).toBe('ascending');
 
-    fireEvent.click(getUniqueSortButton('Command preview', 'not sorted'));
-    expect(getColumnHeaderForSortButton('Command preview', 'ascending').getAttribute('aria-sort')).toBe('ascending');
+    fireEvent.click(getUniqueSortButton('Process', 'not sorted'));
+    expect(getColumnHeaderForSortButton('Process', 'ascending').getAttribute('aria-sort')).toBe('ascending');
 
-    fireEvent.click(getUniqueSortButton('GPU util', 'not sorted'));
-    expect(getColumnHeaderForSortButton('GPU util', 'descending').getAttribute('aria-sort')).toBe('descending');
+    fireEvent.click(getUniqueSortButton('GPU %', 'not sorted'));
+    expect(getColumnHeaderForSortButton('GPU %', 'descending').getAttribute('aria-sort')).toBe('descending');
 
-    fireEvent.click(getUniqueSortButton('GPU memory', 'not sorted'));
-    expect(getColumnHeaderForSortButton('GPU memory', 'descending').getAttribute('aria-sort')).toBe('descending');
+    fireEvent.click(getUniqueSortButton('VRAM', 'not sorted'));
+    expect(getColumnHeaderForSortButton('VRAM', 'descending').getAttribute('aria-sort')).toBe('descending');
     expect(visibleTableBodyRows()[0]).toContain('High memory host');
   });
 

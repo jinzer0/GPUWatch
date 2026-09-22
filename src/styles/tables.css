@@ -3,7 +3,7 @@
     --process-ledger-table-min-width: 78rem;
     --process-ledger-cell-padding-block: var(--density-space-3);
     --process-ledger-cell-padding-inline: var(--density-space-4);
-    --process-ledger-primary-cell-width: 24rem;
+    --process-ledger-pid-cell-width: 10rem;
     --process-ledger-context-cell-width: 18rem;
     --process-ledger-user-cell-width: 12rem;
     --process-ledger-command-cell-width: 22rem;
@@ -39,7 +39,85 @@
     overscroll-behavior-x: contain;
     border-color: var(--color-line-strong);
     background: color-mix(in srgb, var(--color-panel) 88%, var(--color-canvas-deep));
+    outline: 2px solid transparent;
+    outline-offset: var(--density-space-1);
     scrollbar-gutter: stable;
+  }
+
+  .process-ledger-table-shell:focus-visible {
+    outline-color: var(--color-brand);
+  }
+
+  .process-ledger-state {
+    display: grid;
+    gap: var(--density-space-3);
+    min-height: 12rem;
+    align-content: center;
+    justify-items: center;
+    border-color: var(--color-line-strong);
+    padding: var(--density-card-padding);
+    text-align: center;
+  }
+
+  .process-ledger-state p {
+    max-width: 42rem;
+    color: var(--color-muted);
+    font-size: 0.875rem;
+    line-height: 1.6;
+  }
+
+  .process-ledger-error-state {
+    border-color: color-mix(in srgb, var(--color-error) 64%, var(--color-line));
+    background: color-mix(in srgb, var(--color-error) 8%, var(--color-surface));
+  }
+
+  .process-ledger-error-state .section-title,
+  .process-ledger-error-state p:first-of-type {
+    color: var(--color-error);
+  }
+
+  .process-ledger-command-strip {
+    display: grid;
+    gap: var(--density-space-4);
+  }
+
+  .process-ledger-toolbar-summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--density-space-3);
+    border-bottom: 1px solid var(--color-line);
+    padding-bottom: var(--density-space-3);
+  }
+
+  .process-ledger-toolbar-summary-copy {
+    margin-top: var(--density-space-1);
+    color: var(--color-text);
+    font-size: 0.9rem;
+    font-weight: 800;
+  }
+
+  .process-ledger-scope-chips {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: var(--density-space-2);
+    max-width: 48rem;
+  }
+
+  .process-ledger-scope-chip {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-xl);
+    background: color-mix(in srgb, var(--color-accent-soft) 58%, transparent);
+    color: var(--color-muted);
+    font-size: 0.72rem;
+    font-weight: 800;
+    max-width: 18rem;
+    overflow: hidden;
+    padding: var(--density-space-1) var(--density-space-2);
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .process-ledger-table {
@@ -106,6 +184,10 @@
     background: color-mix(in srgb, var(--color-stale) 9%, transparent);
   }
 
+  .process-ledger-row-current {
+    background: color-mix(in srgb, var(--color-online) 4%, transparent);
+  }
+
   .process-ledger-row-selected {
     background: color-mix(in srgb, var(--color-brand-soft) 72%, var(--color-accent-soft));
   }
@@ -120,10 +202,10 @@
     vertical-align: top;
   }
 
-  .process-ledger-process-cell {
-    width: var(--process-ledger-primary-cell-width);
-    min-width: var(--process-ledger-primary-cell-width);
-    max-width: var(--process-ledger-primary-cell-width);
+  .process-ledger-pid-cell {
+    width: var(--process-ledger-pid-cell-width);
+    min-width: var(--process-ledger-pid-cell-width);
+    max-width: var(--process-ledger-pid-cell-width);
   }
 
   .process-ledger-process-cell-frame {
@@ -132,6 +214,18 @@
     justify-content: space-between;
     gap: var(--density-space-3);
     min-width: 0;
+  }
+
+  .process-ledger-status-badge {
+    display: inline-flex;
+    flex: 0 0 auto;
+    margin-top: calc(-1 * var(--density-space-1));
+  }
+
+  .process-ledger-status-badge .status-neutral {
+    border-color: var(--color-online);
+    background: color-mix(in srgb, var(--color-online) 10%, transparent);
+    color: var(--color-online);
   }
 
   .process-ledger-process-identity {
@@ -206,15 +300,28 @@
 
   .app-shell[data-density="compact"] .process-ledger-page {
     --process-ledger-cell-padding-block: var(--density-space-2);
-    --process-ledger-cell-padding-inline: var(--density-space-3);
-    --process-ledger-primary-cell-width: 22rem;
-    --process-ledger-context-cell-width: 16rem;
+    --process-ledger-cell-padding-inline: var(--density-space-2);
+    --process-ledger-pid-cell-width: 8rem;
+    --process-ledger-context-cell-width: 14rem;
     --process-ledger-user-cell-width: 10rem;
-    --process-ledger-command-cell-width: 20rem;
+    --process-ledger-command-cell-width: 18rem;
+    --process-ledger-table-min-width: 72rem;
   }
 
   .app-shell[data-density="compact"] .process-ledger-table {
     font-size: 0.78rem;
+  }
+
+  .app-shell[data-density="compact"] .process-ledger-command-strip {
+    gap: var(--density-space-3);
+  }
+
+  .app-shell[data-density="compact"] .process-ledger-toolbar-summary {
+    padding-bottom: var(--density-space-2);
+  }
+
+  .app-shell[data-density="compact"] .process-ledger-status-badge > span {
+    padding: 0.125rem var(--density-space-2);
   }
 
   .app-shell[data-density="compact"] .process-ledger-process-meta,

@@ -21,7 +21,7 @@ describe('Process Table Phase 7 accessibility defects', () => {
 
   it('P7-D006 exposes the process row selected state while its drawer is open', async () => {
     renderWithQueryClient(<ProcessTableScreen />);
-    const row = await screen.findByRole('row', { name: /open process details for pid 1001/i });
+    const row = await screen.findByRole('row', { name: /gpu 0, pid 1001/i });
 
     fireEvent.keyDown(row, { key: 'Enter' });
 
@@ -34,5 +34,14 @@ describe('Process Table Phase 7 accessibility defects', () => {
     renderWithQueryClient(<ProcessTableScreen />);
 
     expect(await screen.findByRole('table', { name: 'Process rows ledger' })).toBeDefined();
+  });
+
+  it('P7-D008 exposes the horizontally scrollable process table region to keyboard users', async () => {
+    renderWithQueryClient(<ProcessTableScreen />);
+
+    const overflowRegion = await screen.findByRole('region', { name: 'Process rows ledger' });
+    expect(overflowRegion.getAttribute('tabindex')).toBe('0');
+    expect(overflowRegion.getAttribute('aria-describedby')).toBe('process-rows-ledger-overflow-hint');
+    expect(screen.getByText(/Scroll horizontally to review all process metrics/)).toBeDefined();
   });
 });

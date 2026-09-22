@@ -19,15 +19,21 @@ const ProcessDetailSection = ({ children, title }: { readonly children: ReactNod
   </section>
 );
 
+const processDetailLinkSummary = (row: ProcessRowDto) =>
+  `PID ${row.pid} is linked to ${formatMiB(row.gpuMemoryUsedMiB)} VRAM, ${formatPercent(row.gpuUtilizationPercent)} GPU utilization, and user ${formatUnknown(row.username)}.`;
+
 export const ProcessDetailDrawer = ({ onClose, row }: { readonly onClose: () => void; readonly row: ProcessRowDto }) => (
   <RightDrawer ariaLabel="Process details" autoFocusCloseButton onClose={onClose} title={`PID ${row.pid}`}>
     <article className="process-detail-inspector surface-raised overflow-hidden">
       <header className="process-detail-identity bg-[var(--color-surface)] px-4 py-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="metric-label">Process identity</p>
+            <p className="metric-label">Linked Process Table row</p>
             <p className="mt-1 break-words font-[var(--font-display)] text-2xl font-black leading-none tracking-[-0.06em] text-[color:var(--color-text)]">
               {formatUnknown(row.serverName)} / GPU {formatUnknown(row.gpuIndex)}
+            </p>
+            <p className="mt-2 text-sm leading-6 text-[color:var(--color-muted)]">
+              {processDetailLinkSummary(row)}
             </p>
           </div>
           <StatusBadge status={processStatus(row)} />

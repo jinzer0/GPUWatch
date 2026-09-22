@@ -1,5 +1,5 @@
-import { Button, EmptyState, ErrorState, LoadingState, ResultFeedback } from '../../components/ui';
-import { formatMiB } from '../../lib/format';
+import { Button, LoadingState, ResultFeedback } from '../../components/ui';
+import { formatMiB, sanitizeMessage } from '../../lib/format';
 import { ProcessDetailDrawer } from './ProcessDetailDrawer';
 import { ProcessRowsTable } from './ProcessRowsTable';
 import { ProcessTableToolbar } from './ProcessTableToolbar';
@@ -32,12 +32,35 @@ const ProcessLedgerSummaryStrip = ({ summary }: { readonly summary: ProcessLedge
 };
 
 const FilteredProcessEmptyState = ({ onReset }: { readonly onReset: () => void }) => (
-  <div className="process-ledger-filtered-empty surface">
+  <div aria-label="Filtered process rows empty" className="process-ledger-filtered-empty process-ledger-state surface" role="status">
     <div className="section-title">No processes match filters</div>
     <p>Adjust or reset the Process Table filters to show rows again.</p>
     <Button onClick={onReset} type="button" variant="secondary">
       Reset filters
     </Button>
+  </div>
+);
+
+const isBackendUnavailableError = (message: string) => /backend(_|\s+)unavailable|desktop app/i.test(message);
+
+const ProcessTableErrorState = ({ message }: { readonly message: string }) => {
+  const title = isBackendUnavailableError(message) ? 'Desktop backend unavailable' : 'Process rows unavailable';
+
+  return (
+    <div aria-label={title} className="process-ledger-state process-ledger-error-state surface" role="alert">
+      <div className="metric-label">Process Table status</div>
+      <div className="section-title">{title}</div>
+      <p>{sanitizeMessage(message)}</p>
+      <p>Screen identity, filters, and read-only table controls remain available; no process actions are exposed.</p>
+    </div>
+  );
+};
+
+const ProcessTableEmptyState = () => (
+  <div aria-label="No process rows available" className="process-ledger-state process-ledger-empty-state surface" role="status">
+    <div className="section-title">No processes</div>
+    <p>No latest successful GPU process rows are currently available.</p>
+    <p>GPU Activity Monitor remains read-only until the backend records successful process snapshots.</p>
   </div>
 );
 
@@ -53,7 +76,7 @@ export const ProcessTableScreen = () => {
           GPU memory ledger
         </h2>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-[color:var(--color-muted)]">
-          Flattened backend process rows, default sorted by GPU memory descending with stale snapshot rows visibly marked.
+          GPU Activity Monitor view for finding which process, user, and host is driving VRAM and utilization pressure.
         </p>
       </header>
 
@@ -65,9 +88,9 @@ export const ProcessTableScreen = () => {
           <ProcessTableToolbar controller={controller} />
           {controller.refreshFeedback ? <ResultFeedback {...controller.refreshFeedback} /> : null}
           {controller.queryError && controller.processRows.length === 0 ? (
-            <ErrorState message={controller.queryError.message} />
+            <ProcessTableErrorState message={controller.queryError.message} />
           ) : controller.processRows.length === 0 ? (
-            <EmptyState title="No processes" body="No latest successful GPU process rows are currently available." />
+            <ProcessTableEmptyState />
           ) : controller.visibleRows.length === 0 ? (
             <FilteredProcessEmptyState onReset={controller.resetFilters} />
           ) : (
