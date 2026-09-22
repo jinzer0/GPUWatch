@@ -85,7 +85,9 @@ describe('ProcessTableScreen', () => {
 
     expect(screen.getByText('Process Table')).toBeDefined();
     expect(screen.getByText('GPU memory ledger')).toBeDefined();
+    expect(await screen.findByRole('alert', { name: 'Desktop backend unavailable' })).toBeDefined();
     expect(await screen.findByText('GPUWatcher backend is unavailable. Launch the desktop app to use this action.')).toBeDefined();
+    expect(screen.getByText('Screen identity, filters, and read-only table controls remain available; no process actions are exposed.')).toBeDefined();
   });
 
   it('keeps the screen identity visible while loading process rows', () => {
@@ -104,7 +106,9 @@ describe('ProcessTableScreen', () => {
     renderProcessTable();
 
     expect(screen.getByText('Process Table')).toBeDefined();
-    expect(await screen.findByText('No processes')).toBeDefined();
+    expect(await screen.findByRole('status', { name: 'No process rows available' })).toBeDefined();
+    expect(screen.getByText('No processes')).toBeDefined();
+    expect(screen.getByText('GPU Activity Monitor remains read-only until the backend records successful process snapshots.')).toBeDefined();
   });
 
   it('renders process rows sorted by GPU memory below the persistent header', async () => {
@@ -428,6 +432,7 @@ describe('ProcessTableScreen', () => {
     fireEvent.change(await screen.findByRole('textbox', { name: 'Search' }), { target: { value: 'supersecret' } });
 
     await expectProcessLedgerSummary('Showing 0 of 5 process rows');
+    expect(screen.getByRole('status', { name: 'Filtered process rows empty' })).toBeDefined();
     expect(screen.getByText('No processes match filters')).toBeDefined();
     expect(screen.queryByText('No processes')).toBeNull();
     const resetButtons = screen.getAllByRole('button', { name: 'Reset filters' });
@@ -659,6 +664,8 @@ describe('ProcessTableScreen', () => {
 
     await expectProcessLedgerSummary('Showing 5 of 5 process rows');
     expect(sortHeaderLabels().slice(0, 6)).toEqual(['GPU', 'PID', 'User', 'Process', 'GPU %', 'VRAM']);
+    expect(screen.getByRole('region', { name: 'Process rows ledger' }).getAttribute('tabindex')).toBe('0');
+    expect(screen.getByText('Scroll horizontally to review all process metrics. Activate a row to open read-only process details.')).toBeDefined();
 
     for (const sortCase of processSortReachabilityCases) {
       const header = getColumnHeaderForSortButton(sortCase.label, sortCase.initialState);

@@ -39,7 +39,41 @@
     overscroll-behavior-x: contain;
     border-color: var(--color-line-strong);
     background: color-mix(in srgb, var(--color-panel) 88%, var(--color-canvas-deep));
+    outline: 2px solid transparent;
+    outline-offset: var(--density-space-1);
     scrollbar-gutter: stable;
+  }
+
+  .process-ledger-table-shell:focus-visible {
+    outline-color: var(--color-brand);
+  }
+
+  .process-ledger-state {
+    display: grid;
+    gap: var(--density-space-3);
+    min-height: 12rem;
+    align-content: center;
+    justify-items: center;
+    border-color: var(--color-line-strong);
+    padding: var(--density-card-padding);
+    text-align: center;
+  }
+
+  .process-ledger-state p {
+    max-width: 42rem;
+    color: var(--color-muted);
+    font-size: 0.875rem;
+    line-height: 1.6;
+  }
+
+  .process-ledger-error-state {
+    border-color: color-mix(in srgb, var(--color-error) 64%, var(--color-line));
+    background: color-mix(in srgb, var(--color-error) 8%, var(--color-surface));
+  }
+
+  .process-ledger-error-state .section-title,
+  .process-ledger-error-state p:first-of-type {
+    color: var(--color-error);
   }
 
   .process-ledger-command-strip {
@@ -266,11 +300,12 @@
 
   .app-shell[data-density="compact"] .process-ledger-page {
     --process-ledger-cell-padding-block: var(--density-space-2);
-    --process-ledger-cell-padding-inline: var(--density-space-3);
-    --process-ledger-primary-cell-width: 22rem;
-    --process-ledger-context-cell-width: 16rem;
+    --process-ledger-cell-padding-inline: var(--density-space-2);
+    --process-ledger-primary-cell-width: 20rem;
+    --process-ledger-context-cell-width: 14rem;
     --process-ledger-user-cell-width: 10rem;
-    --process-ledger-command-cell-width: 20rem;
+    --process-ledger-command-cell-width: 18rem;
+    --process-ledger-table-min-width: 72rem;
   }
 
   .app-shell[data-density="compact"] .process-ledger-table {

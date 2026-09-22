@@ -5,7 +5,10 @@ import { PROCESS_ROOT_CAUSE_COLUMN_LABELS, pidCellSpacingClass, processRootCause
 const formatGpuUuidPreview = (gpuUuid: string) => (gpuUuid.length > 18 ? `${gpuUuid.slice(0, 15)}...` : gpuUuid);
 
 export const ProcessRowsTable = ({ controller }: { readonly controller: ProcessTableController }) => (
-  <div className="process-ledger-table-shell panel" role="region" aria-label="Process rows ledger">
+  <div aria-describedby="process-rows-ledger-overflow-hint" aria-label="Process rows ledger" className="process-ledger-table-shell panel" role="region" tabIndex={0}>
+    <span className="sr-only" id="process-rows-ledger-overflow-hint">
+      Scroll horizontally to review all process metrics. Activate a row to open read-only process details.
+    </span>
     <table aria-label="Process rows ledger" className="process-ledger-table w-full text-left text-sm">
       <thead className="process-ledger-table-head table-head">
         <tr>

@@ -35,4 +35,13 @@ describe('Process Table Phase 7 accessibility defects', () => {
 
     expect(await screen.findByRole('table', { name: 'Process rows ledger' })).toBeDefined();
   });
+
+  it('P7-D008 exposes the horizontally scrollable process table region to keyboard users', async () => {
+    renderWithQueryClient(<ProcessTableScreen />);
+
+    const overflowRegion = await screen.findByRole('region', { name: 'Process rows ledger' });
+    expect(overflowRegion.getAttribute('tabindex')).toBe('0');
+    expect(overflowRegion.getAttribute('aria-describedby')).toBe('process-rows-ledger-overflow-hint');
+    expect(screen.getByText(/Scroll horizontally to review all process metrics/)).toBeDefined();
+  });
 });
