@@ -1,6 +1,7 @@
 import type { KeyboardEvent, RefObject } from 'react';
 
 import type { LabeledSelectOption, SortDirection as HeaderSortDirection } from '../../components/ui';
+import { formatCommand, formatMiB, formatPercent, formatUnknown } from '../../lib/format';
 import type {
   ProcessTableFilters,
   ProcessTableSortKey,
@@ -107,6 +108,11 @@ export const gpuFilterValue = (gpuIndex: number, gpuUuid: string) => `${gpuIndex
 export const processRowKey = (row: ProcessRowDto) => `${row.serverId}-${row.gpuUuid}-${row.pid}`;
 
 export const processStatus = (row: ProcessRowDto) => (row.stale ? 'stale' : 'current');
+
+export const PROCESS_ROOT_CAUSE_COLUMN_LABELS = ['GPU', 'PID', 'User', 'Process', 'GPU %', 'VRAM'] as const;
+
+export const processRootCauseSummary = (row: ProcessRowDto) =>
+  `Open process details for GPU ${formatUnknown(row.gpuIndex)}, PID ${row.pid}, User ${formatUnknown(row.username)}, Process ${formatCommand(row.command)}, GPU ${formatPercent(row.gpuUtilizationPercent)}, VRAM ${formatMiB(row.gpuMemoryUsedMiB)} on ${row.serverName}`;
 
 export const summarizeProcessLedger = (processRows: readonly ProcessRowDto[], visibleRows: readonly ProcessRowDto[]): ProcessLedgerSummary => {
   const serverIds = new Set<string>();
