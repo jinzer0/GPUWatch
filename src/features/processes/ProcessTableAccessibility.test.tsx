@@ -21,7 +21,7 @@ describe('Process Table Phase 7 accessibility defects', () => {
 
   it('P7-D006 exposes the process row selected state while its drawer is open', async () => {
     renderWithQueryClient(<ProcessTableScreen />);
-    const row = await screen.findByRole('row', { name: /open process details for pid 1001/i });
+    const row = await screen.findByRole('row', { name: /gpu 0, pid 1001/i });
 
     fireEvent.keyDown(row, { key: 'Enter' });
 

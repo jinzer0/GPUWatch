@@ -44,11 +44,13 @@ export const ProcessRowsTable = ({ controller }: { readonly controller: ProcessT
               const commandPreview = formatCommand(row.command);
               const gpuUuidPreview = formatGpuUuidPreview(row.gpuUuid);
               const isSelected = controller.selectedProcess !== null && processRowKey(controller.selectedProcess) === processRowKey(row);
+              const status = processStatus(row);
               return (
                 <tr
                   aria-label={processRootCauseSummary(row)}
                   aria-selected={isSelected ? true : undefined}
                   className={`process-ledger-row ${row.stale ? 'process-ledger-row-stale row-stale' : 'process-ledger-row-current'} ${isSelected ? 'process-ledger-row-selected' : ''}`}
+                  data-activity-status={status}
                   key={processRowKey(row)}
                   onClick={() => controller.openProcessDetails(row)}
                   onKeyDown={(event) => controller.handleRowKeyDown(event, row)}
@@ -74,7 +76,9 @@ export const ProcessRowsTable = ({ controller }: { readonly controller: ProcessT
                           {row.parentPid !== null && row.parentPid !== undefined ? <span>Parent PID {row.parentPid}</span> : null}
                         </div>
                       </div>
-                      <StatusBadge status={processStatus(row)} />
+                      <span className="process-ledger-status-badge" title={row.stale ? 'Stale GPU snapshot row' : 'Current GPU activity row'}>
+                        <StatusBadge status={status} />
+                      </span>
                     </div>
                   </td>
                   <td className="process-ledger-cell process-ledger-user-cell" title={formatUnknown(row.username)}>{formatUnknown(row.username)}</td>

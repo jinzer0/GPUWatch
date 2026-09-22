@@ -53,7 +53,7 @@ export const ProcessTableScreen = () => {
           GPU memory ledger
         </h2>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-[color:var(--color-muted)]">
-          Flattened backend process rows, default sorted by GPU memory descending with stale snapshot rows visibly marked.
+          GPU Activity Monitor view for finding which process, user, and host is driving VRAM and utilization pressure.
         </p>
       </header>
 
