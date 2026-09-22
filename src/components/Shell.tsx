@@ -55,17 +55,29 @@ export const Shell = ({ children, overview }: { children: ReactNode; overview: S
             <div className="titlebar-page-context">GPU Activity Monitor</div>
           </div>
           <div aria-label="Fleet status" className="titlebar-status">
-            <span className="titlebar-status-item">
+            <span
+              aria-label={`Fleet: ${serverCountLabel}`}
+              className="titlebar-status-item"
+              title={`Fleet: ${serverCountLabel}`}
+            >
               <span className="titlebar-status-label">Fleet</span>
-              <span>{serverCountLabel}</span>
+              <span className="titlebar-status-value">{serverCountLabel}</span>
             </span>
-            <span className="titlebar-status-item">
+            <span
+              aria-label={`Online servers: ${onlineCountLabel}`}
+              className="titlebar-status-item"
+              title={`Online servers: ${onlineCountLabel}`}
+            >
               <span className="titlebar-status-label">Online</span>
-              <span>{onlineCountLabel}</span>
+              <span className="titlebar-status-value">{onlineCountLabel}</span>
             </span>
-            <span className="titlebar-status-item">
+            <span
+              aria-label={`Runtime: ${runtimeStatusLabel}`}
+              className="titlebar-status-item"
+              title={`Runtime: ${runtimeStatusLabel}`}
+            >
               <span className="titlebar-status-label">Runtime</span>
-              <span>{runtimeStatusLabel}</span>
+              <span className="titlebar-status-value">{runtimeStatusLabel}</span>
             </span>
           </div>
         </div>
@@ -79,7 +91,7 @@ export const Shell = ({ children, overview }: { children: ReactNode; overview: S
             return (
               <button
                 aria-current={isActive ? 'page' : undefined}
-                className={`no-drag sidebar-nav-item w-full border-l-2 px-4 py-3 text-left text-sm transition ${
+                className={`no-drag sidebar-nav-item w-full border-l-2 text-left text-sm transition ${
                   isActive
                     ? 'sidebar-nav-item-active border-[color:var(--color-brand)] font-extrabold text-[color:var(--color-text)]'
                     : 'border-transparent font-semibold text-[color:var(--color-muted)] hover:bg-white/5 hover:text-[color:var(--color-text)]'
@@ -107,7 +119,7 @@ export const Shell = ({ children, overview }: { children: ReactNode; overview: S
                   <button
                     aria-label={`Use ${option.id} density`}
                     aria-pressed={isActive}
-                    className={`no-drag density-control-option rounded-[var(--radius-sm)] border px-3 py-2 text-sm font-extrabold transition ${
+                    className={`no-drag density-control-option rounded-[var(--radius-sm)] border text-sm font-extrabold transition ${
                       isActive
                         ? 'density-control-option-active border-[color:var(--color-brand)] bg-[var(--color-brand-soft)] text-[color:var(--color-brand)]'
                         : 'border-[color:var(--color-line)] text-[color:var(--color-muted)] hover:border-[color:var(--color-line-strong)] hover:bg-white/5 hover:text-[color:var(--color-text)]'
@@ -125,7 +137,7 @@ export const Shell = ({ children, overview }: { children: ReactNode; overview: S
         </footer>
       </aside>
 
-      <main className="app-content">
+      <main aria-label={`${tabLabels[activeTab]} content`} className="app-content">
         <div className="page-container">{children}</div>
       </main>
     </div>

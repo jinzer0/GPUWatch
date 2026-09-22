@@ -137,10 +137,12 @@ describe('Shell density mode', () => {
     expect(within(titlebar).getByText('GPUWatcher')).toBeDefined();
     expect(within(titlebar).getAllByText('Fleet')).toHaveLength(2);
     expect(within(titlebar).getByText('GPU Activity Monitor')).toBeDefined();
+    expect(screen.getByRole('main', { name: 'Fleet content' })).toBeDefined();
 
     fireEvent.click(screen.getByRole('button', { name: 'History' }));
 
     expect(within(titlebar).getByText('History')).toBeDefined();
+    expect(screen.getByRole('main', { name: 'History content' })).toBeDefined();
   });
 
   it('identifies browser fallback and desktop backend runtime states without changing the Shell API', () => {
@@ -149,6 +151,7 @@ describe('Shell density mode', () => {
 
     expect(fallbackStatus.getByText('Runtime')).toBeDefined();
     expect(fallbackStatus.getByText('Browser fallback')).toBeDefined();
+    expect(fallbackStatus.getByTitle('Runtime: Browser fallback')).toBeDefined();
 
     fallbackView.unmount();
     window.gpuwatcher = {};
@@ -158,6 +161,7 @@ describe('Shell density mode', () => {
     const desktopStatus = within(getRequiredElement(desktopView.container, '.titlebar-status'));
 
     expect(desktopStatus.getByText('Desktop backend')).toBeDefined();
+    expect(desktopStatus.getByTitle('Runtime: Desktop backend')).toBeDefined();
   });
 
   it('renders unknown server counts when overview data has not loaded', () => {
@@ -178,6 +182,8 @@ describe('Shell density mode', () => {
 
     expect(screen.getByText('3 servers')).toBeDefined();
     expect(screen.getByText('2 online')).toBeDefined();
+    expect(screen.getByTitle('Fleet: 3 servers')).toBeDefined();
+    expect(screen.getByTitle('Online servers: 2 online')).toBeDefined();
   });
 
   it('renders children inside the semantic page container', () => {
