@@ -177,6 +177,8 @@ describe('OverviewScreen', () => {
     expect(fleetSummary.getAllByText('Unknown while any host lacks current GPU counts')).toHaveLength(2);
     expect(unknownArticle.getByText('GPU activity unknown')).toBeDefined();
     expect(unknownArticle.getByText('No busy/free GPU counts in overview DTO')).toBeDefined();
+    expect(unknownArticle.getAllByText('unknown').length).toBeGreaterThanOrEqual(3);
+    expect(unknownArticle.queryByText('0 / 0')).toBeNull();
   });
 
   it('summarizes ONLINE as online while excluding online-stale and counting error metadata as attention', () => {

@@ -17,6 +17,8 @@ export const OverviewServerCard = ({
   const hasLatestDiagnostic = server.lastErrorType !== null || server.lastErrorMessage !== null;
   const gpuActivityKnown = overviewGpuActivityKnown(server);
   const needsAttention = overviewNeedsAttention(server);
+  const gpuTotalLabel = gpuActivityKnown ? formatGpuCount(server.gpuTotal) : 'unknown';
+  const busyFreeLabel = gpuActivityKnown ? `${formatGpuCount(server.busyGpuCount)} / ${formatGpuCount(server.freeGpuCount)}` : 'unknown';
 
   return (
     <article aria-label={`${server.name} overview`} className="overview-server-row">
@@ -59,11 +61,11 @@ export const OverviewServerCard = ({
       <dl className="overview-server-metrics">
         <div className="overview-server-metric">
           <dt className="metric-label">GPU total</dt>
-          <dd className="metric-value text-[color:var(--color-accent)]">{formatGpuCount(server.gpuTotal)}</dd>
+          <dd className="metric-value text-[color:var(--color-accent)]">{gpuTotalLabel}</dd>
         </div>
         <div className="overview-server-metric">
           <dt className="metric-label">Busy / free</dt>
-          <dd className="metric-value">{formatGpuCount(server.busyGpuCount)} / {formatGpuCount(server.freeGpuCount)}</dd>
+          <dd className="metric-value">{busyFreeLabel}</dd>
         </div>
         <div className="overview-server-metric">
           <dt className="metric-label">Average GPU util</dt>
