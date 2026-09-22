@@ -4,11 +4,14 @@ import { OverviewServerCard } from './OverviewServerCard';
 import { parseOverviewQuickFilter, summarizeOverviewFleet } from './overviewModel';
 import { useOverviewController } from './useOverviewController';
 
+const formatNullableCount = (value: number | null) => (value === null ? 'unknown' : value.toString());
+
 export const OverviewScreen = ({ overview, isLoading, error }: { readonly overview: ServerOverviewDto[]; readonly isLoading: boolean; readonly error: Error | null }) => {
   const controller = useOverviewController(overview);
   const fleetSummary = summarizeOverviewFleet(overview);
   const showNoData = !isLoading && !error && overview.length === 0;
   const showFilteredEmpty = !isLoading && !error && overview.length > 0 && controller.visibleRows.length === 0;
+  const hasUnknownGpuActivity = fleetSummary.unknownGpuHosts > 0;
 
   return (
     <section className="overview-page space-y-6">
@@ -16,8 +19,8 @@ export const OverviewScreen = ({ overview, isLoading, error }: { readonly overvi
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="eyebrow">Overview</div>
-            <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em]">Fleet snapshot</h2>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-[color:var(--color-muted)]">A terse readout of configured GPU hosts, latest successful polls, and current health metadata.</p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em]">GPU Activity dashboard</h2>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-[color:var(--color-muted)]">Fleet-level GPU capacity, current busy/free signals, and host health from the latest overview DTOs.</p>
           </div>
           <Button disabled={controller.seedMutation.isPending} onClick={() => controller.seedMutation.mutate()} type="button" variant="secondary">
             Seed demo data
@@ -31,24 +34,31 @@ export const OverviewScreen = ({ overview, isLoading, error }: { readonly overvi
       </header>
 
       {overview.length > 0 ? (
-        <dl aria-label="Fleet summary" className="overview-summary surface grid gap-3 p-4">
+        <dl aria-label="GPU activity summary" className="overview-summary surface grid gap-3 p-4">
           <div>
-            <dt className="metric-label">Servers</dt>
-            <dd className="metric-value">{fleetSummary.totalServers}</dd>
+            <dt className="metric-label">Total GPUs</dt>
+            <dd className="metric-value overview-summary-gpu-value text-[color:var(--color-accent)]">{formatNullableCount(fleetSummary.totalGpus)}</dd>
+            <dd className="metric-note">{fleetSummary.knownGpuHosts} known / {fleetSummary.unknownGpuHosts} unknown hosts</dd>
           </div>
           <div>
-            <dt className="metric-label">Online</dt>
-            <dd className="metric-value text-[color:var(--color-online)]">{fleetSummary.onlineServers}</dd>
+            <dt className="metric-label">Busy GPUs</dt>
+            <dd className="metric-value overview-summary-gpu-value text-[color:var(--color-warning)]">{formatNullableCount(fleetSummary.busyGpus)}</dd>
+            <dd className="metric-note">{hasUnknownGpuActivity ? 'Unknown while any host lacks current GPU counts' : 'Current overview DTO activity signal'}</dd>
           </div>
           <div>
-            <dt className="metric-label">Needs attention</dt>
+            <dt className="metric-label">Free GPUs</dt>
+            <dd className="metric-value overview-summary-gpu-value text-[color:var(--color-online)]">{formatNullableCount(fleetSummary.freeGpus)}</dd>
+            <dd className="metric-note">{hasUnknownGpuActivity ? 'Unknown while any host lacks current GPU counts' : 'Available from known hosts'}</dd>
+          </div>
+          <div>
+            <dt className="metric-label">Active processes</dt>
+            <dd className="metric-value">unknown</dd>
+            <dd className="metric-note">Process count unavailable from overview DTO</dd>
+          </div>
+          <div>
+            <dt className="metric-label">Attention hosts</dt>
             <dd className="metric-value text-[color:var(--color-warning)]">{fleetSummary.attentionServers}</dd>
-          </div>
-          <div>
-            <dt className="metric-label">GPUs</dt>
-            <dd className="metric-value overview-summary-gpu-value text-[color:var(--color-accent)]">
-              {fleetSummary.totalGpus} total · {fleetSummary.busyGpus} busy · {fleetSummary.freeGpus} free
-            </dd>
+            <dd className="metric-note">{fleetSummary.onlineServers} online / {fleetSummary.totalServers} total servers</dd>
           </div>
         </dl>
       ) : null}
