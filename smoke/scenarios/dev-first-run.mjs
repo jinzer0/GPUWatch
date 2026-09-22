@@ -112,7 +112,7 @@ async function runScenario(logs, spawnLogged) {
     const { importSurface, savedServerId, servers } = await runSettingsImportScenario(cdp, { smokeWaitForText, screenshots });
     const { errorSurface, afterErrorBody } = await runSanitizedErrorScenario(cdp, { smokeWaitForText, screenshots });
 
-    await clickNav(cdp, 'Overview');
+    await clickNav(cdp, 'Fleet');
     await smokeWaitForText(cdp, 'Fleet snapshot');
     await clickText(cdp, 'Seed demo data');
     const seededBody = await smokeWaitForText(cdp, 'Demo data seeded');

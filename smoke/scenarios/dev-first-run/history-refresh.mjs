@@ -3,7 +3,7 @@ import { screenshot } from '../../shared/cdp.mjs';
 import { evidenceDir } from '../../shared/paths.mjs';
 
 export async function runHistoryRefreshScenario(cdp, { smokeWaitForText, screenshots }) {
-  await clickNav(cdp, 'Live Monitor');
+  await clickNav(cdp, 'History');
   await smokeWaitForText(cdp, 'Stored GPU history');
   await smokeWaitForText(cdp, 'Refresh history');
   await waitForEnabledClickableText(cdp, 'Refresh history');

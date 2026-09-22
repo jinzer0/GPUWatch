@@ -3,7 +3,7 @@ import { screenshot } from '../../shared/cdp.mjs';
 import { evidenceDir } from '../../shared/paths.mjs';
 
 export async function runProcessRefreshScenario(cdp, { smokeWaitForText, screenshots }) {
-  await clickNav(cdp, 'Process Table');
+  await clickNav(cdp, 'Processes');
   await smokeWaitForText(cdp, 'GPU memory ledger');
   await waitForEnabledClickableText(cdp, 'Refresh process rows');
   await selectByLabel(cdp, 'View', 'userGrouped');
@@ -11,7 +11,7 @@ export async function runProcessRefreshScenario(cdp, { smokeWaitForText, screens
   await waitForEnabledClickableText(cdp, 'Refresh process rows');
   await clickText(cdp, 'Refresh process rows');
   const processBody = await smokeWaitForText(cdp, 'Refresh rows loaded');
-  await assertNonBlank(cdp, 'Process Table refresh');
+  await assertNonBlank(cdp, 'Processes refresh');
   await screenshot(cdp, evidenceDir, 'task-14-process-refresh-rows.png', (file) => screenshots.push(file));
   return processBody;
 }

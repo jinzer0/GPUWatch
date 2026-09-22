@@ -72,9 +72,19 @@
   }
 
   .titlebar-main {
+    min-width: 0;
+    overflow: hidden;
     justify-content: space-between;
     gap: var(--density-space-4);
     padding: 0 var(--density-space-5);
+  }
+
+  .titlebar-heading {
+    display: flex;
+    min-width: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 0.05rem;
   }
 
   .titlebar-page-title {
@@ -86,13 +96,58 @@
     white-space: nowrap;
   }
 
+  .titlebar-page-context {
+    overflow: hidden;
+    color: var(--color-text-tertiary);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
   .titlebar-status {
     display: flex;
-    flex: 0 0 auto;
-    gap: var(--density-space-3);
-    color: var(--color-text-tertiary);
-    font-size: 0.75rem;
+    min-width: 0;
+    flex: 0 1 auto;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--density-space-2);
+    overflow: hidden;
+    color: var(--color-text-secondary);
+    font-size: 0.72rem;
     font-weight: 700;
+  }
+
+  .titlebar-status-item {
+    display: inline-flex;
+    min-width: 0;
+    align-items: center;
+    gap: var(--density-space-1);
+    min-height: 1.5rem;
+    max-width: 12rem;
+    border: 1px solid var(--color-line);
+    border-radius: 999px;
+    background: var(--color-panel);
+    padding: 0 var(--density-space-2);
+    white-space: nowrap;
+  }
+
+  .titlebar-status-value {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .titlebar-status-label {
+    flex: 0 0 auto;
+    color: var(--color-text-tertiary);
+    font-size: 0.66rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
   }
 
   .app-sidebar {
@@ -113,10 +168,21 @@
     padding: var(--density-space-3) 0;
   }
 
+  .sidebar-nav-item {
+    min-height: 2.75rem;
+    padding: var(--density-space-3) var(--density-space-4);
+    overflow-wrap: anywhere;
+  }
+
   .sidebar-footer {
     flex: 0 0 auto;
     border-top: 1px solid var(--color-line);
     padding: var(--density-space-4);
+  }
+
+  .density-control-option {
+    min-height: var(--shell-control-height);
+    padding: var(--density-space-2) var(--density-space-3);
   }
 
   .app-content {
@@ -154,5 +220,47 @@
 
   .app-shell.app-shell[data-density="compact"] .panel-strong {
     border-radius: var(--radius-card);
+  }
+
+  .app-shell[data-density="compact"] .titlebar-main {
+    gap: var(--density-space-3);
+    padding: 0 var(--density-space-4);
+  }
+
+  .app-shell[data-density="compact"] .titlebar-status {
+    gap: var(--density-space-1);
+    font-size: 0.68rem;
+  }
+
+  .app-shell[data-density="compact"] .titlebar-status-item {
+    min-height: 1.35rem;
+    max-width: 9rem;
+    padding: 0 var(--density-space-2);
+  }
+
+  .app-shell[data-density="compact"] .titlebar-status-label {
+    font-size: 0.6rem;
+  }
+
+  .app-shell[data-density="compact"] .sidebar-nav {
+    padding: var(--density-space-2) 0;
+  }
+
+  .app-shell[data-density="compact"] .sidebar-nav-item {
+    min-height: 2.25rem;
+    padding: var(--density-space-2) var(--density-space-3);
+  }
+
+  .app-shell[data-density="compact"] .sidebar-footer {
+    padding: var(--density-space-3);
+  }
+
+  .app-shell[data-density="compact"] .density-control-options {
+    gap: var(--density-space-1);
+    margin-top: var(--density-space-2);
+  }
+
+  .app-shell[data-density="compact"] .density-control-option {
+    padding: var(--density-space-1) var(--density-space-2);
   }
 }
