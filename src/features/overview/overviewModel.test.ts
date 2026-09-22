@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { ServerOverviewDto } from '../../lib/types';
-import { isOverviewStatusOnline, overviewNeedsAttention, summarizeOverviewFleet } from './overviewModel';
+import { isOverviewStatusOnline, overviewGpuActivityKnown, overviewNeedsAttention, summarizeOverviewFleet } from './overviewModel';
 
 const baseOverviewRow: ServerOverviewDto = {
   id: 'server-base',
@@ -61,12 +61,17 @@ describe('overviewModel fleet summary helpers', () => {
 
   it('summarizes an empty fleet with zero totals', () => {
     expect(summarizeOverviewFleet([])).toEqual({
+      activeProcessCount: null,
+      activeProcessSemantics: 'unavailable-from-overview-dto',
       attentionServers: 0,
+      attentionHosts: [],
       busyGpus: 0,
       freeGpus: 0,
+      knownGpuHosts: 0,
       onlineServers: 0,
       totalGpus: 0,
-      totalServers: 0
+      totalServers: 0,
+      unknownGpuHosts: 0
     });
   });
 
@@ -78,12 +83,30 @@ describe('overviewModel fleet summary helpers', () => {
     ];
 
     expect(summarizeOverviewFleet(rows)).toEqual({
+      activeProcessCount: null,
+      activeProcessSemantics: 'unavailable-from-overview-dto',
       attentionServers: 2,
+      attentionHosts: [
+        {
+          host: 'base.local',
+          id: 'server-stale',
+          name: 'Base GPU Server',
+          status: 'online-stale'
+        },
+        {
+          host: 'base.local',
+          id: 'server-error',
+          name: 'Base GPU Server',
+          status: 'offline'
+        }
+      ],
       busyGpus: 10,
       freeGpus: 4,
+      knownGpuHosts: 3,
       onlineServers: 1,
       totalGpus: 14,
-      totalServers: 3
+      totalServers: 3,
+      unknownGpuHosts: 0
     });
   });
 
@@ -101,12 +124,71 @@ describe('overviewModel fleet summary helpers', () => {
     ];
 
     expect(summarizeOverviewFleet(rows)).toEqual({
+      activeProcessCount: null,
+      activeProcessSemantics: 'unavailable-from-overview-dto',
       attentionServers: 0,
+      attentionHosts: [],
       busyGpus: 0,
       freeGpus: 0,
+      knownGpuHosts: 1,
       onlineServers: 1,
       totalGpus: 0,
-      totalServers: 1
+      totalServers: 1,
+      unknownGpuHosts: 0
+    });
+  });
+
+  it('treats no-success zero GPU counts as unknown rather than real zero activity', () => {
+    const rows: ServerOverviewDto[] = [
+      buildOverviewRow({
+        id: 'server-known',
+        gpuTotal: 2,
+        busyGpuCount: 1,
+        freeGpuCount: 1,
+        lastSuccessAt: '2026-06-01T00:05:00Z'
+      }),
+      buildOverviewRow({
+        id: 'server-unknown',
+        gpuTotal: 0,
+        busyGpuCount: 0,
+        freeGpuCount: 0,
+        lastSuccessAt: null
+      })
+    ];
+
+    expect(overviewGpuActivityKnown(rows[0])).toBe(true);
+    expect(overviewGpuActivityKnown(rows[1])).toBe(false);
+    expect(summarizeOverviewFleet(rows)).toEqual({
+      activeProcessCount: null,
+      activeProcessSemantics: 'unavailable-from-overview-dto',
+      attentionServers: 0,
+      attentionHosts: [],
+      busyGpus: null,
+      freeGpus: null,
+      knownGpuHosts: 1,
+      onlineServers: 2,
+      totalGpus: null,
+      totalServers: 2,
+      unknownGpuHosts: 1
+    });
+  });
+
+  it('treats nullable GPU count fields as unknown when untyped runtime data supplies them', () => {
+    const runtimeRow = buildOverviewRow({
+      id: 'server-null-gpu-counts',
+      gpuTotal: null,
+      busyGpuCount: null,
+      freeGpuCount: null,
+      lastSuccessAt: '2026-06-01T00:05:00Z'
+    } as unknown as Partial<ServerOverviewDto>);
+
+    expect(overviewGpuActivityKnown(runtimeRow)).toBe(false);
+    expect(summarizeOverviewFleet([runtimeRow])).toMatchObject({
+      busyGpus: null,
+      freeGpus: null,
+      knownGpuHosts: 0,
+      totalGpus: null,
+      unknownGpuHosts: 1
     });
   });
 });
