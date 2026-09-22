@@ -52,7 +52,7 @@ GitHub Issue: [#20](https://github.com/jinzer0/GPUWatch/issues/20)
 
 - Stage 1: overviewModel.test.ts 8 passed, `git diff --check` 통과
 - Stage 2: Overview screen/model tests 29 passed, `git diff --check` 통과
-- Stage 3: Overview screen/model tests 31 passed, `npm run build` 통과, `git diff --check` 통과
+- Stage 3: Overview screen/model tests 31 passed, `npm run build` 통과, `git diff --check` 통과, browser QA 통과
 
 ### 최종 수용 기준 검증
 
@@ -62,11 +62,13 @@ GitHub Issue: [#20](https://github.com/jinzer0/GPUWatch/issues/20)
 git diff --check
 npm run test -- --run src/features/overview/OverviewScreen.test.tsx src/features/overview/overviewModel.test.ts
 npm run build
+Browser QA: Vite plain-browser fallback at 1280x860 and 1024x720, full/compact density
 ```
 
 결과:
 
 - OK — Overview screen/model tests 31 passed, build passed, diff check passed.
+- OK — Browser QA에서 `GPU Activity dashboard` header, no-data state, full/compact density 전환을 1280x860과 1024x720에서 확인했고 document horizontal overflow가 viewport width를 넘지 않았다.
 
 ## 잔여 위험과 후속 작업
 
