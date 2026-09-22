@@ -92,7 +92,7 @@ async function captureDensityEvidence(cdp, screenshots) {
 }
 
 async function runLedgerInteractions(cdp, screenshots) {
-  await clickNav(cdp, 'Process Table');
+  await clickNav(cdp, 'Processes');
   await waitForSmokeText(cdp, 'GPU memory ledger');
   await waitForSmokeText(cdp, 'Showing 6 of 6 process rows');
   await expectPage(cdp, 'all twelve sort controls', `document.querySelectorAll('button[aria-label^="Sort "]').length === 12`);
