@@ -11,6 +11,7 @@ export const OverviewScreen = ({ overview, isLoading, error }: { readonly overvi
   const fleetSummary = summarizeOverviewFleet(overview);
   const showNoData = !isLoading && !error && overview.length === 0;
   const showFilteredEmpty = !isLoading && !error && overview.length > 0 && controller.visibleRows.length === 0;
+  const hasUnknownGpuActivity = fleetSummary.unknownGpuHosts > 0;
 
   return (
     <section className="overview-page space-y-6">
@@ -36,23 +37,23 @@ export const OverviewScreen = ({ overview, isLoading, error }: { readonly overvi
         <dl aria-label="GPU activity summary" className="overview-summary surface grid gap-3 p-4">
           <div>
             <dt className="metric-label">Total GPUs</dt>
-            <dd className="metric-value text-[color:var(--color-accent)]">{formatNullableCount(fleetSummary.totalGpus)}</dd>
+            <dd className="metric-value overview-summary-gpu-value text-[color:var(--color-accent)]">{formatNullableCount(fleetSummary.totalGpus)}</dd>
             <dd className="metric-note">{fleetSummary.knownGpuHosts} known / {fleetSummary.unknownGpuHosts} unknown hosts</dd>
           </div>
           <div>
             <dt className="metric-label">Busy GPUs</dt>
-            <dd className="metric-value text-[color:var(--color-warning)]">{formatNullableCount(fleetSummary.busyGpus)}</dd>
-            <dd className="metric-note">Overview DTO activity signal</dd>
+            <dd className="metric-value overview-summary-gpu-value text-[color:var(--color-warning)]">{formatNullableCount(fleetSummary.busyGpus)}</dd>
+            <dd className="metric-note">{hasUnknownGpuActivity ? 'Unknown while any host lacks current GPU counts' : 'Current overview DTO activity signal'}</dd>
           </div>
           <div>
             <dt className="metric-label">Free GPUs</dt>
-            <dd className="metric-value text-[color:var(--color-online)]">{formatNullableCount(fleetSummary.freeGpus)}</dd>
-            <dd className="metric-note">Available from known hosts</dd>
+            <dd className="metric-value overview-summary-gpu-value text-[color:var(--color-online)]">{formatNullableCount(fleetSummary.freeGpus)}</dd>
+            <dd className="metric-note">{hasUnknownGpuActivity ? 'Unknown while any host lacks current GPU counts' : 'Available from known hosts'}</dd>
           </div>
           <div>
             <dt className="metric-label">Active processes</dt>
             <dd className="metric-value">unknown</dd>
-            <dd className="metric-note">Not available from overview DTO</dd>
+            <dd className="metric-note">Process count unavailable from overview DTO</dd>
           </div>
           <div>
             <dt className="metric-label">Attention hosts</dt>

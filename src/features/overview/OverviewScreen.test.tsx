@@ -152,8 +152,31 @@ describe('OverviewScreen', () => {
     expect(fleetSummary.getByText('10')).toBeDefined();
     expect(fleetSummary.getByText('4')).toBeDefined();
     expect(fleetSummary.getByText('3 known / 0 unknown hosts')).toBeDefined();
-    expect(fleetSummary.getByText('Not available from overview DTO')).toBeDefined();
+    expect(fleetSummary.getByText('Process count unavailable from overview DTO')).toBeDefined();
     expect(fleetSummary.getByText('1 online / 3 total servers')).toBeDefined();
+  });
+
+  it('preserves unknown GPU activity wording when any host lacks current counts', () => {
+    const { container } = renderOverview([
+      overviewRows[0],
+      {
+        ...overviewRows[1],
+        id: 'server-unknown-gpu',
+        name: 'Unknown GPU Host',
+        gpuTotal: 0,
+        busyGpuCount: 0,
+        freeGpuCount: 0,
+        lastSuccessAt: null
+      }
+    ]);
+
+    const fleetSummary = within(getFleetSummary(container));
+    const unknownArticle = within(screen.getByRole('article', { name: /Unknown GPU Host overview/i }));
+
+    expect(fleetSummary.getAllByText('unknown').length).toBeGreaterThanOrEqual(3);
+    expect(fleetSummary.getAllByText('Unknown while any host lacks current GPU counts')).toHaveLength(2);
+    expect(unknownArticle.getByText('GPU activity unknown')).toBeDefined();
+    expect(unknownArticle.getByText('No busy/free GPU counts in overview DTO')).toBeDefined();
   });
 
   it('summarizes ONLINE as online while excluding online-stale and counting error metadata as attention', () => {
@@ -308,6 +331,25 @@ describe('OverviewScreen', () => {
     expect(screen.getByText('Try a broader search or reset the local visibility controls.')).toBeDefined();
     expect(screen.queryByText('No servers configured')).toBeNull();
     expect(screen.queryByText('Loading overview DTOs...')).toBeNull();
+  });
+
+  it('preserves loading, no-data, and error state copy without hiding static overview identity', () => {
+    const loadingView = renderOverview([], null, true);
+    expect(screen.getByText('GPU Activity dashboard')).toBeDefined();
+    expect(screen.getByText('Loading overview DTOs...')).toBeDefined();
+    expect(screen.queryByText('No servers configured')).toBeNull();
+    loadingView.unmount();
+
+    const emptyView = renderOverview([]);
+    expect(screen.getByText('GPU Activity dashboard')).toBeDefined();
+    expect(screen.getByText('No servers configured')).toBeDefined();
+    expect(screen.getByText('Add a server or seed demo data to populate the fleet snapshot.')).toBeDefined();
+    emptyView.unmount();
+
+    renderOverview([], new Error('backend_unavailable for /Users/alice/.ssh/id_ed25519'));
+    expect(screen.getByText('GPU Activity dashboard')).toBeDefined();
+    expect(screen.getByRole('alert').textContent).toBe('backend_unavailable for [path redacted]');
+    expect(screen.queryByText('No servers configured')).toBeNull();
   });
 
   it('preserves clicking a visible server to select it and navigate to detail', () => {

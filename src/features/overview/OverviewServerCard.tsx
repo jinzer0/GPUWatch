@@ -33,17 +33,17 @@ export const OverviewServerCard = ({
       </div>
 
       <div className="overview-server-activity" aria-label={`${server.name} GPU activity`}>
-        <div>
+        <div className="overview-server-activity-card overview-server-activity-card-primary">
           <span className="metric-label">GPU activity</span>
-          <strong>{gpuActivityKnown ? `${formatGpuCount(server.busyGpuCount)} busy / ${formatGpuCount(server.freeGpuCount)} free` : 'unknown'}</strong>
-          <span>{gpuActivityKnown ? `${formatGpuCount(server.gpuTotal)} total GPUs reported` : 'No current GPU count in overview DTO'}</span>
+          <strong>{gpuActivityKnown ? `${formatGpuCount(server.busyGpuCount)} busy / ${formatGpuCount(server.freeGpuCount)} free` : 'GPU activity unknown'}</strong>
+          <span>{gpuActivityKnown ? `${formatGpuCount(server.gpuTotal)} total GPUs reported` : 'No busy/free GPU counts in overview DTO'}</span>
         </div>
-        <div>
+        <div className="overview-server-activity-card">
           <span className="metric-label">Processes</span>
           <strong>unknown</strong>
           <span>Process activity is unavailable from overview DTO</span>
         </div>
-        <div>
+        <div className="overview-server-activity-card">
           <span className="metric-label">Attention</span>
           <strong className={needsAttention ? 'overview-server-attention-warning' : 'overview-server-attention-clear'}>{needsAttention ? 'Review needed' : 'Clear'}</strong>
           <span>{hasLatestDiagnostic ? 'Latest diagnostic available' : `Status ${server.status}`}</span>

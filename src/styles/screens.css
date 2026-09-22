@@ -15,6 +15,8 @@
     --overview-row-padding: var(--density-card-padding);
     --overview-row-gap: var(--density-space-4);
     --overview-metric-gap: var(--density-space-3);
+    --overview-summary-card-min: 10rem;
+    --overview-activity-card-min: 11rem;
   }
 
   .overview-header {
@@ -27,7 +29,7 @@
 
   .overview-summary {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(var(--overview-summary-card-min), 100%), 1fr));
     gap: var(--density-space-3);
     overflow-wrap: anywhere;
   }
@@ -115,11 +117,11 @@
 
   .overview-server-activity {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+    grid-template-columns: minmax(min(15rem, 100%), 1.35fr) repeat(2, minmax(min(var(--overview-activity-card-min), 100%), 1fr));
     gap: var(--overview-metric-gap);
   }
 
-  .overview-server-activity > div {
+  .overview-server-activity-card {
     display: grid;
     min-width: 0;
     gap: var(--density-space-1);
@@ -128,6 +130,10 @@
     background: color-mix(in srgb, var(--color-accent) 9%, transparent);
     padding: var(--density-space-3);
     overflow-wrap: anywhere;
+  }
+
+  .overview-server-activity-card-primary {
+    background: color-mix(in srgb, var(--color-accent) 13%, transparent);
   }
 
   .overview-server-activity strong {
@@ -176,6 +182,8 @@
     --overview-row-padding: var(--density-space-3);
     --overview-row-gap: var(--density-space-3);
     --overview-metric-gap: var(--density-space-2);
+    --overview-summary-card-min: 8.5rem;
+    --overview-activity-card-min: 9.5rem;
   }
 
   .app-shell[data-density="compact"] .overview-summary {
@@ -184,7 +192,7 @@
   }
 
   .app-shell[data-density="compact"] .overview-summary > div,
-  .app-shell[data-density="compact"] .overview-server-activity > div,
+  .app-shell[data-density="compact"] .overview-server-activity-card,
   .app-shell[data-density="compact"] .overview-server-metric {
     padding: var(--density-space-2);
   }
@@ -779,7 +787,11 @@
     }
 
     .overview-summary {
-      grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+      --overview-summary-card-min: 8.5rem;
+    }
+
+    .overview-server-activity {
+      grid-template-columns: 1fr;
     }
 
     .detail-header > div,
