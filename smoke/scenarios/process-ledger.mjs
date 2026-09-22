@@ -74,21 +74,21 @@ async function pressKey(cdp, key, modifiers = 0) {
 
 async function captureDensityEvidence(cdp, screenshots) {
   await setViewport(cdp, 1024, 720);
-  await clickSelector(cdp, 'button[aria-label="Use full display mode"]');
+  await clickSelector(cdp, 'button[aria-label="Use full density"]');
   await showLedgerTable(cdp);
   await screenshot(cdp, evidenceDir, 'process-ledger-1024x720-full.png', (file) => screenshots.push(file));
-  await clickSelector(cdp, 'button[aria-label="Use compact display mode"]');
+  await clickSelector(cdp, 'button[aria-label="Use compact density"]');
   await expectPage(cdp, 'compact density', 'document.querySelector(".app-shell")?.dataset.density === "compact"');
   await showLedgerTable(cdp);
   await screenshot(cdp, evidenceDir, 'process-ledger-1024x720-compact.png', (file) => screenshots.push(file));
   await setViewport(cdp, 1280, 860);
-  await clickSelector(cdp, 'button[aria-label="Use full display mode"]');
+  await clickSelector(cdp, 'button[aria-label="Use full density"]');
   await showLedgerTable(cdp);
   await screenshot(cdp, evidenceDir, 'process-ledger-1280x860-full.png', (file) => screenshots.push(file));
-  await clickSelector(cdp, 'button[aria-label="Use compact display mode"]');
+  await clickSelector(cdp, 'button[aria-label="Use compact density"]');
   await showLedgerTable(cdp);
   await screenshot(cdp, evidenceDir, 'process-ledger-1280x860-compact.png', (file) => screenshots.push(file));
-  await clickSelector(cdp, 'button[aria-label="Use full display mode"]');
+  await clickSelector(cdp, 'button[aria-label="Use full density"]');
 }
 
 async function runLedgerInteractions(cdp, screenshots) {
