@@ -43,6 +43,13 @@
     line-height: 1.05;
   }
 
+  .overview-summary .metric-note {
+    margin-top: var(--density-space-2);
+    color: var(--color-muted);
+    font-size: 0.78rem;
+    line-height: 1.45;
+  }
+
   .overview-summary-gpu-value {
     font-size: clamp(1.05rem, 1.5vw, var(--component-metric-value-size));
     letter-spacing: -0.035em;
@@ -106,6 +113,45 @@
     overflow-wrap: anywhere;
   }
 
+  .overview-server-activity {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+    gap: var(--overview-metric-gap);
+  }
+
+  .overview-server-activity > div {
+    display: grid;
+    min-width: 0;
+    gap: var(--density-space-1);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-control);
+    background: color-mix(in srgb, var(--color-accent) 9%, transparent);
+    padding: var(--density-space-3);
+    overflow-wrap: anywhere;
+  }
+
+  .overview-server-activity strong {
+    color: var(--color-text);
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    letter-spacing: -0.025em;
+    line-height: 1.2;
+  }
+
+  .overview-server-activity strong.overview-server-attention-clear {
+    color: var(--color-online);
+  }
+
+  .overview-server-activity strong.overview-server-attention-warning {
+    color: var(--color-warning);
+  }
+
+  .overview-server-activity span:not(.metric-label) {
+    color: var(--color-muted);
+    font-size: 0.78rem;
+    line-height: 1.45;
+  }
+
   .overview-server-metrics {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
@@ -138,6 +184,7 @@
   }
 
   .app-shell[data-density="compact"] .overview-summary > div,
+  .app-shell[data-density="compact"] .overview-server-activity > div,
   .app-shell[data-density="compact"] .overview-server-metric {
     padding: var(--density-space-2);
   }
