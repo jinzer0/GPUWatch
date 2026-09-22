@@ -39,7 +39,7 @@ export async function runPackagedHelperErrorScenario({ appPath, helperPath, logs
       return /permission denied|EACCES|failed to spawn helper|spawn .*gpuwatcher-helper/i.test(text) ? text : null;
     }, 45000);
     const errorScreenshot = await screenshot(cdp, evidenceDir, 'task-2-gpuwatcher-maintainability-refactor-plan-packaged-helper-nonexec-error.png', (file) => screenshots.push(file));
-    await clickText(cdp, 'Overview');
+    await clickText(cdp, 'Fleet');
     await waitForText(cdp, 'Fleet snapshot');
     await clickText(cdp, 'Settings');
     await waitForText(cdp, 'Server registry');

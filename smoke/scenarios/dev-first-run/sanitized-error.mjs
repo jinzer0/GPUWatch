@@ -16,7 +16,7 @@ export async function runSanitizedErrorScenario(cdp, { smokeWaitForText, screens
   assertNoSensitiveText('Visible SSH/backend error', errorSurface);
   await screenshot(cdp, evidenceDir, 'task-14-visible-error-path.png', (file) => screenshots.push(file));
 
-  await clickNav(cdp, 'Overview');
+  await clickNav(cdp, 'Fleet');
   await smokeWaitForText(cdp, 'Fleet snapshot');
   await clickNav(cdp, 'Settings');
   await smokeWaitForText(cdp, 'Server registry');

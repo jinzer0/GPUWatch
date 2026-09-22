@@ -21,13 +21,28 @@ export type RefreshFeedback = ActionFeedback & {
   readonly serverId: string;
 };
 
-export interface FleetSummary {
+export interface OverviewGpuActivitySummary {
+  readonly attentionHosts: readonly OverviewAttentionHost[];
+  readonly totalGpus: number | null;
+  readonly busyGpus: number | null;
+  readonly freeGpus: number | null;
+  readonly knownGpuHosts: number;
+  readonly unknownGpuHosts: number;
+  readonly activeProcessCount: null;
+  readonly activeProcessSemantics: 'unavailable-from-overview-dto';
+}
+
+export interface FleetSummary extends OverviewGpuActivitySummary {
   readonly totalServers: number;
   readonly onlineServers: number;
   readonly attentionServers: number;
-  readonly totalGpus: number;
-  readonly busyGpus: number;
-  readonly freeGpus: number;
+}
+
+export interface OverviewAttentionHost {
+  readonly id: string;
+  readonly name: string;
+  readonly host: string;
+  readonly status: string;
 }
 
 export const ALL_OVERVIEW_FILTER_VALUE = 'all';
@@ -51,25 +66,72 @@ export const overviewNeedsAttention = (server: ServerOverviewDto) => {
   );
 };
 
-export const summarizeOverviewFleet = (rows: readonly ServerOverviewDto[]): FleetSummary =>
-  rows.reduce<FleetSummary>(
-    (summary, row) => ({
-      totalServers: summary.totalServers + 1,
-      onlineServers: summary.onlineServers + (isOverviewStatusOnline(row.status) ? 1 : 0),
-      attentionServers: summary.attentionServers + (overviewNeedsAttention(row) ? 1 : 0),
-      totalGpus: summary.totalGpus + row.gpuTotal,
-      busyGpus: summary.busyGpus + row.busyGpuCount,
-      freeGpus: summary.freeGpus + row.freeGpuCount
-    }),
+const isKnownGpuCount = (value: number | null | undefined): value is number => typeof value === 'number' && Number.isFinite(value);
+
+export const overviewGpuActivityKnown = (server: ServerOverviewDto) => {
+  if (!isKnownGpuCount(server.gpuTotal) || !isKnownGpuCount(server.busyGpuCount) || !isKnownGpuCount(server.freeGpuCount)) {
+    return false;
+  }
+
+  return server.lastSuccessAt !== null || server.gpuTotal > 0 || server.busyGpuCount > 0 || server.freeGpuCount > 0;
+};
+
+export const summarizeOverviewFleet = (rows: readonly ServerOverviewDto[]): FleetSummary => {
+  const summary = rows.reduce<
+    Omit<FleetSummary, 'totalGpus' | 'busyGpus' | 'freeGpus' | 'activeProcessCount' | 'activeProcessSemantics'> & {
+      totalGpus: number;
+      busyGpus: number;
+      freeGpus: number;
+    }
+  >(
+    (current, row) => {
+      const needsAttention = overviewNeedsAttention(row);
+      const gpuActivityKnown = overviewGpuActivityKnown(row);
+
+      return {
+        totalServers: current.totalServers + 1,
+        onlineServers: current.onlineServers + (isOverviewStatusOnline(row.status) ? 1 : 0),
+        attentionServers: current.attentionServers + (needsAttention ? 1 : 0),
+        attentionHosts: needsAttention
+          ? [
+              ...current.attentionHosts,
+              {
+                id: row.id,
+                name: row.name,
+                host: row.host,
+                status: row.status
+              }
+            ]
+          : current.attentionHosts,
+        totalGpus: gpuActivityKnown ? current.totalGpus + row.gpuTotal : current.totalGpus,
+        busyGpus: gpuActivityKnown ? current.busyGpus + row.busyGpuCount : current.busyGpus,
+        freeGpus: gpuActivityKnown ? current.freeGpus + row.freeGpuCount : current.freeGpus,
+        knownGpuHosts: current.knownGpuHosts + (gpuActivityKnown ? 1 : 0),
+        unknownGpuHosts: current.unknownGpuHosts + (gpuActivityKnown ? 0 : 1)
+      };
+    },
     {
       totalServers: 0,
       onlineServers: 0,
       attentionServers: 0,
+      attentionHosts: [],
       totalGpus: 0,
       busyGpus: 0,
-      freeGpus: 0
+      freeGpus: 0,
+      knownGpuHosts: 0,
+      unknownGpuHosts: 0
     }
   );
+
+  return {
+    ...summary,
+    totalGpus: summary.unknownGpuHosts === 0 ? summary.totalGpus : null,
+    busyGpus: summary.unknownGpuHosts === 0 ? summary.busyGpus : null,
+    freeGpus: summary.unknownGpuHosts === 0 ? summary.freeGpus : null,
+    activeProcessCount: null,
+    activeProcessSemantics: 'unavailable-from-overview-dto'
+  };
+};
 
 export const invalidateLiveData = (queryClient: QueryClient) =>
   Promise.all([

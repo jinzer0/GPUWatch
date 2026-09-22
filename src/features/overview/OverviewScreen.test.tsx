@@ -94,7 +94,7 @@ const getFleetSummary = (container: HTMLElement) => {
     return classScopedSummary;
   }
 
-  return screen.queryByRole('region', { name: 'Fleet summary' }) ?? screen.getByRole('group', { name: 'Fleet summary' });
+  return screen.queryByRole('region', { name: 'GPU activity summary' }) ?? screen.getByRole('group', { name: 'GPU activity summary' });
 };
 
 const textContentIs = (expected: string) => (_content: string, element: Element | null) => element?.textContent === expected;
@@ -138,19 +138,47 @@ describe('OverviewScreen', () => {
     expect(screen.queryByText('0.0%')).toBeNull();
   });
 
-  it('renders fleet summary labels and values from the full overview data set', () => {
+  it('renders GPU activity summary labels and values from the full overview data set', () => {
     const { container } = renderOverview(overviewRows);
 
     const fleetSummary = within(getFleetSummary(container));
 
-    expect(fleetSummary.getByText('Servers')).toBeDefined();
-    expect(fleetSummary.getByText('Online')).toBeDefined();
-    expect(fleetSummary.getByText('Needs attention')).toBeDefined();
-    expect(fleetSummary.getByText('GPUs')).toBeDefined();
-    expect(fleetSummary.getByText('3')).toBeDefined();
-    expect(fleetSummary.getByText('1')).toBeDefined();
-    expect(fleetSummary.getByText('2')).toBeDefined();
-    expect(fleetSummary.getByText('14 total · 10 busy · 4 free')).toBeDefined();
+    expect(fleetSummary.getByText('Total GPUs')).toBeDefined();
+    expect(fleetSummary.getByText('Busy GPUs')).toBeDefined();
+    expect(fleetSummary.getByText('Free GPUs')).toBeDefined();
+    expect(fleetSummary.getByText('Active processes')).toBeDefined();
+    expect(fleetSummary.getByText('Attention hosts')).toBeDefined();
+    expect(fleetSummary.getByText('14')).toBeDefined();
+    expect(fleetSummary.getByText('10')).toBeDefined();
+    expect(fleetSummary.getByText('4')).toBeDefined();
+    expect(fleetSummary.getByText('3 known / 0 unknown hosts')).toBeDefined();
+    expect(fleetSummary.getByText('Process count unavailable from overview DTO')).toBeDefined();
+    expect(fleetSummary.getByText('1 online / 3 total servers')).toBeDefined();
+  });
+
+  it('preserves unknown GPU activity wording when any host lacks current counts', () => {
+    const { container } = renderOverview([
+      overviewRows[0],
+      {
+        ...overviewRows[1],
+        id: 'server-unknown-gpu',
+        name: 'Unknown GPU Host',
+        gpuTotal: 0,
+        busyGpuCount: 0,
+        freeGpuCount: 0,
+        lastSuccessAt: null
+      }
+    ]);
+
+    const fleetSummary = within(getFleetSummary(container));
+    const unknownArticle = within(screen.getByRole('article', { name: /Unknown GPU Host overview/i }));
+
+    expect(fleetSummary.getAllByText('unknown').length).toBeGreaterThanOrEqual(3);
+    expect(fleetSummary.getAllByText('Unknown while any host lacks current GPU counts')).toHaveLength(2);
+    expect(unknownArticle.getByText('GPU activity unknown')).toBeDefined();
+    expect(unknownArticle.getByText('No busy/free GPU counts in overview DTO')).toBeDefined();
+    expect(unknownArticle.getAllByText('unknown').length).toBeGreaterThanOrEqual(3);
+    expect(unknownArticle.queryByText('0 / 0')).toBeNull();
   });
 
   it('summarizes ONLINE as online while excluding online-stale and counting error metadata as attention', () => {
@@ -163,13 +191,15 @@ describe('OverviewScreen', () => {
 
     const fleetSummary = within(getFleetSummary(container));
 
-    expect(fleetSummary.getByText('Servers')).toBeDefined();
-    expect(fleetSummary.getByText('Online')).toBeDefined();
-    expect(fleetSummary.getByText('Needs attention')).toBeDefined();
-    expect(fleetSummary.getByText('3')).toBeDefined();
-    expect(fleetSummary.getByText('1')).toBeDefined();
-    expect(fleetSummary.getByText('2')).toBeDefined();
-    expect(fleetSummary.getByText('6 total · 2 busy · 4 free')).toBeDefined();
+    expect(fleetSummary.getByText('Total GPUs')).toBeDefined();
+    expect(fleetSummary.getByText('Busy GPUs')).toBeDefined();
+    expect(fleetSummary.getByText('Free GPUs')).toBeDefined();
+    expect(fleetSummary.getByText('Attention hosts')).toBeDefined();
+    expect(fleetSummary.getByText('6')).toBeDefined();
+    expect(fleetSummary.getAllByText('2').length).toBeGreaterThanOrEqual(1);
+    expect(fleetSummary.getByText('4')).toBeDefined();
+    expect(fleetSummary.getByText('3 known / 0 unknown hosts')).toBeDefined();
+    expect(fleetSummary.getByText('1 online / 3 total servers')).toBeDefined();
   });
 
   it('exposes compact server row metrics without treating last success as a metric cell', () => {
@@ -183,6 +213,10 @@ describe('OverviewScreen', () => {
     expect(renderBoxArticle.getByText('Average memory')).toBeDefined();
     expect(renderBoxArticle.getByText('Max temperature')).toBeDefined();
     expect(renderBoxArticle.getByText(/Last successful poll/i)).toBeDefined();
+    expect(renderBoxArticle.getByLabelText('Render Box GPU activity')).toBeDefined();
+    expect(renderBoxArticle.getByText('3 busy / 1 free')).toBeDefined();
+    expect(renderBoxArticle.getByText('Process activity is unavailable from overview DTO')).toBeDefined();
+    expect(renderBoxArticle.getByText('Clear')).toBeDefined();
     expect(renderBoxArticle.queryByText('Last success')).toBeNull();
   });
 
@@ -301,6 +335,25 @@ describe('OverviewScreen', () => {
     expect(screen.queryByText('Loading overview DTOs...')).toBeNull();
   });
 
+  it('preserves loading, no-data, and error state copy without hiding static overview identity', () => {
+    const loadingView = renderOverview([], null, true);
+    expect(screen.getByText('GPU Activity dashboard')).toBeDefined();
+    expect(screen.getByText('Loading overview DTOs...')).toBeDefined();
+    expect(screen.queryByText('No servers configured')).toBeNull();
+    loadingView.unmount();
+
+    const emptyView = renderOverview([]);
+    expect(screen.getByText('GPU Activity dashboard')).toBeDefined();
+    expect(screen.getByText('No servers configured')).toBeDefined();
+    expect(screen.getByText('Add a server or seed demo data to populate the fleet snapshot.')).toBeDefined();
+    emptyView.unmount();
+
+    renderOverview([], new Error('backend_unavailable for /Users/alice/.ssh/id_ed25519'));
+    expect(screen.getByText('GPU Activity dashboard')).toBeDefined();
+    expect(screen.getByRole('alert').textContent).toBe('backend_unavailable for [path redacted]');
+    expect(screen.queryByText('No servers configured')).toBeNull();
+  });
+
   it('preserves clicking a visible server to select it and navigate to detail', () => {
     renderOverview(overviewRows);
 
@@ -380,7 +433,7 @@ describe('OverviewScreen', () => {
     const refreshAlert = await screen.findByRole('alert', { name: 'Refresh Demo GPU Server' });
     expect(refreshAlert.textContent).toContain('Remote refresh failed for Demo GPU Server. SSH failed for [path redacted]');
     expect(screen.queryByText('/Users/alice/.ssh/id_ed25519')).toBeNull();
-    expect(screen.getByText('Fleet snapshot')).toBeDefined();
+    expect(screen.getByText('GPU Activity dashboard')).toBeDefined();
   });
 
   it('renders bounded diagnostics guidance for overview health and typed refresh failures', async () => {
@@ -408,7 +461,7 @@ describe('OverviewScreen', () => {
     expect(within(unreachableArticle).getAllByText(/Permission denied for \[path redacted\]/).length).toBeGreaterThan(0);
     expect(within(unreachableArticle).getAllByText(/Verify DNS, routing, firewall/).length).toBeGreaterThan(0);
     expect(screen.queryByText('/Users/alice/.ssh/id_ed25519')).toBeNull();
-    expect(screen.getByText('Fleet snapshot')).toBeDefined();
+    expect(screen.getByText('GPU Activity dashboard')).toBeDefined();
   });
 
   it('shows success feedback for seeding demo data and refreshes overview collections', async () => {
@@ -439,6 +492,6 @@ describe('OverviewScreen', () => {
     const seedAlert = await screen.findByRole('alert', { name: 'Seed demo data' });
     expect(seedAlert.textContent).toContain('Demo data seed failed. Failed to seed [path redacted]');
     expect(screen.queryByText('/Users/alice/.ssh/id_ed25519')).toBeNull();
-    expect(screen.getByText('Fleet snapshot')).toBeDefined();
+    expect(screen.getByText('GPU Activity dashboard')).toBeDefined();
   });
 });
