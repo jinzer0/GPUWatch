@@ -4,18 +4,18 @@ import { useUiStore, type DensityMode } from '../lib/store';
 import type { ServerOverviewDto, TabId } from '../lib/types';
 
 const tabLabels: Record<TabId, string> = {
-  detail: 'Server Detail',
-  history: 'Live Monitor',
-  overview: 'Overview',
-  processes: 'Process Table',
+  detail: 'GPU Detail',
+  history: 'History',
+  overview: 'Fleet',
+  processes: 'Processes',
   settings: 'Settings'
 };
 
 const tabs: ReadonlyArray<{ readonly id: TabId; readonly label: string }> = [
   { id: 'overview', label: tabLabels.overview },
   { id: 'detail', label: tabLabels.detail },
-  { id: 'history', label: tabLabels.history },
   { id: 'processes', label: tabLabels.processes },
+  { id: 'history', label: tabLabels.history },
   { id: 'settings', label: tabLabels.settings }
 ];
 
@@ -73,17 +73,17 @@ export const Shell = ({ children, overview }: { children: ReactNode; overview: S
         </nav>
 
         <footer className="sidebar-footer">
-          <section aria-labelledby="display-mode-heading" className="density-control">
-            <div className="eyebrow" id="display-mode-heading">
-              Display mode
+          <section aria-labelledby="density-control-heading" className="density-control">
+            <div className="eyebrow" id="density-control-heading">
+              Display density
             </div>
-            <div className="density-control-options mt-3 grid grid-cols-2 gap-2" role="group" aria-labelledby="display-mode-heading">
+            <div className="density-control-options mt-3 grid grid-cols-2 gap-2" role="group" aria-labelledby="density-control-heading">
               {densityOptions.map((option) => {
                 const isActive = densityMode === option.id;
 
                 return (
                   <button
-                    aria-label={`Use ${option.id} display mode`}
+                    aria-label={`Use ${option.id} density`}
                     aria-pressed={isActive}
                     className={`no-drag density-control-option rounded-[var(--radius-sm)] border px-3 py-2 text-sm font-extrabold transition ${
                       isActive

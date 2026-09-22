@@ -6,10 +6,10 @@ import type { ServerOverviewDto, TabId } from '../lib/types';
 import { Shell } from './Shell';
 
 const tabCases: ReadonlyArray<{ readonly id: TabId; readonly label: string }> = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'detail', label: 'Server Detail' },
-  { id: 'history', label: 'Live Monitor' },
-  { id: 'processes', label: 'Process Table' },
+  { id: 'overview', label: 'Fleet' },
+  { id: 'detail', label: 'GPU Detail' },
+  { id: 'processes', label: 'Processes' },
+  { id: 'history', label: 'History' },
   { id: 'settings', label: 'Settings' }
 ];
 
@@ -93,17 +93,23 @@ describe('Shell density mode', () => {
       expect(useUiStore.getState().activeTab).toBe(tab.id);
       expect(useUiStore.getState().activeScreen).toBe(tab.id);
       expect(tabButton.getAttribute('aria-current')).toBe('page');
+      expect(
+        within(navigation)
+          .getAllByRole('button')
+          .filter((button) => button.getAttribute('aria-current') === 'page')
+          .map((button) => button.textContent)
+      ).toEqual([tab.label]);
     }
   });
 
-  it('renders Display mode controls and applies the root density attribute', () => {
+  it('renders Display density controls and applies the root density attribute', () => {
     const view = renderShell();
 
     const shell = getRequiredElement(view.container, '.app-shell');
-    const fullButton = screen.getByRole('button', { name: 'Use full display mode' });
-    const compactButton = screen.getByRole('button', { name: 'Use compact display mode' });
+    const fullButton = screen.getByRole('button', { name: 'Use full density' });
+    const compactButton = screen.getByRole('button', { name: 'Use compact density' });
 
-    expect(screen.getByText('Display mode')).toBeDefined();
+    expect(screen.getByText('Display density')).toBeDefined();
     expect(shell.matches('.app-shell[data-density="full"]')).toBe(true);
     expect(fullButton.getAttribute('aria-pressed')).toBe('true');
     expect(compactButton.getAttribute('aria-pressed')).toBe('false');
@@ -127,11 +133,11 @@ describe('Shell density mode', () => {
     const titlebar = getRequiredElement(view.container, '.window-titlebar');
 
     expect(within(titlebar).getByText('GPUWatcher')).toBeDefined();
-    expect(within(titlebar).getByText('Overview')).toBeDefined();
+    expect(within(titlebar).getByText('Fleet')).toBeDefined();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Live Monitor' }));
+    fireEvent.click(screen.getByRole('button', { name: 'History' }));
 
-    expect(within(titlebar).getByText('Live Monitor')).toBeDefined();
+    expect(within(titlebar).getByText('History')).toBeDefined();
   });
 
   it('renders unknown server counts when overview data has not loaded', () => {
