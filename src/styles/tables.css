@@ -3,7 +3,7 @@
     --process-ledger-table-min-width: 78rem;
     --process-ledger-cell-padding-block: var(--density-space-3);
     --process-ledger-cell-padding-inline: var(--density-space-4);
-    --process-ledger-primary-cell-width: 24rem;
+    --process-ledger-pid-cell-width: 10rem;
     --process-ledger-context-cell-width: 18rem;
     --process-ledger-user-cell-width: 12rem;
     --process-ledger-command-cell-width: 22rem;
@@ -202,10 +202,10 @@
     vertical-align: top;
   }
 
-  .process-ledger-process-cell {
-    width: var(--process-ledger-primary-cell-width);
-    min-width: var(--process-ledger-primary-cell-width);
-    max-width: var(--process-ledger-primary-cell-width);
+  .process-ledger-pid-cell {
+    width: var(--process-ledger-pid-cell-width);
+    min-width: var(--process-ledger-pid-cell-width);
+    max-width: var(--process-ledger-pid-cell-width);
   }
 
   .process-ledger-process-cell-frame {
@@ -301,7 +301,7 @@
   .app-shell[data-density="compact"] .process-ledger-page {
     --process-ledger-cell-padding-block: var(--density-space-2);
     --process-ledger-cell-padding-inline: var(--density-space-2);
-    --process-ledger-primary-cell-width: 20rem;
+    --process-ledger-pid-cell-width: 8rem;
     --process-ledger-context-cell-width: 14rem;
     --process-ledger-user-cell-width: 10rem;
     --process-ledger-command-cell-width: 18rem;

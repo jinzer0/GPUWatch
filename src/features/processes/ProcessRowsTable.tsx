@@ -71,7 +71,7 @@ export const ProcessRowsTable = ({ controller }: { readonly controller: ProcessT
                     <div>GPU {formatUnknown(row.gpuIndex)}</div>
                     <div className="process-ledger-gpu-uuid">{gpuUuidPreview}</div>
                   </td>
-                  <td className={`process-ledger-cell process-ledger-process-cell ${pidCellSpacingClass(depth)}`}>
+                  <td className={`process-ledger-cell process-ledger-pid-cell ${pidCellSpacingClass(depth)}`}>
                     <div className="process-ledger-process-cell-frame">
                       <div className="process-ledger-process-identity">
                         <div className="process-ledger-process-meta">
