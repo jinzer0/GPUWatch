@@ -82,7 +82,7 @@ describe('ServerDetailScreen', () => {
     renderWithQueryClient(<ServerDetailScreen selectedServerId={null} />);
 
     expect(screen.getByText('No server selected')).toBeDefined();
-    expect(screen.getByText('Choose a server from Overview to inspect the latest backend detail DTO.')).toBeDefined();
+    expect(screen.getByText('Choose a server from the sidebar, or add a server using server management.')).toBeDefined();
     expect(getServerDetail).not.toHaveBeenCalled();
     expect(listGpuHistory).not.toHaveBeenCalled();
     expect(screen.queryByText(detailFixture.server.name)).toBeNull();

@@ -27,7 +27,7 @@ export const ServerDetailScreen = ({ selectedServerId }: { readonly selectedServ
   const refreshResult = controller.refreshMutation.data;
 
   if (!selectedServerId) {
-    return <EmptyState title="No server selected" body="Choose a server from Overview to inspect the latest backend detail DTO." />;
+    return <EmptyState title="No server selected" body="Choose a server from the sidebar, or add a server using server management." />;
   }
 
   if (controller.detailQuery.isLoading) {

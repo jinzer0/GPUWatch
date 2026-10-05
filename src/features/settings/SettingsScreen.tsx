@@ -46,7 +46,7 @@ export const SettingsScreen = () => {
       <header className="settings-header border-b border-[color:var(--color-line)] pb-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="settings-header-copy">
-            <div className="eyebrow">Settings</div>
+            <div className="eyebrow">Server management</div>
             <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em]">Server registry</h2>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-[color:var(--color-muted)]">
               Add, edit, delete, enable, disable, and test SSH-backed GPU hosts without storing private key material.

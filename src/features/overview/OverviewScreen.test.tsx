@@ -103,7 +103,8 @@ describe('OverviewScreen', () => {
   beforeEach(() => {
     apiMocks.refreshServer.mockReset();
     apiMocks.seedDemoData.mockReset();
-    useUiStore.setState({ activeScreen: 'overview', activeTab: 'overview', selectedServerId: null, editingServerId: null });
+    localStorage.clear();
+    useUiStore.setState({ managementOpen: false, selectedServerId: null, editingServerId: null });
   });
 
   it('renders fixture overview DTO fields and stale error metadata', () => {
@@ -354,14 +355,13 @@ describe('OverviewScreen', () => {
     expect(screen.queryByText('No servers configured')).toBeNull();
   });
 
-  it('preserves clicking a visible server to select it and navigate to detail', () => {
+  it('preserves clicking a visible server to select it', () => {
     renderOverview(overviewRows);
 
     fireEvent.change(screen.getByRole('textbox', { name: 'Search servers' }), { target: { value: 'render' } });
     fireEvent.click(screen.getByRole('button', { name: /^Render Box/i }));
 
     expect(useUiStore.getState().selectedServerId).toBe('server-2');
-    expect(useUiStore.getState().activeTab).toBe('detail');
   });
 
   it('keeps server identity navigation accessible by server name', () => {
@@ -371,19 +371,17 @@ describe('OverviewScreen', () => {
     fireEvent.click(renderBoxArticle.getByRole('button', { name: /^Render Box/i }));
 
     expect(useUiStore.getState().selectedServerId).toBe('server-2');
-    expect(useUiStore.getState().activeTab).toBe('detail');
   });
 
-  it('refreshes Render Box from a server-specific accessible name without changing navigation state', async () => {
+  it('refreshes Render Box from a server-specific accessible name without changing server selection', async () => {
     apiMocks.refreshServer.mockResolvedValue(connectionSuccess);
-    useUiStore.setState({ activeScreen: 'overview', activeTab: 'overview', selectedServerId: 'server-1', editingServerId: null });
+    useUiStore.setState({ managementOpen: false, selectedServerId: 'server-1', editingServerId: null });
     renderOverview(overviewRows);
 
     fireEvent.click(within(screen.getByRole('article', { name: /Render Box overview/i })).getByRole('button', { name: 'Refresh Render Box' }));
 
     await waitFor(() => expect(apiMocks.refreshServer).toHaveBeenCalledWith('server-2'));
     expect(useUiStore.getState().selectedServerId).toBe('server-1');
-    expect(useUiStore.getState().activeTab).toBe('overview');
   });
 
   it('shows pending and success feedback for a remote refresh while preserving active filters and invalidating matching stale data', async () => {

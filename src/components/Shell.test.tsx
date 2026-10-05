@@ -1,195 +1,77 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useUiStore } from '../lib/store';
-import type { ServerOverviewDto, TabId } from '../lib/types';
+import type { ServerOverviewDto } from '../lib/types';
 import { Shell } from './Shell';
 
-const tabCases: ReadonlyArray<{ readonly id: TabId; readonly label: string }> = [
-  { id: 'overview', label: 'Fleet' },
-  { id: 'detail', label: 'GPU Detail' },
-  { id: 'processes', label: 'Processes' },
-  { id: 'history', label: 'History' },
-  { id: 'settings', label: 'Settings' }
-];
-
-const buildOverviewServer = ({ id, status }: { readonly id: string; readonly status: string }): ServerOverviewDto => ({
-  id,
-  name: `Server ${id}`,
-  host: `${id}.example.test`,
-  status,
-  gpuTotal: 2,
-  busyGpuCount: 1,
-  freeGpuCount: 1,
-  averageGpuUtilizationPercent: 62,
-  averageMemoryUsagePercent: 25,
-  maxTemperatureCelsius: 61,
-  lastSuccessAt: null,
-  lastErrorType: null,
-  lastErrorMessage: null,
+const server = (id: string, status: string): ServerOverviewDto => ({
+  id, name: `Server ${id}`, host: `${id}.example.test`, status,
+  gpuTotal: 2, busyGpuCount: 1, freeGpuCount: 1,
+  averageGpuUtilizationPercent: 62, averageMemoryUsagePercent: 25, maxTemperatureCelsius: 61,
+  lastSuccessAt: null, lastErrorType: null, lastErrorMessage: null
 });
+const renderShell = (overview: ServerOverviewDto[] | null = [server('one', 'online'), server('two', 'stale')]) => render(
+  <Shell overview={overview}><section aria-label="Telemetry">Existing GPU detail</section></Shell>
+);
 
-const overviewFixture: ServerOverviewDto[] = [buildOverviewServer({ id: 'server-1', status: 'online' })];
-
-const mixedStatusOverview: ServerOverviewDto[] = [
-  buildOverviewServer({ id: 'server-1', status: 'ONLINE' }),
-  buildOverviewServer({ id: 'server-2', status: 'offline' }),
-  buildOverviewServer({ id: 'server-3', status: 'online' })
-];
-
-const renderShell = (overview: ServerOverviewDto[] | null = overviewFixture) =>
-  render(
-    <Shell overview={overview}>
-      <section aria-label="Screen content">Metrics stay visible</section>
-    </Shell>
-  );
-
-const getRequiredElement = (container: HTMLElement, selector: string): HTMLElement => {
-  const element = container.querySelector(selector);
-
-  if (element instanceof HTMLElement) {
-    return element;
-  }
-
-  throw new Error(`Expected ${selector} to render`);
-};
-
-describe('Shell density mode', () => {
+describe('server-centered Shell', () => {
   beforeEach(() => {
     window.localStorage.clear();
     delete window.gpuwatcher;
+    delete window.gpuwatcherUi;
     delete window.gpuWatcherElectron;
     useUiStore.setState(useUiStore.getInitialState(), true);
   });
 
-  it('defaults to full density and exposes a session-only toggle path', () => {
-    expect(useUiStore.getState().densityMode).toBe('full');
-
-    useUiStore.getState().toggleDensityMode();
-
-    expect(useUiStore.getState().densityMode).toBe('compact');
-    expect(window.localStorage.getItem('densityMode')).toBeNull();
-
-    useUiStore.getState().toggleDensityMode();
-
-    expect(useUiStore.getState().densityMode).toBe('full');
-  });
-
-  it('renders every primary navigation item', () => {
+  it('selects actual server IDs and closes management without global tabs', () => {
     renderShell();
-
-    const navigation = screen.getByRole('navigation');
-    expect(within(navigation).getAllByRole('button').map((button) => button.textContent)).toEqual(tabCases.map((tab) => tab.label));
+    fireEvent.click(screen.getByRole('button', { name: '서버 관리' }));
+    expect(useUiStore.getState().managementOpen).toBe(true);
+    fireEvent.click(within(screen.getByRole('navigation', { name: '서버' })).getByRole('button', { name: /Server two/ }));
+    expect(useUiStore.getState().selectedServerId).toBe('two');
+    expect(useUiStore.getState().managementOpen).toBe(false);
+    expect(screen.getByRole('button', { name: /Server two/ }).getAttribute('aria-current')).toBe('page');
+    expect(screen.queryByRole('button', { name: 'History' })).toBeNull();
+    expect(screen.getByRole('main', { name: 'Server detail content' })).toBeDefined();
+    expect(screen.getByText('Existing GPU detail')).toBeDefined();
   });
 
-  it('clicking each navigation item updates the active tab and screen through the real store', () => {
+  it('keeps real management reachable for add/import and return to detail', () => {
     renderShell();
-
-    const navigation = screen.getByRole('navigation');
-
-    for (const tab of tabCases) {
-      const tabButton = within(navigation).getByRole('button', { name: tab.label });
-
-      fireEvent.click(tabButton);
-
-      expect(useUiStore.getState().activeTab).toBe(tab.id);
-      expect(useUiStore.getState().activeScreen).toBe(tab.id);
-      expect(tabButton.getAttribute('aria-current')).toBe('page');
-      expect(
-        within(navigation)
-          .getAllByRole('button')
-          .filter((button) => button.getAttribute('aria-current') === 'page')
-          .map((button) => button.textContent)
-      ).toEqual([tab.label]);
-    }
+    fireEvent.click(screen.getByRole('button', { name: '서버 추가 또는 가져오기' }));
+    expect(useUiStore.getState().managementOpen).toBe(true);
+    expect(screen.getByRole('main', { name: 'Server management content' })).toBeDefined();
+    fireEvent.click(screen.getByRole('button', { name: '서버 관리' }));
+    expect(useUiStore.getState().managementOpen).toBe(false);
   });
 
-  it('renders Display density controls and applies the root density attribute', () => {
-    const view = renderShell();
-
-    const shell = getRequiredElement(view.container, '.app-shell');
-    const fullButton = screen.getByRole('button', { name: 'Use full density' });
-    const compactButton = screen.getByRole('button', { name: 'Use compact density' });
-
-    expect(screen.getByText('Display density')).toBeDefined();
-    expect(shell.matches('.app-shell[data-density="full"]')).toBe(true);
-    expect(fullButton.getAttribute('aria-pressed')).toBe('true');
-    expect(compactButton.getAttribute('aria-pressed')).toBe('false');
-
-    fireEvent.click(compactButton);
-
-    expect(useUiStore.getState().densityMode).toBe('compact');
-    expect(shell.matches('.app-shell[data-density="compact"]')).toBe(true);
-    expect(compactButton.getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByText('Metrics stay visible')).toBeDefined();
-    expect(window.localStorage.getItem('densityMode')).toBeNull();
-
-    fireEvent.click(fullButton);
-
-    expect(useUiStore.getState().densityMode).toBe('full');
-    expect(shell.matches('.app-shell[data-density="full"]')).toBe(true);
-  });
-
-  it('renders titlebar identity and updates the active page label', () => {
-    const view = renderShell();
-    const titlebar = getRequiredElement(view.container, '.window-titlebar');
-
-    expect(within(titlebar).getByText('GPUWatcher')).toBeDefined();
-    expect(within(titlebar).getAllByText('Fleet')).toHaveLength(2);
-    expect(within(titlebar).getByText('GPU Activity Monitor')).toBeDefined();
-    expect(screen.getByRole('main', { name: 'Fleet content' })).toBeDefined();
-
-    fireEvent.click(screen.getByRole('button', { name: 'History' }));
-
-    expect(within(titlebar).getByText('History')).toBeDefined();
-    expect(screen.getByRole('main', { name: 'History content' })).toBeDefined();
-  });
-
-  it('identifies browser fallback and desktop backend runtime states without changing the Shell API', () => {
-    const fallbackView = renderShell();
-    const fallbackStatus = within(getRequiredElement(fallbackView.container, '.titlebar-status'));
-
-    expect(fallbackStatus.getByText('Runtime')).toBeDefined();
-    expect(fallbackStatus.getByText('Browser fallback')).toBeDefined();
-    expect(fallbackStatus.getByTitle('Runtime: Browser fallback')).toBeDefined();
-
-    fallbackView.unmount();
-    window.gpuwatcher = {};
-    window.gpuWatcherElectron = { isElectron: true, platform: 'darwin', versions: {} };
-
-    const desktopView = renderShell();
-    const desktopStatus = within(getRequiredElement(desktopView.container, '.titlebar-status'));
-
-    expect(desktopStatus.getByText('Desktop backend')).toBeDefined();
-    expect(desktopStatus.getByTitle('Runtime: Desktop backend')).toBeDefined();
-  });
-
-  it('renders unknown server counts when overview data has not loaded', () => {
-    renderShell(null);
-
-    expect(screen.getAllByText('unknown')).toHaveLength(2);
-  });
-
-  it('renders zero server and online count labels for an empty overview', () => {
+  it('distinguishes unavailable server data from an empty registry', () => {
+    const view = renderShell(null);
+    expect(screen.getByText('서버 목록을 확인할 수 없습니다')).toBeDefined();
+    expect(screen.queryByText('등록된 서버가 없습니다')).toBeNull();
+    view.unmount();
     renderShell([]);
-
-    expect(screen.getByText('0 servers')).toBeDefined();
-    expect(screen.getByText('0 online')).toBeDefined();
+    expect(screen.getByText('등록된 서버가 없습니다')).toBeDefined();
+    expect(screen.getByText('GPUWatcher', { selector: '.titlebar-page-title' })).toBeDefined();
+    expect(screen.getByText('브라우저 · 읽기 전용')).toBeDefined();
   });
 
-  it('counts online servers case-insensitively in the shell status copy', () => {
-    renderShell(mixedStatusOverview);
-
-    expect(screen.getByText('3 servers')).toBeDefined();
-    expect(screen.getByText('2 online')).toBeDefined();
-    expect(screen.getByTitle('Fleet: 3 servers')).toBeDefined();
-    expect(screen.getByTitle('Online servers: 2 online')).toBeDefined();
+  it('opens settings through the dedicated local UI method, not a helper action', async () => {
+    const openSettings = vi.fn().mockResolvedValue({ ok: true, data: undefined });
+    window.gpuwatcherUi = {
+      openSettings,
+      getAppearance: vi.fn(), setAppearance: vi.fn(), onAppearanceChanged: vi.fn()
+    };
+    renderShell();
+    fireEvent.click(screen.getByRole('button', { name: '외형 설정 열기' }));
+    await waitFor(() => expect(openSettings).toHaveBeenCalledOnce());
+    expect(window.gpuwatcher).toBeUndefined();
   });
 
-  it('renders children inside the semantic page container', () => {
-    const view = renderShell();
-    const pageContainer = getRequiredElement(view.container, '.app-content .page-container');
-
-    expect(within(pageContainer).getByText('Metrics stay visible')).toBeDefined();
+  it('reports settings window failure instead of pretending a browser window opened', async () => {
+    renderShell();
+    fireEvent.click(screen.getByRole('button', { name: '외형 설정 열기' }));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/backend|desktop|unavailable/i));
   });
 });

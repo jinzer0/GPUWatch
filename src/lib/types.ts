@@ -1,7 +1,5 @@
 export type ServerStatus = 'disabled' | 'idle' | 'polling' | 'online' | 'stale' | 'offline' | 'error' | string;
 
-export type TabId = 'overview' | 'detail' | 'history' | 'processes' | 'settings';
-
 export type WatchKind = 'gpu_available';
 
 export interface GpuAvailableWatchInput {

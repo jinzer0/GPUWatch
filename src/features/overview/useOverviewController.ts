@@ -12,7 +12,6 @@ import { ALL_OVERVIEW_FILTER_VALUE, errorMessage, invalidateLiveData, invalidate
 export const useOverviewController = (overview: ServerOverviewDto[]) => {
   const queryClient = useQueryClient();
   const selectServer = useUiStore((state) => state.selectServer);
-  const setActiveTab = useUiStore((state) => state.setActiveTab);
   const [searchText, setSearchText] = useState(DEFAULT_OVERVIEW_FILTERS.searchText);
   const [statusFilter, setStatusFilter] = useState(DEFAULT_OVERVIEW_FILTERS.status ?? ALL_OVERVIEW_FILTER_VALUE);
   const [quickFilter, setQuickFilter] = useState<OverviewFilters['state']>(DEFAULT_OVERVIEW_FILTERS.state);
@@ -76,7 +75,6 @@ export const useOverviewController = (overview: ServerOverviewDto[]) => {
   };
   const openServer = (id: string) => {
     selectServer(id);
-    setActiveTab('detail');
   };
 
   return {
