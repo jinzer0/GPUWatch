@@ -256,6 +256,7 @@ Task #29 Stage 4: 가용 관측과 알림 보존 규칙을 연결하고 통합 �
 - 제품 기준 HEAD: `a3bc6e72294efa486f3bb55cb343cd91ae20e8bb`, 작업 위치와 브랜치는 기존 `GPUWatch-task29`, `local/task29`를 유지한다.
 - PR #30의 Codex review `5428186807`, comment `4195130711`과 `4195130721`의 P2 두 건만 수정한다. 같은 스레드의 수정 지시 후 보완 내용·계획서 단독 커밋을 요청했고, 작업지시자의 `커밋 승인`으로 해당 단일 gate를 승인받았다.
 - 이 `_impl.md`만 독립 커밋한 뒤 출력된 새 exact SHA를 승인받아야 제품 수정·테스트 실행에 진입한다. 이전 계획 OID나 최종 보고/게시 승인을 새 구현 승인으로 재사용하지 않는다.
+- 최초 Stage 5 계획 `fdc1aa7da3d097c75e5db0234bbaddb4c5e7015c`의 exact SHA 승인 후 focused 회귀는 통과했으나 core stale-poll fixture와 management Cancel focus의 전체 gate가 실패했다. 추가 직접 영향 파일 범위·계획 보완을 요청했고, 같은 스레드의 `승인`으로 아래 테스트 정합화와 오래된 focus callback 차단의 보완 내용을 승인받았다. 새 계획서 단독 커밋·새 exact SHA 승인 전에는 추가 파일을 수정하거나 재검증하지 않는다. 이미 작성된 Stage 5 제품 변경·실패 증거는 보존한다.
 
 ### 직접 영향 파일
 
@@ -264,8 +265,11 @@ Task #29 Stage 4: 가용 관측과 알림 보존 규칙을 연결하고 통합 �
 - `crates/gpuwatcher-core/src/repository/servers.rs`
 - `crates/gpuwatcher-core/tests/gpu_availability.rs`
 - `crates/gpuwatcher-core/tests/storage/repository_server_contract.rs`
+- `crates/gpuwatcher-core/src/service.rs`: 기존 stale-poll 테스트 fixture와 이름 변경 poll 수용 회귀만; 제품 service API 변경 없음.
 - `src/features/settings/useSettingsController.ts`
 - `src/features/settings/SettingsScreen.test.tsx`
+- `src/features/settings/ServerManagerSheet.tsx`: 지연된 focus callback의 요청/대상 수명 경계.
+- `src/features/settings/ServerManagerSheet.test.tsx`: 기존 Cancel/invoker assertion 유지 및 이전 시트 callback 회귀.
 
 단계 기록·최종 보고:
 
@@ -273,7 +277,7 @@ Task #29 Stage 4: 가용 관측과 알림 보존 규칙을 연결하고 통합 �
 - `mydocs/orders/20261005.md`: 리뷰 보완 진행·검증 및 승인 상태 갱신.
 - `mydocs/report/task_m001_29_report.md`: Stage 5 승인·커밋 뒤 별도 최종 보고 갱신 단계에서 수정.
 
-제품/사용자 문서와 설계 사본은 변경하지 않는다. 기존 승인 계약을 복구하는 두 버그 수정이며 문서 위치 판단은 기존 수행계획의 내부 기록 `working/orders/report`를 그대로 사용한다. source 수정·Stage 5 산출물 커밋·최종 보고 전용 커밋·원격 PR 업데이트를 한 번에 합치지 않는다.
+제품/사용자 문서와 설계 사본은 변경하지 않는다. 기존 승인 계약을 복구하는 두 리뷰 버그 및 통합 검증에서 확인한 직접 영향 stale-poll fixture·focus callback 보완이며 문서 위치 판단은 기존 수행계획의 내부 기록 `working/orders/report`를 그대로 사용한다. source 수정·Stage 5 산출물 커밋·최종 보고 전용 커밋·원격 PR 업데이트를 한 번에 합치지 않는다.
 
 ### 변경 내용과 수용 기준
 
@@ -282,12 +286,16 @@ Task #29 Stage 4: 가용 관측과 알림 보존 규칙을 연결하고 통합 �
 3. SSH config의 새 검색 결과를 성공적으로 수용할 때 `selectedImportHostAliases`와 이전 bulk 결과 요약을 초기화한다. 같은 alias가 다른 host/user로 재해석되더라도 새 검색에서 사용자 재선택 없이 저장하지 않는다. 성공적으로 이미 저장한 `importedServers`/ref는 보존해 stale query에서도 중복 저장을 막는다.
 4. frontend 회귀는 동일 alias의 대상 변경 재검색, 이전 선택/실패 요약 초기화, 재선택 전 저장 불가, 재선택 후 새 target의 정확한 저장, 기존 partial import 실패 항목만 재시도와 성공 항목 중복 방지를 함께 검증한다. request/version fence와 StrictMode 자동 test는 변경 범위에 포함하지 않고 기존 검증을 유지한다.
 5. 제품 변경 뒤 아래 focused·통합 gate를 실행하고 결과·명시적인 검증 한계를 Stage 5 보고서에 기록한다. 구현 완료를 source commit·push 완료로 보고하지 않는다.
+6. `service.rs`의 `poll_server_discards_success_when_config_revision_changes`는 실제 host/port 등 관측 관련 설정 변경을 mock collector에서 수행하도록 고친다. `stale_discarded`와 snapshot/history 무저장 assertion은 유지하고 이름만 변경했을 때 진행 중 성공 poll을 정상 수용하는 분기를 별도로 검증한다. 테스트 약화·skip·강제 실패 응답으로 통과시키지 않는다.
+7. 관리 시트의 지연 focus callback은 해당 management request와 유효한 대상에 결박한다. unmount 뒤 이전 시트의 fallback callback이 이후 시트/새 invoker의 focus를 가로채지 않게 하고, 실제 삭제로 invoker가 사라진 경우의 `+` fallback은 유지한다. dirty 계속 편집의 지연 focus도 이후 요청에 적용하지 않는다. shared `RightDrawer`는 기존 연결된 invoker 복귀 동작을 유지하고 변경하지 않는다.
+8. `ServerManagerSheet.test.tsx`에서 callback 실행 순서를 제어하여 이전 시트가 끝난 뒤 새 요청을 열고 닫아도 이전 callback이 새 invoker를 덮지 않는 것을 검증한다. Cancel-first·삭제 미호출·정확한 invoker 복귀 assertion을 유지한다. 단일 필터 실행만으로 전체 성공을 주장하지 않고 file 전체 및 전체 Vitest를 재실행한다.
 
 ### 검증 명령
 
 ```bash
 cargo test --manifest-path crates/gpuwatcher-core/Cargo.toml --test gpu_availability
 cargo test --manifest-path crates/gpuwatcher-core/Cargo.toml --test storage_read_model_state
+cargo test --manifest-path crates/gpuwatcher-core/Cargo.toml service::tests::poll_server
 npm run test -- --run src/features/settings/SettingsScreen.test.tsx src/features/settings/ServerManagerSheet.test.tsx
 cargo fmt --manifest-path crates/gpuwatcher-core/Cargo.toml --all -- --check
 cargo test --manifest-path crates/gpuwatcher-core/Cargo.toml
