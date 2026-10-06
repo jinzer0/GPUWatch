@@ -4,7 +4,7 @@
 GitHub Issue: [#29](https://github.com/jinzer0/GPUWatch/issues/29)
 마일스톤: M001
 작성일: 2026-10-05
-상태: Stage 2 착수·runtime 인덱스 보완 내용·독립 커밋 승인 완료 — 새 구현계획서 exact SHA 확인 대기
+상태: Stage 1–4 완료, PR #30 Codex 리뷰 보완 내용·계획서 단독 커밋 승인 완료 — 새 exact SHA 승인 전 Stage 5 구현 금지
 브랜치: `local/task29`
 기준 커밋: `000dac5f33cefdf8cd2f2f12b7c0fcb6a4bd73b1`
 작업 위치: `/Users/kjy/Desktop/Codes/projects/GPUWatch-task29`
@@ -248,6 +248,68 @@ git diff --check
 ```text
 Task #29 Stage 4: 가용 관측과 알림 보존 규칙을 연결하고 통합 검증
 ```
+
+## Stage 5 — PR #30 Codex 리뷰 회귀 수정
+
+### 승인·작업 기준
+
+- 제품 기준 HEAD: `a3bc6e72294efa486f3bb55cb343cd91ae20e8bb`, 작업 위치와 브랜치는 기존 `GPUWatch-task29`, `local/task29`를 유지한다.
+- PR #30의 Codex review `5428186807`, comment `4195130711`과 `4195130721`의 P2 두 건만 수정한다. 같은 스레드의 수정 지시 후 보완 내용·계획서 단독 커밋을 요청했고, 작업지시자의 `커밋 승인`으로 해당 단일 gate를 승인받았다.
+- 이 `_impl.md`만 독립 커밋한 뒤 출력된 새 exact SHA를 승인받아야 제품 수정·테스트 실행에 진입한다. 이전 계획 OID나 최종 보고/게시 승인을 새 구현 승인으로 재사용하지 않는다.
+
+### 직접 영향 파일
+
+제품·회귀:
+
+- `crates/gpuwatcher-core/src/repository/servers.rs`
+- `crates/gpuwatcher-core/tests/gpu_availability.rs`
+- `crates/gpuwatcher-core/tests/storage/repository_server_contract.rs`
+- `src/features/settings/useSettingsController.ts`
+- `src/features/settings/SettingsScreen.test.tsx`
+
+단계 기록·최종 보고:
+
+- `mydocs/working/task_m001_29_stage5.md`: 기존 단계 기록 위치의 신규 Stage 5 보고서.
+- `mydocs/orders/20261005.md`: 리뷰 보완 진행·검증 및 승인 상태 갱신.
+- `mydocs/report/task_m001_29_report.md`: Stage 5 승인·커밋 뒤 별도 최종 보고 갱신 단계에서 수정.
+
+제품/사용자 문서와 설계 사본은 변경하지 않는다. 기존 승인 계약을 복구하는 두 버그 수정이며 문서 위치 판단은 기존 수행계획의 내부 기록 `working/orders/report`를 그대로 사용한다. source 수정·Stage 5 산출물 커밋·최종 보고 전용 커밋·원격 PR 업데이트를 한 번에 합치지 않는다.
+
+### 변경 내용과 수용 기준
+
+1. 서버 저장은 입력 정규화 후 현재 값과 비교한다. 동일 설정 저장 및 관측과 무관한 이름 변경만으로 가용 observation·watch sustain·health를 초기화하지 않는다. host/port/username/key path/polling interval/enabled 등 관측 관련 설정이 실제 변경된 경우에만 기존 초기화 정책을 적용한다. 무변경 저장이 불필요하게 collection revision을 바꾸어 in-flight 결과를 무효화하지 않는지 확인하고, 실제 설정 변경의 stale-poll 차단은 유지한다.
+2. backend 회귀는 가용 상태에 도달한 GPU·지속 조건 누적 중 watch의 무변경 저장, 정규화 후 동일값, 이름만 변경, 실제 연결/주기/enabled 변경을 구분한다. 관측 구간·health·armed/last-triggered/cooldown 보존 및 기존 실제 변경 reset을 검증한다. 테스트를 약화하거나 skip하여 revision 계약을 맞추지 않는다.
+3. SSH config의 새 검색 결과를 성공적으로 수용할 때 `selectedImportHostAliases`와 이전 bulk 결과 요약을 초기화한다. 같은 alias가 다른 host/user로 재해석되더라도 새 검색에서 사용자 재선택 없이 저장하지 않는다. 성공적으로 이미 저장한 `importedServers`/ref는 보존해 stale query에서도 중복 저장을 막는다.
+4. frontend 회귀는 동일 alias의 대상 변경 재검색, 이전 선택/실패 요약 초기화, 재선택 전 저장 불가, 재선택 후 새 target의 정확한 저장, 기존 partial import 실패 항목만 재시도와 성공 항목 중복 방지를 함께 검증한다. request/version fence와 StrictMode 자동 test는 변경 범위에 포함하지 않고 기존 검증을 유지한다.
+5. 제품 변경 뒤 아래 focused·통합 gate를 실행하고 결과·명시적인 검증 한계를 Stage 5 보고서에 기록한다. 구현 완료를 source commit·push 완료로 보고하지 않는다.
+
+### 검증 명령
+
+```bash
+cargo test --manifest-path crates/gpuwatcher-core/Cargo.toml --test gpu_availability
+cargo test --manifest-path crates/gpuwatcher-core/Cargo.toml --test storage_read_model_state
+npm run test -- --run src/features/settings/SettingsScreen.test.tsx src/features/settings/ServerManagerSheet.test.tsx
+cargo fmt --manifest-path crates/gpuwatcher-core/Cargo.toml --all -- --check
+cargo test --manifest-path crates/gpuwatcher-core/Cargo.toml
+cargo test --manifest-path crates/gpuwatcher-helper/Cargo.toml
+npm run test -- --run
+npm run build
+npm run electron:build
+npm run helper:build
+npm run smoke:electron:first-run
+npm run electron:pack
+node smoke/electron-packaged-app-smoke.mjs
+git diff --check
+```
+
+Rust 구현 변경 후 기존 formatter를 사용하고 최종 합쳐진 변경에 대해 format check를 한 번 수행한다. JS/TS formatter를 새로 도입하지 않는다. normal gate는 운영 DB/live SSH/실제 OS 알림을 사용하지 않는다. unsigned·CDP/guard 한계와 기존 helper timeout PID 소멸 간헐성을 최종 보고에 계속 보존한다.
+
+### 커밋·게시 경계
+
+- 계획서 단독 커밋 및 새 exact SHA 승인 → Stage 5 구현·검증·단계 보고 → 산출물·단계 커밋 승인 → 별도 최종 보고/오늘할일 갱신 및 수용 승인 순서를 지킨다.
+- Stage 5 예정 커밋 제목: `Task #29 Stage 5: Codex 리뷰의 서버 관측과 SSH 재검색 회귀 수정`.
+- PR #30에는 기존 제품 OID가 게시되어 있다. 새 제품·최종 보고 OID에 대해 기존 publication tuple을 재사용하거나 현재 publish ref를 임의 overwrite하지 않는다. 원격 업데이트의 별도 승인된 절차를 확인한 뒤 진행한다.
+- GraphQL `closingIssuesReferences`가 빈 목록인 게시 검증 문제, default branch/main/devel 정책, framework/manual 수정, PR merge·issue close는 이번 리뷰 수정 범위 밖이다.
 
 ## 검증
 
