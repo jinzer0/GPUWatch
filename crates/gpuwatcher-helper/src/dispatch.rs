@@ -22,6 +22,9 @@ pub(crate) fn dispatch_action(
             server_actions::dispatch_empty_payload_action(action, payload)
         }
         HelperAction::ListSshConfigHosts => server_actions::dispatch_ssh_config_import(payload),
+        HelperAction::ResetAvailabilityObservations => {
+            server_actions::dispatch_availability_reset(payload)
+        }
         HelperAction::SaveServer
         | HelperAction::DeleteServer
         | HelperAction::SetServerEnabled

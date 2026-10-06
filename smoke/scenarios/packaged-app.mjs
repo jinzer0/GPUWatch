@@ -8,7 +8,7 @@ import { buildPackagedEvidence } from './packaged-app/evidence.mjs';
 import { runPackagedHelperErrorScenario } from './packaged-app/helper-error.mjs';
 import { runPackagedStartupScenario, verifyPackagedRuntimePaths } from './packaged-app/startup.mjs';
 
-const taskEvidenceName = 'task-2-gpuwatcher-maintainability-refactor-plan';
+const taskEvidenceName = 'task-29-native-macos-ux';
 const cdpPortBase = 9349;
 
 async function packagedWaitForText(cdp, text, timeoutMs = 30000) {

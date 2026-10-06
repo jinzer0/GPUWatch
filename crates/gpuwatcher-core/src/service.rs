@@ -16,7 +16,8 @@ pub use queries::{
 };
 pub use seed::seed_demo_data;
 pub use watches::{
-    consume_notification_outbox, delete_watch_rule, list_watch_rules, save_gpu_available_watch,
+    consume_notification_outbox, delete_watch_rule, list_watch_rules,
+    reset_availability_observations, save_gpu_available_watch,
 };
 pub use writes::{delete_server, save_server, set_server_enabled};
 

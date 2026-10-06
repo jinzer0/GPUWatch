@@ -126,6 +126,7 @@ body { min-width: 0; }
 .detail-gpus { gap: 10px; }
 .detail-gpus > h3 { font-size: 13px; }
 .gpu-card { min-width: 0; border-radius: 8px; box-shadow: none; }
+.gpu-card-available { border-color: var(--status-success); }
 .gpu-card-summary {
   display: grid;
   grid-template-columns: 12px minmax(100px, 1fr) minmax(270px, 1.7fr);

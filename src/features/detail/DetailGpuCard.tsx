@@ -61,15 +61,26 @@ export const DetailGpuCard = ({
     ? (gpu.memoryUsedMiB / gpu.memoryTotalMiB) * 100
     : null;
   const processesUnavailable = detail.warnings.some((warning) => /compute[-_]apps/i.test(warning));
-  const watchTitle = 'GPU 사용률 ≤ 5%, VRAM ≤ 1GB가 5분 지속되면 알림';
+  const healthy = detail.server.enabled && (detail.health.status === 'online' || detail.health.status === 'polling');
+  const available = healthy && gpu.availability.state === 'available';
+  const availabilityText = available ? '사용 가능' : !healthy
+    ? '가용 상태 unknown'
+    : { in_use: '사용 중', candidate: '사용 가능 조건 확인 중', available: '사용 가능', unknown: '가용 상태 unknown' }[gpu.availability.state];
+  const defaultCondition = !watchRule || (watchRule.utilizationThresholdPercent === 5
+    && watchRule.memoryThresholdMiB === 1024 && watchRule.sustainSeconds === 300);
+  const watchCondition = watchRule
+    ? `GPU 사용률 ≤ ${watchRule.utilizationThresholdPercent}%, VRAM ≤ ${watchRule.memoryThresholdMiB} MiB가 ${watchRule.sustainSeconds}초 지속되면 알림`
+    : 'GPU 사용률 ≤ 5%, VRAM ≤ 1024 MiB가 300초 지속되면 알림';
+  const watchTitle = `${defaultCondition ? '기본 사용 가능 조건' : '사용자 지정 조건'}: ${watchCondition}`;
+  const savedCooldown = watchRule?.cooldownSeconds ?? 900;
   const toggleWatch = () => {
-    if (watchRule?.enabled) {
+    if (watchRule) {
       saveWatch({
         id: watchRule.id,
         serverId: watchRule.serverId,
         gpuUuid: watchRule.gpuUuid,
         gpuIndex: watchRule.gpuIndex,
-        enabled: false,
+        enabled: !watchRule.enabled,
         utilizationThresholdPercent: watchRule.utilizationThresholdPercent,
         memoryThresholdMiB: watchRule.memoryThresholdMiB,
         sustainSeconds: watchRule.sustainSeconds,
@@ -81,7 +92,7 @@ export const DetailGpuCard = ({
     saveWatch({
       id: null,
       serverId: detail.server.id,
-      gpuUuid: gpu.uuid,
+      gpuUuid: gpu.uuid.trim() ? gpu.uuid : null,
       gpuIndex: gpu.index,
       enabled: true,
       utilizationThresholdPercent: null,
@@ -92,7 +103,7 @@ export const DetailGpuCard = ({
   };
 
   return (
-    <article className="gpu-card panel">
+    <article className={`gpu-card panel${available ? ' gpu-card-available' : ''}`}>
     <details open={expanded} onToggle={(event) => {
       if (event.target === event.currentTarget) syncDisclosure('expanded', event.currentTarget.open);
     }}>
@@ -106,6 +117,7 @@ export const DetailGpuCard = ({
         <div className="gpu-card-identity">
           <span className="eyebrow">GPU {gpu.index}</span>
           <h4 aria-label={`GPU ${gpu.index} ${gpu.name}`} className="break-words font-semibold">{gpu.name}</h4>
+          <span className="text-xs">{availabilityText}</span>
         </div>
         <div className="gpu-card-metrics">
           <GpuMetricMeter label="GPU 사용률" value={gpu.gpuUtilizationPercent} kind="percent" />
@@ -123,23 +135,32 @@ export const DetailGpuCard = ({
           </p>
         ) : null}
         <div className="mb-4 flex flex-wrap items-center gap-2">
-          <span className="sr-only" id={watchDescriptionId}>{watchTitle}</span>
           {!watchRulesReady ? (
-            <Button aria-describedby={watchDescriptionId} aria-label="Watch status unavailable" disabled size="sm" variant="secondary">
-              알림 상태 확인 불가
-            </Button>
+            <>
+              {watchRule ? <span className="text-xs">마지막 저장 상태: 알림 {watchRule.enabled ? '활성화' : '비활성화'}</span> : null}
+              <Button aria-describedby={watchDescriptionId} aria-label="Watch status unavailable" disabled size="sm" variant="secondary">
+                알림 상태 확인 불가
+              </Button>
+            </>
           ) : watchRule?.enabled ? (
             <div className="flex flex-wrap items-center gap-2" title={watchTitle}>
               <span className="text-xs font-semibold">알림 활성화</span>
-              <Button aria-describedby={watchDescriptionId} aria-label={`Disable availability watch for GPU ${gpu.index}`} disabled={watchPending} onClick={toggleWatch} size="sm" variant="ghost">
+              <Button aria-describedby={watchDescriptionId} aria-label={`Disable ${defaultCondition ? 'availability' : 'custom-condition'} watch for GPU ${gpu.index}`} disabled={watchPending} onClick={toggleWatch} size="sm" variant="ghost">
                 알림 해제
               </Button>
             </div>
           ) : (
-            <Button aria-describedby={watchDescriptionId} aria-label="Notify when available" disabled={watchPending} onClick={toggleWatch} size="sm" title={watchTitle} variant="secondary">
-              사용 가능 시 알림
+            <Button aria-describedby={watchDescriptionId} aria-label={defaultCondition ? 'Notify when available' : `Enable custom-condition watch for GPU ${gpu.index}`} disabled={watchPending} onClick={toggleWatch} size="sm" title={watchTitle} variant="secondary">
+              {defaultCondition ? '사용 가능 시 알림' : '사용자 지정 조건 알림'}
             </Button>
           )}
+          {watchPending ? <span className="text-xs" role="status">GPU {gpu.index} 알림 저장 중</span> : null}
+        </div>
+        <div className="mb-4 text-xs text-[color:var(--color-muted)]">
+          <p id={watchDescriptionId}>{watchTitle}</p>
+          {!defaultCondition ? <p>사용자 지정 알림 조건은 기본 사용 가능 표시와 별도로 평가됩니다.</p> : null}
+          <p>{watchRule ? `저장된 재알림 간격: ${savedCooldown}초` : '새 알림 기본 재알림 간격: 900초'} · 실제 적용: {Math.max(savedCooldown, 900)}초 (최소 900초 / 15분)</p>
+          <p>OS 알림 권한: unknown. macOS 시스템 설정의 알림에서 GPUWatcher 허용 여부와 집중 모드(Focus)를 확인하세요. 알림 전달은 보장되지 않습니다.</p>
         </div>
         <DetailProcessList processes={gpu.processes} unavailable={processesUnavailable} />
         <details className="gpu-extra-metrics mt-4" open={metricsExpanded} onToggle={(event) => {

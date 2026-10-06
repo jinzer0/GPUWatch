@@ -49,7 +49,8 @@ impl Repository {
             let current = self.get_server(&id)?.ok_or_else(|| {
                 AppError::new("storage_app", "server_not_found", "server not found")
             })?;
-            let changed = self.conn.execute(
+            let transaction = self.conn.unchecked_transaction()?;
+            let changed = transaction.execute(
                 "UPDATE servers
                  SET name = ?1, host = ?2, port = ?3, username = ?4, ssh_key_path = ?5,
                      polling_interval_seconds = ?6, enabled = ?7,
@@ -74,7 +75,10 @@ impl Repository {
                     "server not found",
                 ));
             }
-            self.ensure_health(&id, if enabled { "idle" } else { "disabled" })?;
+            super::availability::reset_server(&transaction, &id)?;
+            super::watches::reset_server(&transaction, &id, &now)?;
+            transaction.execute("INSERT INTO server_health(server_id, status) VALUES(?1, ?2) ON CONFLICT(server_id) DO UPDATE SET status=excluded.status", params![id, if enabled { "idle" } else { "disabled" }])?;
+            transaction.commit()?;
             return self.get_server(&id)?.ok_or_else(|| {
                 AppError::new(
                     "storage_app",
@@ -128,9 +132,10 @@ impl Repository {
 
     pub fn set_server_enabled(&self, id: &str, enabled: bool) -> Result<Server, AppError> {
         let now = now_string();
-        let changed = self.conn.execute(
+        let transaction = self.conn.unchecked_transaction()?;
+        let changed = transaction.execute(
             "UPDATE servers SET enabled = ?1, config_revision = config_revision + 1, updated_at = ?2 WHERE id = ?3",
-            params![bool_to_i64(enabled), now, id],
+            params![bool_to_i64(enabled), &now, id],
         )?;
         if changed == 0 {
             return Err(AppError::new(
@@ -139,7 +144,10 @@ impl Repository {
                 "server not found",
             ));
         }
-        self.ensure_health(id, if enabled { "idle" } else { "disabled" })?;
+        super::availability::reset_server(&transaction, id)?;
+        super::watches::reset_server(&transaction, id, &now)?;
+        transaction.execute("INSERT INTO server_health(server_id, status) VALUES(?1, ?2) ON CONFLICT(server_id) DO UPDATE SET status=excluded.status", params![id, if enabled { "idle" } else { "disabled" }])?;
+        transaction.commit()?;
         self.get_server(id)?
             .ok_or_else(|| AppError::new("storage_app", "server_not_found", "server not found"))
     }

@@ -5,7 +5,7 @@ import { getServerDetail, listWatchRules, queryKeys, refreshServer, saveGpuAvail
 import type { GpuAvailableWatchInput, ServerDetailDto, WatchRule } from '../../lib/types';
 
 export const getWatchTargetKey = (serverId: string, gpuUuid: string | null, gpuIndex: number) =>
-  gpuUuid === null ? `${serverId}:index:${gpuIndex}` : `${serverId}:uuid:${gpuUuid}`;
+  gpuUuid === null || !gpuUuid.trim() ? `${serverId}:index:${gpuIndex}` : `${serverId}:uuid:${gpuUuid}`;
 
 export const useServerDetailController = (selectedServerId: string | null) => {
   const queryClient = useQueryClient();
@@ -23,7 +23,14 @@ export const useServerDetailController = (selectedServerId: string | null) => {
       return Math.max((detail?.server.pollingIntervalSeconds ?? 10) * 1000, 5_000);
     }
   });
-  const detail = detailQuery.data ?? null;
+  const savedDetail = detailQuery.data ?? null;
+  const detail = savedDetail && detailQuery.isError ? {
+    ...savedDetail,
+    gpus: savedDetail.gpus.map((gpu) => ({
+      ...gpu,
+      availability: { state: 'unknown' as const, conditionStartedAt: null }
+    }))
+  } : savedDetail;
   const watchRulesQuery = useQuery<WatchRule[]>({
     enabled: selectedServerId !== null,
     queryFn: () => listWatchRules(selectedServerId ?? ''),
@@ -31,7 +38,11 @@ export const useServerDetailController = (selectedServerId: string | null) => {
   });
   const watchMutation = useMutation({
     mutationFn: (input: GpuAvailableWatchInput) => saveGpuAvailableWatch(input),
-    onSuccess: (_rule, input) => queryClient.invalidateQueries({ queryKey: queryKeys.watchRules(input.serverId) })
+    onSuccess: (_rule, input) => queryClient.invalidateQueries({ queryKey: queryKeys.watchRules(input.serverId) }),
+    onSettled: (_rule, _error, input) => {
+      pendingWatchTargetsRef.current.delete(getWatchTargetKey(input.serverId, input.gpuUuid, input.gpuIndex));
+      setPendingWatchTargets([...pendingWatchTargetsRef.current]);
+    }
   });
   const saveWatch = (input: GpuAvailableWatchInput) => {
     const target = getWatchTargetKey(input.serverId, input.gpuUuid, input.gpuIndex);
@@ -41,12 +52,7 @@ export const useServerDetailController = (selectedServerId: string | null) => {
 
     pendingWatchTargetsRef.current.add(target);
     setPendingWatchTargets([...pendingWatchTargetsRef.current]);
-    watchMutation.mutate(input, {
-      onSettled: () => {
-        pendingWatchTargetsRef.current.delete(target);
-        setPendingWatchTargets([...pendingWatchTargetsRef.current]);
-      }
-    });
+    watchMutation.mutate(input);
   };
   const refreshMutation = useMutation({
     mutationFn: refreshServer,

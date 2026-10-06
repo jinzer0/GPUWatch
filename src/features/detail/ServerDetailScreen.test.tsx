@@ -1,8 +1,9 @@
 import { QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, renderHook, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ServerDetailScreen } from './ServerDetailScreen';
+import { useServerDetailController } from './useServerDetailController';
 import { getServerDetail, listGpuHistory, listWatchRules, refreshServer, saveGpuAvailableWatch } from '../../lib/api';
 import { useUiStore } from '../../lib/store';
 import type { ServerDetailDto, WatchRule } from '../../lib/types';
@@ -329,6 +330,69 @@ describe('ServerDetailScreen', () => {
     });
   });
 
+  it.each(['online', 'polling'])('highlights backend available without a watch despite busy metrics with %s health', async (status) => {
+    renderDetail({
+      ...detailFixture,
+      health: { ...detailFixture.health, status },
+      gpus: [{
+        ...detailFixture.gpus[0],
+        busy: true,
+        gpuUtilizationPercent: 90,
+        availability: { state: 'available', conditionStartedAt: '2026-06-07T00:00:00Z' }
+      }]
+    });
+    const gpu = await gpuDisclosure('NVIDIA Test GPU');
+    expect(gpu.closest('article')?.classList.contains('gpu-card-available')).toBe(true);
+    expect(within(gpu.querySelector('summary') as HTMLElement).getByText('사용 가능')).toBeDefined();
+    await setDisclosureOpen(gpu, true);
+    expect(within(gpu).getByRole('button', { name: 'Notify when available' })).toBeDefined();
+    expect(within(gpu).queryByText('알림 활성화')).toBeNull();
+    expect(listGpuHistory).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { state: 'candidate' as const, status: 'online', enabled: true },
+    { state: 'unknown' as const, status: 'online', enabled: true },
+    { state: 'in_use' as const, status: 'online', enabled: true },
+    { state: 'available' as const, status: 'stale', enabled: true },
+    { state: 'available' as const, status: 'offline', enabled: true },
+    { state: 'available' as const, status: 'unknown', enabled: true },
+    { state: 'available' as const, status: 'online', enabled: false }
+  ])('does not highlight $state with health $status and enabled=$enabled', async ({ state, status, enabled }) => {
+    renderDetail({
+      ...detailFixture,
+      server: { ...detailFixture.server, enabled },
+      health: { ...detailFixture.health, status },
+      gpus: [{ ...detailFixture.gpus[0], availability: { state, conditionStartedAt: '2026-06-07T00:00:00Z' } }]
+    });
+    const gpu = await gpuDisclosure('NVIDIA Test GPU');
+    expect(gpu.closest('article')?.classList.contains('gpu-card-available')).toBe(false);
+    expect(within(gpu).queryByText('사용 가능')).toBeNull();
+    expect(listGpuHistory).not.toHaveBeenCalled();
+  });
+
+  it('suppresses availability after a failed detail read without changing the cached snapshot', async () => {
+    const availableDetail: ServerDetailDto = {
+      ...detailFixture,
+      gpus: [{ ...detailFixture.gpus[0], availability: { state: 'available', conditionStartedAt: '2026-06-07T00:00:00Z' } }]
+    };
+    const { queryClient } = renderDetail(availableDetail);
+    const gpu = await gpuDisclosure('NVIDIA Test GPU');
+    expect(gpu.closest('article')?.classList.contains('gpu-card-available')).toBe(true);
+    const { result } = renderHook(() => useServerDetailController('server-1'), {
+      wrapper: ({ children }) => <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    });
+    vi.mocked(getServerDetail).mockRejectedValue(new Error('detail read failed'));
+    await act(async () => {
+      await queryClient.refetchQueries({ queryKey: ['server-detail', 'server-1'] });
+    });
+    await waitFor(() => expect(result.current.detailQuery.isError).toBe(true));
+    expect(result.current.detail?.gpus[0].availability).toEqual({ state: 'unknown', conditionStartedAt: null });
+    expect(queryClient.getQueryData<ServerDetailDto>(['server-detail', 'server-1'])?.gpus[0].availability.state).toBe('available');
+    expect(screen.queryByText('사용 가능')).toBeNull();
+    expect(screen.getByRole('alert').textContent).toContain('detail read failed');
+  });
+
   it.each(['online', 'stale'])('does not infer current availability from busy=false with %s health', async (status) => {
     renderDetail({ ...detailFixture, health: { ...detailFixture.health, status } });
     const gpu = await gpuDisclosure('NVIDIA Test GPU');
@@ -522,8 +586,8 @@ describe('ServerDetailScreen', () => {
     expect(enableDescriptionId).toBeTruthy();
     expect(disableDescriptionId).toBeTruthy();
     expect(enableDescriptionId).not.toBe(disableDescriptionId);
-    expect(document.getElementById(enableDescriptionId ?? '')?.textContent).toBe('GPU 사용률 ≤ 5%, VRAM ≤ 1GB가 5분 지속되면 알림');
-    expect(document.getElementById(disableDescriptionId ?? '')?.textContent).toBe('GPU 사용률 ≤ 5%, VRAM ≤ 1GB가 5분 지속되면 알림');
+    expect(document.getElementById(enableDescriptionId ?? '')?.textContent).toBe('기본 사용 가능 조건: GPU 사용률 ≤ 5%, VRAM ≤ 1024 MiB가 300초 지속되면 알림');
+    expect(document.getElementById(disableDescriptionId ?? '')?.textContent).toBe('기본 사용 가능 조건: GPU 사용률 ≤ 5%, VRAM ≤ 1024 MiB가 300초 지속되면 알림');
   });
 
   it('treats rejected watch-rule reads as unknown persisted state without allowing saves', async () => {
@@ -589,6 +653,94 @@ describe('ServerDetailScreen', () => {
     expect(await firstGpu.findByRole('button', { name: 'Notify when available' })).toBeDefined();
   });
 
+  it('preserves every saved custom field and identity when toggling a watch off and on', async () => {
+    const saved = watchRule({
+      id: 'custom-watch', gpuUuid: null, utilizationThresholdPercent: 17,
+      memoryThresholdMiB: 4096, sustainSeconds: 42, cooldownSeconds: 60
+    });
+    let persisted = saved;
+    vi.mocked(listWatchRules).mockImplementation(async () => [persisted]);
+    vi.mocked(saveGpuAvailableWatch).mockImplementation(async (input) => {
+      persisted = { ...saved, enabled: input.enabled };
+      return persisted;
+    });
+    renderDetail();
+    const disclosure = await gpuDisclosure('NVIDIA Test GPU');
+    await setDisclosureOpen(disclosure, true);
+    const gpu = within(disclosure);
+    const disable = await gpu.findByRole('button', { name: 'Disable custom-condition watch for GPU 0' });
+    expect(disable.closest('[title]')?.getAttribute('title')).toBe('사용자 지정 조건: GPU 사용률 ≤ 17%, VRAM ≤ 4096 MiB가 42초 지속되면 알림');
+    expect(gpu.getByText('사용자 지정 알림 조건은 기본 사용 가능 표시와 별도로 평가됩니다.')).toBeDefined();
+    expect(gpu.getByText('저장된 재알림 간격: 60초 · 실제 적용: 900초 (최소 900초 / 15분)')).toBeDefined();
+    expect(gpu.getByText(/OS 알림 권한: unknown.*macOS.*집중 모드\(Focus\).*보장되지 않습니다/)).toBeDefined();
+    fireEvent.click(disable);
+    const enable = await gpu.findByRole('button', { name: 'Enable custom-condition watch for GPU 0' });
+    await waitFor(() => expect(enable.hasAttribute('disabled')).toBe(false));
+    expect(enable.textContent).toBe('사용자 지정 조건 알림');
+    expect(enable.getAttribute('title')).toBe('사용자 지정 조건: GPU 사용률 ≤ 17%, VRAM ≤ 4096 MiB가 42초 지속되면 알림');
+    fireEvent.click(enable);
+    await gpu.findByRole('button', { name: 'Disable custom-condition watch for GPU 0' });
+    const input = {
+      id: saved.id, serverId: saved.serverId, gpuUuid: saved.gpuUuid, gpuIndex: saved.gpuIndex,
+      utilizationThresholdPercent: saved.utilizationThresholdPercent,
+      memoryThresholdMiB: saved.memoryThresholdMiB, sustainSeconds: saved.sustainSeconds,
+      cooldownSeconds: saved.cooldownSeconds
+    };
+    expect(saveGpuAvailableWatch).toHaveBeenNthCalledWith(1, { ...input, enabled: false });
+    expect(saveGpuAvailableWatch).toHaveBeenNthCalledWith(2, { ...input, enabled: true });
+  });
+
+  it.each(['', '   '])('creates a new watch with null UUID and target-specific pending state for UUID %j', async (uuid) => {
+    let resolveSave: ((rule: WatchRule) => void) | undefined;
+    vi.mocked(saveGpuAvailableWatch).mockReturnValue(new Promise<WatchRule>((resolve) => { resolveSave = resolve; }));
+    renderDetail({ ...detailFixture, gpus: [{ ...detailFixture.gpus[0], uuid }] });
+    const gpu = await gpuDisclosure('NVIDIA Test GPU');
+    await setDisclosureOpen(gpu, true);
+    const button = await within(gpu).findByRole('button', { name: 'Notify when available' });
+    fireEvent.click(button);
+    await waitFor(() => expect(button.hasAttribute('disabled')).toBe(true));
+    expect(within(gpu).getByRole('status').textContent).toBe('GPU 0 알림 저장 중');
+    expect(saveGpuAvailableWatch).toHaveBeenCalledWith({
+      id: null, serverId: 'server-1', gpuUuid: null, gpuIndex: 0, enabled: true,
+      utilizationThresholdPercent: null, memoryThresholdMiB: null, sustainSeconds: null, cooldownSeconds: null
+    });
+    await act(async () => { resolveSave?.(watchRule({ gpuUuid: null })); });
+  });
+
+  it('retains the last saved rule and condition but blocks edits after a watch read fails', async () => {
+    const saved = watchRule({ utilizationThresholdPercent: 12, cooldownSeconds: 1800 });
+    vi.mocked(listWatchRules).mockResolvedValue([saved]);
+    const { queryClient } = renderDetail();
+    const disclosure = await gpuDisclosure('NVIDIA Test GPU');
+    await setDisclosureOpen(disclosure, true);
+    await within(disclosure).findByRole('button', { name: 'Disable custom-condition watch for GPU 0' });
+    vi.mocked(listWatchRules).mockRejectedValue(new Error('watch read failed'));
+    await act(async () => { await queryClient.refetchQueries({ queryKey: ['watch-rules', 'server-1'] }); });
+    const gpu = within(disclosure);
+    expect(await gpu.findByText('마지막 저장 상태: 알림 활성화')).toBeDefined();
+    expect(gpu.getByRole('button', { name: 'Watch status unavailable' }).hasAttribute('disabled')).toBe(true);
+    expect(gpu.getByText('사용자 지정 조건: GPU 사용률 ≤ 12%, VRAM ≤ 1024 MiB가 300초 지속되면 알림')).toBeDefined();
+    expect(gpu.getByText('저장된 재알림 간격: 1800초 · 실제 적용: 1800초 (최소 900초 / 15분)')).toBeDefined();
+    expect(screen.getByRole('region', { name: 'Watch diagnostic' }).textContent).toContain('watch read failed');
+    expect(saveGpuAvailableWatch).not.toHaveBeenCalled();
+  });
+
+  it('retains the enabled saved rule and clears target pending state after a failed disable', async () => {
+    vi.mocked(listWatchRules).mockResolvedValue([watchRule()]);
+    vi.mocked(saveGpuAvailableWatch).mockRejectedValue(new Error('disable failed'));
+    renderDetail();
+    const disclosure = await gpuDisclosure('NVIDIA Test GPU');
+    await setDisclosureOpen(disclosure, true);
+    const gpu = within(disclosure);
+    const button = await gpu.findByRole('button', { name: 'Disable availability watch for GPU 0' });
+    fireEvent.click(button);
+    await screen.findByRole('region', { name: 'Watch diagnostic' });
+    await waitFor(() => expect(button.hasAttribute('disabled')).toBe(false));
+    expect(gpu.getByText('알림 활성화')).toBeDefined();
+    expect(gpu.queryByRole('status')).toBeNull();
+    expect(gpu.queryByRole('button', { name: 'Notify when available' })).toBeNull();
+  });
+
   it('prevents rapid duplicate watch saves and disables only the pending GPU control', async () => {
     let resolveSave: ((rule: WatchRule) => void) | undefined;
     vi.mocked(saveGpuAvailableWatch).mockReturnValue(new Promise<WatchRule>((resolve) => {
@@ -605,6 +757,32 @@ describe('ServerDetailScreen', () => {
     await waitFor(() => expect(firstGpuButton.hasAttribute('disabled')).toBe(true));
     expect(secondGpu.getByRole('button', { name: 'Notify when available' }).hasAttribute('disabled')).toBe(false);
     resolveSave?.(watchRule());
+  });
+
+  it('settles each pending target independently when GPU saves overlap', async () => {
+    const resolvers = new Map<number, (rule: WatchRule) => void>();
+    vi.mocked(saveGpuAvailableWatch).mockImplementation((input) => new Promise<WatchRule>((resolve) => {
+      resolvers.set(input.gpuIndex, resolve);
+    }));
+    renderDetail();
+    await expandAllGpus();
+    const first = within(await gpuDisclosure('NVIDIA Test GPU'));
+    const second = within(await gpuDisclosure('NVIDIA Clocked GPU'));
+    const firstButton = first.getByRole('button', { name: 'Notify when available' });
+    const secondButton = second.getByRole('button', { name: 'Notify when available' });
+    fireEvent.click(firstButton);
+    fireEvent.click(secondButton);
+    await waitFor(() => expect(saveGpuAvailableWatch).toHaveBeenCalledTimes(2));
+    expect(firstButton.hasAttribute('disabled')).toBe(true);
+    expect(secondButton.hasAttribute('disabled')).toBe(true);
+    await act(async () => { resolvers.get(0)?.(watchRule()); });
+    await waitFor(() => expect(firstButton.hasAttribute('disabled')).toBe(false));
+    expect(secondButton.hasAttribute('disabled')).toBe(true);
+    expect(first.queryByRole('status')).toBeNull();
+    expect(second.getByRole('status').textContent).toBe('GPU 1 알림 저장 중');
+    await act(async () => { resolvers.get(1)?.(watchRule({ gpuIndex: 1, gpuUuid: 'GPU-populated' })); });
+    await waitFor(() => expect(secondButton.hasAttribute('disabled')).toBe(false));
+    expect(second.queryByRole('status')).toBeNull();
   });
 
   it('does not carry a pending GPU mutation to another server with the same GPU index', async () => {

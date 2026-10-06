@@ -1,4 +1,5 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { StrictMode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { queryKeys } from '../../lib/api';
@@ -288,6 +289,40 @@ describe('ServerManagerSheet', () => {
     await act(async () => connection.resolve(okBridgeResponse({ ok: true, status: 'online', errorType: null, message: 'Beta SSH ready' })));
     expect(await screen.findByText('Beta SSH ready')).toBeDefined();
     expect(useUiStore.getState().selectedServerId).toBe('server-a');
+  });
+
+  it.each(['success', 'failure'] as const)('settles a cached-target automatic test after StrictMode replay (%s)', async (outcome) => {
+    const connection = deferred<ReturnType<typeof okBridgeResponse<ConnectionTestResultDto>>>();
+    const testConnection = vi.fn().mockReturnValue(connection.promise);
+    setGpuWatcherBridge({ listServers: vi.fn().mockResolvedValue(okBridgeResponse(servers)), testConnection });
+    const { queryClient } = renderWithQueryClient(<StrictMode><ModalHost action="test" target="server-b" /></StrictMode>);
+    act(() => queryClient.setQueryData(queryKeys.servers, servers));
+    fireEvent.click(screen.getByRole('button', { name: 'Open manager' }));
+    await waitFor(() => expect(testConnection).toHaveBeenCalledTimes(1));
+    expect(testConnection).toHaveBeenCalledWith({ id: 'server-b' });
+    expect(screen.getByText('Connection test pending')).toBeDefined();
+    if (outcome === 'success') {
+      await act(async () => connection.resolve(okBridgeResponse({ ok: true, status: 'online', errorType: null, message: 'StrictMode SSH ready' })));
+      expect(await screen.findByText('StrictMode SSH ready')).toBeDefined();
+    } else {
+      await act(async () => connection.reject(new Error('StrictMode transport denied')));
+      expect(await screen.findByText('StrictMode transport denied')).toBeDefined();
+    }
+    expect(screen.queryByText('Connection test pending')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Test SSH connection' })).toHaveProperty('disabled', false);
+    expect(testConnection).toHaveBeenCalledTimes(1);
+    expect(useUiStore.getState().selectedServerId).toBe('server-a');
+  });
+
+  it('does not start a queued automatic test after its StrictMode sheet unmounts', async () => {
+    const testConnection = vi.fn();
+    setGpuWatcherBridge({ listServers: vi.fn().mockResolvedValue(okBridgeResponse(servers)), testConnection });
+    const view = renderWithQueryClient(<StrictMode><ModalHost action="test" target="server-b" /></StrictMode>);
+    act(() => view.queryClient.setQueryData(queryKeys.servers, servers));
+    fireEvent.click(screen.getByRole('button', { name: 'Open manager' }));
+    view.unmount();
+    await act(async () => { await Promise.resolve(); });
+    expect(testConnection).not.toHaveBeenCalled();
   });
 
   it('moves a chosen import candidate into the editor without saving or testing', async () => {

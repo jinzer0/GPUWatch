@@ -1,5 +1,6 @@
-import { app, BrowserWindow, dialog, Menu, nativeTheme, Notification } from 'electron';
+import { app, BrowserWindow, dialog, Menu, nativeTheme, Notification, powerMonitor } from 'electron';
 import path from 'node:path';
+import { mkdirSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ipcMain } from 'electron';
 import { registerIpcScaffold } from './ipc.js';
@@ -16,6 +17,12 @@ let mainWindow: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
 let settingsLoading: Promise<void> | null = null;
 let disposeUi: (() => void) | null = null;
+const testDataDirectory = process.env.GPUWATCHER_TEST_DATA_DIR;
+if (testDataDirectory) {
+  const userDataDirectory = path.resolve(testDataDirectory, 'electron-user-data');
+  mkdirSync(userDataDirectory, { recursive: true });
+  app.setPath('userData', userDataDirectory);
+}
 const appearance = createAppearanceController({ nativeTheme, filePath: path.join(app.getPath('userData'), 'appearance.json') });
 const rendererFile = path.join(app.getAppPath(), 'dist', 'index.html');
 
@@ -105,6 +112,12 @@ async function openSettings(): Promise<void> {
 const scheduler = createScheduler();
 const helperRunner = createHelperRunner({ isPackaged: app.isPackaged, resourcesPath: process.resourcesPath });
 registerIpcScaffold(helperRunner, scheduler);
+let disposePowerMonitor: (() => void) | null = null;
+
+function reportLifecycleError(error: unknown): void {
+  console.error('GPUWatcher availability reset failed:', error);
+  dialog.showErrorBox('GPU 관측을 재준비할 수 없습니다', error instanceof Error ? error.message : '앱을 다시 시작해 주세요.');
+}
 
 app.whenReady().then(async () => {
   await appearance.initialize().catch((error: unknown) => {
@@ -145,7 +158,18 @@ app.whenReady().then(async () => {
     { role: 'windowMenu' }
   ]));
   scheduler.setNotifier(createMacosNotificationNotifier(Notification));
-  scheduler.start(helperRunner);
+  const onSuspend = () => { void scheduler.suspend().catch(reportLifecycleError); };
+  const onResume = () => { void scheduler.resume().catch(reportLifecycleError); };
+  powerMonitor.on('suspend', onSuspend);
+  powerMonitor.on('resume', onResume);
+  disposePowerMonitor = () => {
+    powerMonitor.removeListener('suspend', onSuspend);
+    powerMonitor.removeListener('resume', onResume);
+  };
+  await scheduler.start(helperRunner).catch((error: unknown) => {
+    // Keep the static shell available for renderer backend-error recovery.
+    console.error('GPUWatcher startup availability reset failed:', error);
+  });
   await createMainWindow();
   app.on('activate', () => {
     void createMainWindow().catch((error: unknown) => console.error('Could not open main window:', error));
@@ -159,6 +183,8 @@ app.on('window-all-closed', () => {
   if (!isMac) app.quit();
 });
 app.on('before-quit', () => {
+  disposePowerMonitor?.();
+  disposePowerMonitor = null;
   disposeUi?.();
   appearance.dispose();
   scheduler.stop();

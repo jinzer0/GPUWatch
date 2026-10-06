@@ -110,6 +110,10 @@ export interface GpuCardDto {
   index: number;
   uuid: string;
   name: string;
+  availability: {
+    state: 'in_use' | 'candidate' | 'available' | 'unknown';
+    conditionStartedAt: string | null;
+  };
   pciBusId: string | null;
   driverVersion: string | null;
   graphicsClockMhz: number | null;

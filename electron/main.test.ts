@@ -10,6 +10,7 @@ type Handler = (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown;
 
 const mocks = vi.hoisted(() => {
   const appListeners = new Map<string, () => void>();
+  const powerListeners = new Map<string, () => void>();
   const handlers = new Map<string, Handler>();
   const appearanceListeners: ((state: AppearanceState) => void)[] = [];
   const windows: MockWindow[] = [];
@@ -48,10 +49,18 @@ const mocks = vi.hoisted(() => {
     }
   }
   return {
-    appListeners, handlers, appearanceListeners, windows, loadPlans, MockWindow,
+    appListeners, powerListeners, handlers, appearanceListeners, windows, loadPlans, MockWindow,
+    mkdirSync: vi.fn(),
+    powerMonitor: {
+      on: vi.fn((event: string, listener: () => void) => { powerListeners.set(event, listener); }),
+      removeListener: vi.fn((event: string, listener: () => void) => {
+        if (powerListeners.get(event) === listener) powerListeners.delete(event);
+      })
+    },
     app: {
       isPackaged: false,
       getPath: vi.fn(() => '/isolated/user-data'),
+      setPath: vi.fn((_name: string, value: string) => { mocks.app.getPath.mockReturnValue(value); }),
       getAppPath: vi.fn(() => '/isolated/GPUWatcher'),
       whenReady: vi.fn<() => Promise<void>>(),
       on: vi.fn((event: string, listener: () => void) => { appListeners.set(event, listener); }),
@@ -78,7 +87,7 @@ const mocks = vi.hoisted(() => {
       }),
       dispose: vi.fn()
     },
-    scheduler: { start: vi.fn(), stop: vi.fn(), setNotifier: vi.fn() },
+    scheduler: { start: vi.fn().mockResolvedValue(undefined), suspend: vi.fn().mockResolvedValue(undefined), resume: vi.fn().mockResolvedValue(undefined), stop: vi.fn(), setNotifier: vi.fn() },
     runner: { run: vi.fn() },
     notifier: vi.fn(),
     registerIpcScaffold: vi.fn(),
@@ -94,8 +103,13 @@ vi.mock('electron', () => ({
   nativeTheme: mocks.nativeTheme,
   dialog: mocks.dialog,
   Notification: mocks.Notification,
+  powerMonitor: mocks.powerMonitor,
   ipcMain: mocks.ipcMain
 }));
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  return { ...actual, mkdirSync: mocks.mkdirSync, default: { ...actual, mkdirSync: mocks.mkdirSync } };
+});
 vi.mock('./appearance.js', () => ({
   createAppearanceController: mocks.createAppearanceController.mockImplementation(() => mocks.appearance)
 }));
@@ -146,11 +160,17 @@ describe('main settings-window lifecycle', () => {
     vi.resetModules();
     vi.clearAllMocks();
     mocks.appListeners.clear();
+    mocks.powerListeners.clear();
+    mocks.scheduler.start.mockResolvedValue(undefined);
+    mocks.scheduler.suspend.mockResolvedValue(undefined);
+    mocks.scheduler.resume.mockResolvedValue(undefined);
     mocks.handlers.clear();
     mocks.appearanceListeners.length = 0;
     mocks.windows.length = 0;
     mocks.loadPlans.length = 0;
     mocks.app.isPackaged = false;
+    mocks.app.getPath.mockReturnValue('/isolated/user-data');
+    vi.stubEnv('GPUWATCHER_TEST_DATA_DIR', '');
     mocks.appearance.initialize.mockResolvedValue(undefined);
     mocks.appearance.getAppearance.mockReturnValue({ mode: 'system', resolved: 'light' });
     vi.stubEnv('VITE_DEV_SERVER_URL', 'http://127.0.0.1:5173');
@@ -164,6 +184,8 @@ describe('main settings-window lifecycle', () => {
 
   it('deduplicates menu CmdOrCtrl+, and repeated UI requests while settings loads', async () => {
     const main = await boot();
+    expect(mocks.app.setPath).not.toHaveBeenCalled();
+    expect(mocks.mkdirSync).not.toHaveBeenCalled();
     expect(mocks.registerIpcScaffold).toHaveBeenCalledWith(mocks.runner, mocks.scheduler);
     expect(mocks.createAppearanceController).toHaveBeenCalledWith({
       nativeTheme: mocks.nativeTheme, filePath: '/isolated/user-data/appearance.json'
@@ -321,5 +343,66 @@ describe('main settings-window lifecycle', () => {
     const stranger = { sender: { mainFrame: settings.webContents.mainFrame }, senderFrame: settings.webContents.mainFrame } as unknown as IpcMainInvokeEvent;
     await expect(mocks.handlers.get(UI_CHANNELS.openSettings)!(stranger)).resolves.toMatchObject({ ok: false, error: { type: 'ui_forbidden' } });
     expect(mocks.windows).toHaveLength(2);
+  });
+
+  it('isolates Electron userData before constructing appearance when test data is configured', async () => {
+    vi.stubEnv('GPUWATCHER_TEST_DATA_DIR', '/isolated/stage4-data');
+    await boot();
+    expect(mocks.app.setPath).toHaveBeenCalledExactlyOnceWith('userData', '/isolated/stage4-data/electron-user-data');
+    expect(mocks.mkdirSync).toHaveBeenCalledExactlyOnceWith('/isolated/stage4-data/electron-user-data', { recursive: true });
+    expect(mocks.createAppearanceController).toHaveBeenCalledWith({
+      nativeTheme: mocks.nativeTheme, filePath: '/isolated/stage4-data/electron-user-data/appearance.json'
+    });
+    expect(mocks.app.setPath.mock.invocationCallOrder[0]).toBeLessThan(mocks.createAppearanceController.mock.invocationCallOrder[0]);
+  });
+
+  it('registers power transitions once and removes the exact listeners on quit', async () => {
+    await boot();
+    await invoke(UI_CHANNELS.openSettings);
+    settingsMenuItem().click!();
+    expect(mocks.powerMonitor.on).toHaveBeenCalledTimes(2);
+    const suspend = mocks.powerListeners.get('suspend')!;
+    const resume = mocks.powerListeners.get('resume')!;
+    suspend();
+    resume();
+    expect(mocks.scheduler.suspend).toHaveBeenCalledOnce();
+    expect(mocks.scheduler.resume).toHaveBeenCalledOnce();
+    mocks.appListeners.get('before-quit')!();
+    expect(mocks.powerMonitor.removeListener).toHaveBeenCalledWith('suspend', suspend);
+    expect(mocks.powerMonitor.removeListener).toHaveBeenCalledWith('resume', resume);
+    expect(mocks.powerListeners.size).toBe(0);
+  });
+
+  it('waits for startup reset then opens the static shell on failure without quitting or blocking on a dialog', async () => {
+    const ready = deferred();
+    const reset = deferred();
+    mocks.app.whenReady.mockReturnValue(ready.promise);
+    mocks.scheduler.start.mockReturnValue(reset.promise);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await import('./main.js');
+    ready.resolve();
+    await vi.waitFor(() => expect(mocks.scheduler.start).toHaveBeenCalledOnce());
+    expect(mocks.windows).toHaveLength(0);
+    const error = new Error('Reset database unavailable');
+    reset.reject(error);
+    await vi.waitFor(() => expect(mocks.appListeners.has('activate')).toBe(true));
+    expect(consoleError).toHaveBeenCalledWith('GPUWatcher startup availability reset failed:', error);
+    expect(mocks.dialog.showErrorBox).not.toHaveBeenCalled();
+    expect(mocks.app.quit).not.toHaveBeenCalled();
+    expect(mocks.windows).toHaveLength(1);
+    expect(mocks.windows[0].show).toHaveBeenCalledOnce();
+    expect(mocks.scheduler.start).toHaveBeenCalledOnce();
+    expect(mocks.scheduler.resume).not.toHaveBeenCalled();
+  });
+
+  it.each(['suspend', 'resume'] as const)('shows %s reset diagnostics without restarting monitoring', async (event) => {
+    await boot();
+    const error = new Error('Lifecycle reset failed');
+    mocks.scheduler[event].mockRejectedValue(error);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mocks.powerListeners.get(event)!();
+    await vi.waitFor(() => expect(consoleError).toHaveBeenCalledWith('GPUWatcher availability reset failed:', error));
+    expect(mocks.dialog.showErrorBox).toHaveBeenCalledWith('GPU 관측을 재준비할 수 없습니다', error.message);
+    expect(mocks.scheduler.start).toHaveBeenCalledOnce();
   });
 });

@@ -32,6 +32,7 @@ export const gpuCardFixture: GpuCardDto = {
   graphicsClockMhz: 1740,
   memoryClockMhz: 9501,
   busy: false,
+  availability: { state: 'unknown', conditionStartedAt: null },
   memoryTotalMiB: 24576,
   memoryUsedMiB: 0,
   memoryFreeMiB: 24576,

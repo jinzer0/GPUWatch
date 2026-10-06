@@ -17,6 +17,7 @@ export type HelperAction =
   | 'save_gpu_available_watch'
   | 'delete_watch_rule'
   | 'consume_notification_events'
+  | 'reset_availability_observations'
   | 'health';
 
 export type ActionVisibility = 'renderer' | 'main-only';
@@ -32,7 +33,8 @@ export type DbMutation =
   | 'poll-health-start-and-result-write'
   | 'watch-rules-write'
   | 'watch-rules-delete'
-  | 'notification-outbox-consume';
+  | 'notification-outbox-consume'
+  | 'availability-reset';
 
 export type PollingOverlapKey = 'none' | 'server-id' | 'electron-main-scheduler';
 

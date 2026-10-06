@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { expectedBridgeKeys, forbiddenBridgeKeys, forbiddenElectronMetadataKeys } from '../../shared/constants.mjs';
 import { evidenceDir } from '../../shared/paths.mjs';
-import { helperRestored } from './helper-error.mjs';
+import { sourceHelperIsExecutable } from './helper-error.mjs';
 
 export function selectedLogExcerpt(logs) {
   return logs
@@ -22,7 +22,7 @@ export async function buildPackagedEvidence({ taskEvidenceName, startedAt, appPa
     .join('\n');
 
   const launchEvidence = [
-    'Task 2 unsigned local packaged Electron app launch smoke evidence',
+    'Task 29 unsigned local packaged Electron app launch smoke evidence',
     `Started at: ${startedAt}`,
     `Completed at: ${timestamp()}`,
     'Package command: npm run electron:pack',
@@ -38,7 +38,10 @@ export async function buildPackagedEvidence({ taskEvidenceName, startedAt, appPa
     'Success launch environment: GPUWATCHER_HELPER_PATH unset; GPUWATCHER_TEST_DATA_DIR isolated; HOME isolated',
     `Isolated data dir: ${success.tempDataDir}`,
     `Isolated HOME: ${success.tempHomeDir}`,
-    `Canonical test DB exists: ${existsSync(success.dbPath)} (${success.dbPath})`,
+    `Canonical test DB existed before owned cleanup: ${success.dbExistedBeforeCleanup} (${success.dbPath})`,
+    `Disposable runtime app/helper: ${success.runtimeAppPath}; ${success.runtimeHelperPath}`,
+    `Guarded actions: ${JSON.stringify(success.guardActions)}`,
+    `Disposable app removed: ${success.isolatedCopyRemoved}`,
     `Renderer URL: ${success.bridgeInfo.url}`,
     `Nonblank UI body length: ${success.bridgeInfo.bodyLength}`,
     `window.gpuwatcher exposed: ${success.bridgeInfo.hasGpuwatcher}`,
@@ -56,21 +59,23 @@ export async function buildPackagedEvidence({ taskEvidenceName, startedAt, appPa
   ].join('\n');
 
   const failureEvidence = [
-    'Task 2 packaged helper resolution failure evidence',
+    'Task 29 packaged helper resolution failure evidence',
     `Started at: ${startedAt}`,
     `Completed at: ${timestamp()}`,
-    'Failure mode: temporarily chmod removed executable bits from packaged helper, then restored them',
+    'Failure mode: removed executable bits only in an owned disposable app copy; source package untouched',
     `App path: ${appPath}`,
     `Helper path: ${helperPath}`,
+    `Disposable fault helper: ${failure.faultHelperPath}`,
+    `Disposable app removed: ${failure.isolatedCopyRemoved}`,
     `Failure launch cwd: ${failure.nonRepoCwd}`,
     'Failure launch environment: GPUWATCHER_HELPER_PATH unset; GPUWATCHER_TEST_DATA_DIR isolated; HOME isolated',
     `Isolated data dir: ${failure.tempDataDir}`,
     `Isolated HOME: ${failure.tempHomeDir}`,
     `Renderer bridge structured helperHealth error: ${JSON.stringify(failure.bridgeError)}`,
     `Visible helper error excerpt: ${failure.errorBody.split('\n').filter((line) => /helper_spawn_failed|permission denied|EACCES|failed to spawn helper|helper_contract|helper|error/i.test(line)).slice(0, 12).join(' | ')}`,
-    `App remained nonblank after helper error: ${failure.errorBody.toLowerCase().includes('gpuwatcher') && failure.errorBody.toLowerCase().includes('server registry')}`,
-    `Navigation after helper error: ${failure.navigableBody.toLowerCase().includes('fleet snapshot') || failure.navigableBody.toLowerCase().includes('server registry')}`,
-    `Helper restored executable: ${helperRestored(helperPath)}`,
+    `App remained nonblank after helper error: ${failure.errorBody.includes('GPUWatcher') && failure.errorBody.includes('Save server')}`,
+    `Management remains navigable after helper error: ${failure.navigableBody.includes('Save server')}`,
+    `Source helper remains executable: ${sourceHelperIsExecutable(helperPath)}`,
     `Screenshot: ${failure.errorScreenshot}`,
     `Packaged app log excerpt: ${selectedLogExcerpt(logs) || 'No relevant packaged app log excerpt.'}`
   ].join('\n');

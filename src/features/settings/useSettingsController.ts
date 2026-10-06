@@ -74,6 +74,7 @@ export const useSettingsController = () => {
   const observedRequest = useRef(managementRequestId);
   const clearedRequest = useRef<number | null>(null);
   const initializedRequest = useRef<number | null>(null);
+  const automaticTestRequest = useRef<number | null>(null);
   if (observedRequest.current !== managementRequestId) {
     observedRequest.current = managementRequestId;
     targetVersion.current += 1;
@@ -207,10 +208,23 @@ export const useSettingsController = () => {
     if (managementAction === 'delete' && editingServer) {
       deleteMutation.reset();
       setDeleteTarget({ id: editingServer.id, name: editingServer.name });
-    } else if (managementAction === 'test' && editingServer) {
-      testMutation.mutate({ input: editingServer.id, targetVersion: targetVersion.current, managementRequestId });
     }
   }, [managementOpen, managementRequestId, managementAction, editingServerId, editingServer]);
+
+  useEffect(() => {
+    if (!managementOpen || managementAction !== 'test' || editingServerId === null ||
+      editor.selectedServerId !== editingServerId || initializedRequest.current !== managementRequestId ||
+      automaticTestRequest.current === managementRequestId) return;
+    const request = { input: editingServerId, targetVersion: targetVersion.current, managementRequestId };
+    let cancelled = false;
+    // Start after effect replay so the mutation observer remains subscribed.
+    queueMicrotask(() => {
+      if (cancelled || !requestIsCurrent(request)) return;
+      automaticTestRequest.current = managementRequestId;
+      testMutation.mutate(request);
+    });
+    return () => { cancelled = true; };
+  }, [managementOpen, managementAction, managementRequestId, editingServerId, editor.selectedServerId, testMutation.mutate]);
 
   const updateField = (field: keyof SettingsFormState, value: string | boolean) => {
     targetVersion.current += 1;

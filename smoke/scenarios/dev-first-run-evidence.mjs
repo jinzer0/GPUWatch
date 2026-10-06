@@ -1,75 +1,33 @@
 import { existsSync } from 'node:fs';
-import path from 'node:path';
-import { expectedBridgeKeys, forbiddenBridgeKeys, forbiddenElectronMetadataKeys } from '../shared/constants.mjs';
-import { cdpUrl } from '../shared/cdp.mjs';
-import { evidenceDir } from '../shared/paths.mjs';
 
-const viteUrl = 'http://127.0.0.1:5173';
-const cdpPort = 9339;
-
-export function buildDevFirstRunEvidence({ tempDataDir, tempHomeDir, dbPath, bridgeInfo, electronMetaKeys, savedServerId, servers, importSurface, errorSurface, afterErrorBody, seededBody, processBody, historyBody, watch, persistedWatch, lifecycle, screenshots }) {
-  const parityEvidence = [
-    'Task 9 Electron first-run UI parity evidence',
+export function buildDevFirstRunEvidence({ tempDataDir, tempHomeDir, dbPath, bridgeInfo, electronMetaKeys, savedServerId, importSurface, errorSurface, detail, originalRule, offRule, onRule, persistedRule, appearance, screenshots, guardActions }) {
+  const task29Evidence = [
+    'Task29 current Electron dev UI integration evidence',
     'Command: npm run smoke:electron:first-run',
-    `Surface: actual Electron main/preload/renderer launched from dist-electron/electron/main.js with Vite renderer at ${viteUrl}`,
-    'Packaged app smoke: reserved for Task 11; this task used the Electron dev surface as allowed.',
-    `Isolated data dir: ${tempDataDir}`,
-    `Isolated HOME for SSH import fixture: ${tempHomeDir}`,
-    `Canonical test DB exists: ${existsSync(dbPath)} (${dbPath})`,
-    'Static identity visible: GPUWatcher; Fleet snapshot',
-    `Bridge keys: ${bridgeInfo.keys.join(', ')}`,
-    `Forbidden bridge keys absent: ${forbiddenBridgeKeys.join(', ')}`,
-    `Electron metadata keys: ${electronMetaKeys.join(', ')}`,
-    `Forbidden Electron metadata absent: ${forbiddenElectronMetadataKeys.join(', ')}`,
-    `Deferred migration labels visible: ${bridgeInfo.bodyHasMigrationLabels}`,
-    `Electron metadata: ${JSON.stringify(bridgeInfo.electronMeta)}`,
-    `Settings add/list/edit/delete through UI: saved ${savedServerId}, edited name to ${servers[0].name}, deleted back to zero servers`,
-    `Settings SSH import warning excerpt: ${importSurface.split('\n').filter((line) => /include|proxycommand|no importable|task14/i.test(line)).slice(0, 6).join(' | ')}`,
-    `Processes refresh proved local read-model control: ${/Refresh rows loaded/i.test(processBody)}; User grouped visible: ${/User grouped/i.test(processBody)}`,
-    `History refresh proved local read-model control: ${/History refreshed/i.test(historyBody)}; Stored GPU history visible: ${/Stored GPU history/i.test(historyBody)}`,
-    `Watch enable through GPU Detail: Watching visible for GPU ${watch.rule.gpuIndex}; persisted UUID/index=${watch.rule.gpuUuid}/${watch.rule.gpuIndex}`,
-    `Watch persisted across Electron relaunch: same rule id=${watch.rule.id === persistedWatch.rule.id}; Watching visible after relaunch`,
-    `macOS window-close lifecycle: ${lifecycle}`,
-    'No remote refresh, SSH poll, notification trigger, or native notification was exercised by this watch persistence smoke.',
-    `Screenshots: ${screenshots.join('; ')}`
-  ].join('\n');
-
-  const errorEvidence = [
-    'Task 9 visible backend/SSH/helper error path evidence',
-    `Action: Settings -> Test SSH connection for disabled smoke server ${savedServerId} at 127.0.0.1:1`,
-    `Visible error excerpt: ${errorSurface.split('\n').filter((line) => /error|ssh|connection|helper/i.test(line)).slice(0, 8).join(' | ')}`,
-    'Visible error sanitized: no raw key path, token, or private-key markers',
-    `App remained nonblank: ${/GPUWatcher|Server registry/i.test(afterErrorBody)}`,
-    'Navigation after error: clicked Fleet and returned to Settings successfully',
-    `Screenshot: ${screenshots[3]}`,
-    `Isolated data dir: ${tempDataDir}`
-  ].join('\n');
-
-  const task14Evidence = [
-    'Task 14 Electron smoke expansion for new real surfaces',
-    'Command: npm run smoke:electron:first-run',
-    `Surface: Electron dev main/preload/renderer over CDP ${cdpUrl(cdpPort)}; no packaged app, no live SSH, no production DB`,
-    `Isolated GPUWATCHER_TEST_DATA_DIR: ${tempDataDir}`,
-    `Isolated HOME for SSH config import fixture: ${tempHomeDir}`,
-    `Bridge forbidden keys absent: ${forbiddenBridgeKeys.join(', ')}`,
-    `Bridge expected keys present: ${expectedBridgeKeys.join(', ')}`,
-    `Electron metadata cleanup: keys=${electronMetaKeys.join(', ')}; forbidden metadata absent=${forbiddenElectronMetadataKeys.join(', ')}`,
-    `Deferred migration labels visible: ${bridgeInfo.bodyHasMigrationLabels}`,
-    `Settings import warning/fallback: ${importSurface.split('\n').filter((line) => /include|proxycommand|no importable|task14/i.test(line)).slice(0, 8).join(' | ')}`,
-    `Settings manual form remained usable: saved ${savedServerId}, edited ${servers[0].name}`,
-    `Sanitized SSH/backend error excerpt: ${errorSurface.split('\n').filter((line) => /error|ssh|connection|helper/i.test(line)).slice(0, 8).join(' | ')}`,
-    'Sanitized error navigation: Fleet snapshot and Settings Server registry remained reachable',
-    `Local demo seed feedback: ${seededBody.split('\n').filter((line) => /Demo data seeded/i.test(line)).slice(0, 2).join(' | ')}; no refreshServer or remote SSH polling used for Process/History checks`,
-    'Processes: selected User grouped, clicked Refresh rows, observed local rows feedback and nonblank shell',
-    'History: clicked Refresh history, observed Stored GPU history identity and success feedback',
-    `Watch: seeded GPU Detail Notify when available -> Watching; rule persisted through fresh Electron process with GPU UUID/index ${watch.rule.gpuUuid}/${watch.rule.gpuIndex}`,
-    `Watch relaunch screenshot: ${persistedWatch.screenshotPath}; macOS lifecycle: ${lifecycle}`,
-    'Renderer isolation: watch list/save/delete are action-specific bridge methods; notification consumption and due polling remain absent from the renderer bridge.',
-    `Canonical test DB exists: ${existsSync(dbPath)} (${dbPath})`,
+    'Surface: built dist-electron main/preload with current Vite renderer; not packaged or external distribution evidence',
+    `Isolated data: ${tempDataDir}; HOME: ${tempHomeDir}; userData: ${tempDataDir}/electron-user-data`,
+    `Actual local helper SQLite existed before cleanup: ${existsSync(dbPath)} (${dbPath})`,
+    `Server sidebar + direct add / edit / confirmed delete and cancelled delete: ${savedServerId}`,
+    'All saved test servers disabled; monitoring-start menu inspected, not invoked (no enabled test hosts)',
+    'SSH import reads only isolated HOME fixture; preview/warnings and bulk save of two disabled hosts checked; imported fixtures deleted through explicit row menus; no user SSH config or system ssh used',
+    `Import diagnostic excerpt: ${importSurface.split('\n').filter(line => /task14|include|proxycommand/i.test(line)).slice(0, 8).join(' | ')}`,
+    `Connection test through UI: SIMULATED guard diagnostic; ${errorSurface.split('\n').filter(line => /SIMULATED|smoke_network_guard/.test(line)).join(' | ')}`,
+    'Every network-capable helper action blocked before real helper execution; notification consumption guard returns empty outbox',
+    `Guard-observed helper actions: ${guardActions.map(entry => entry.action).join(', ')}`,
+    `Real disabled fixture availability DTO: ${JSON.stringify(detail.gpus.map(gpu => ({ index: gpu.index, availability: gpu.availability })))}`,
+    'No controlled available state fabricated; no continuous availability inherited after relaunch',
+    'GPU and nested extra-metric disclosure exercised; disclosure resets per process session',
+    'New watch created through UI with actual saved defaults 5% / 1024MiB / 300sec / 900sec; custom fixture keeps saved 120sec cooldown while UI shows effective minimum 900sec and OS permission unknown',
+    `Custom fixture watch saved values preserved by UI off/on: ${JSON.stringify({ originalRule, offRule, onRule })}`,
+    `Actual local helper watch after relaunch: ${JSON.stringify(persistedRule)}`,
+    'Last selected server restored through isolated Electron userData; backend History readable, renderer History UI absent',
+    `Appearance: ${appearance}`,
+    `Backend bridge keys: ${bridgeInfo.keys.join(', ')}; UI bridge keys: ${bridgeInfo.uiKeys.join(', ')}; metadata keys: ${electronMetaKeys.join(', ')}`,
+    'Main-only reset, polling, notification consumption, generic dispatch and helper path not exposed on renderer bridge',
+    'UI controls exercised by renderer native input setters, DOM clicks and CDP keyboard; not OS-level input automation',
     `Screenshots: ${screenshots.join('; ')}`,
-    `Logs: ${path.join(evidenceDir, 'task-14-vite.log')}; ${path.join(evidenceDir, 'task-14-electron.log')}`,
-    'Teardown: CDP socket closed; Vite/Electron child processes are SIGTERM/SIGKILL guarded in finally'
+    'Teardown: owned CDP sockets closed and child processes terminated before isolated data/HOME deletion; logs retained as task-29-vite.log and task-29-electron.log',
+    'Scope: no live SSH, native notifications, signed/notarized package, distribution readiness, or old first-run parity claim'
   ].join('\n');
-
-  return { parityEvidence, errorEvidence, task14Evidence };
+  return { task29Evidence };
 }
