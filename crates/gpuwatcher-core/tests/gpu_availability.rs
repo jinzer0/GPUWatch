@@ -389,6 +389,226 @@ fn absent_uuid_uses_index_identity_and_index_change_starts_new_condition() {
 }
 
 #[test]
+fn equivalent_and_name_only_server_saves_preserve_availability_watch_sustain_and_health() {
+    for change in ["unchanged", "normalized", "normalized_key", "name"] {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let path = temp.path().join("availability.sqlite3");
+        let repository = repository(&path);
+        let mut original = input(30);
+        if change == "normalized_key" {
+            original.ssh_key_path = Some("/tmp/test-key".to_string());
+        }
+        let server = repository.save_server(original).expect("server");
+        let mut accumulating = watch(&server.id);
+        accumulating.sustain_seconds = Some(600);
+        let rule = repository
+            .save_gpu_available_watch(accumulating)
+            .expect("watch");
+        let mut immediate = watch(&server.id);
+        immediate.gpu_uuid = None;
+        let triggered = repository
+            .save_gpu_available_watch(immediate)
+            .expect("immediate watch");
+        let success = success();
+        for seconds in [0, 100, 200, 300] {
+            store(&repository, &server.id, &success, seconds);
+        }
+        assert_state(&repository, &server.id, 300, "available", Some(0));
+        assert_eq!(
+            repository
+                .consume_notification_outbox()
+                .expect("initial event")
+                .len(),
+            1
+        );
+        let connection = Connection::open(&path).expect("inspection connection");
+        let runtime = |id: &str| {
+            connection.query_row(
+                "SELECT condition_started_at, last_observed_at, last_triggered_at, armed, updated_at FROM watch_runtime_state WHERE rule_id = ?1",
+                [id],
+                |row| Ok((row.get::<_, Option<String>>(0)?, row.get::<_, Option<String>>(1)?, row.get::<_, Option<String>>(2)?, row.get::<_, i64>(3)?, row.get::<_, String>(4)?)),
+            ).expect("watch runtime")
+        };
+        let accumulating_before = runtime(&rule.id);
+        let triggered_before = runtime(&triggered.id);
+        assert_eq!(accumulating_before.0, Some(at(0)));
+        assert_eq!(triggered_before.2, Some(at(0)));
+        assert_eq!(triggered_before.3, 0);
+        let rules_before =
+            serde_json::to_value(repository.list_watch_rules(&server.id).expect("rules"))
+                .expect("rules JSON");
+        for polling in [false, true] {
+            if polling {
+                repository
+                    .mark_poll_started(&server.id, &at(301))
+                    .expect("in-flight poll");
+            }
+            let health_before =
+                serde_json::to_value(repository.get_health(&server.id).expect("health"))
+                    .expect("health JSON");
+            assert_eq!(
+                health_before["status"],
+                if polling { "polling" } else { "online" }
+            );
+            let current = repository
+                .get_server(&server.id)
+                .expect("server lookup")
+                .expect("server row");
+            let mut updated = input(30);
+            updated.id = Some(server.id.clone());
+            match change {
+                "normalized" => {
+                    updated.name = "  Availability test  ".to_string();
+                    updated.host = " availability.example.test ".to_string();
+                    updated.username = " test ".to_string();
+                    updated.port = 0;
+                    updated.polling_interval_seconds = None;
+                    updated.ssh_key_path = Some("   ".to_string());
+                }
+                "normalized_key" => updated.ssh_key_path = Some(" /tmp/test-key ".to_string()),
+                "name" => {
+                    updated.name = if polling { "Renamed again" } else { "Renamed" }.to_string()
+                }
+                _ => {}
+            }
+            let saved = repository.save_server(updated).expect("save");
+            if change == "name" {
+                assert_eq!(
+                    saved.name,
+                    if polling { "Renamed again" } else { "Renamed" }
+                );
+            } else {
+                assert_eq!(
+                    serde_json::to_value(&saved).expect("saved JSON"),
+                    serde_json::to_value(&current).expect("current JSON")
+                );
+            }
+            assert_eq!(saved.config_revision, current.config_revision);
+            assert!(repository
+                .poll_target_current(&server.id, current.config_revision)
+                .expect("in-flight poll remains current"));
+            assert_state(&repository, &server.id, 300, "available", Some(0));
+            assert_eq!(runtime(&rule.id), accumulating_before);
+            assert_eq!(runtime(&triggered.id), triggered_before);
+            assert_eq!(
+                serde_json::to_value(repository.get_health(&server.id).expect("health"))
+                    .expect("health JSON"),
+                health_before
+            );
+            assert_eq!(
+                serde_json::to_value(repository.list_watch_rules(&server.id).expect("rules"))
+                    .expect("rules JSON"),
+                rules_before
+            );
+        }
+        for seconds in [400, 500, 600] {
+            store(&repository, &server.id, &success, seconds);
+        }
+        let events = repository
+            .consume_notification_outbox()
+            .expect("sustained event");
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].rule_id, rule.id);
+        assert_eq!(
+            repository
+                .get_health(&server.id)
+                .expect("completed poll health")
+                .expect("health row")
+                .status,
+            "online"
+        );
+        assert_state(&repository, &server.id, 600, "available", Some(0));
+    }
+}
+
+#[test]
+fn observation_affecting_server_saves_reset_intervals_but_preserve_watch_cooldown() {
+    for change in ["host", "port", "username", "key", "interval", "enabled"] {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let path = temp.path().join("availability.sqlite3");
+        let repository = repository(&path);
+        let server = repository.save_server(input(30)).expect("server");
+        let mut accumulating = watch(&server.id);
+        accumulating.sustain_seconds = Some(600);
+        let rule = repository
+            .save_gpu_available_watch(accumulating)
+            .expect("watch");
+        let mut immediate = watch(&server.id);
+        immediate.gpu_uuid = None;
+        let triggered = repository
+            .save_gpu_available_watch(immediate)
+            .expect("immediate watch");
+        let success = success();
+        for seconds in [0, 100, 200, 300] {
+            store(&repository, &server.id, &success, seconds);
+        }
+        assert_state(&repository, &server.id, 300, "available", Some(0));
+        assert_eq!(
+            repository
+                .consume_notification_outbox()
+                .expect("initial event")
+                .len(),
+            1
+        );
+        let mut updated = input(30);
+        updated.id = Some(server.id.clone());
+        match change {
+            "host" => updated.host = "changed.example.test".to_string(),
+            "port" => updated.port = 2222,
+            "username" => updated.username = "changed".to_string(),
+            "key" => updated.ssh_key_path = Some("/tmp/changed-key".to_string()),
+            "interval" => updated.polling_interval_seconds = Some(60),
+            "enabled" => updated.enabled = false,
+            _ => unreachable!(),
+        }
+        let saved = repository
+            .save_server(updated)
+            .expect("configuration change");
+        assert_eq!(saved.config_revision, server.config_revision + 1);
+        assert!(!repository
+            .poll_target_current(&server.id, server.config_revision)
+            .expect("old poll stale"));
+        assert_state(&repository, &server.id, 300, "unknown", None);
+        assert_eq!(
+            repository
+                .get_health(&server.id)
+                .expect("health")
+                .expect("health row")
+                .status,
+            if change == "enabled" {
+                "disabled"
+            } else {
+                "idle"
+            }
+        );
+        let connection = Connection::open(&path).expect("inspection connection");
+        for (id, last, armed) in [(&rule.id, None, 1), (&triggered.id, Some(at(0)), 0)] {
+            let runtime: (Option<String>, Option<String>, Option<String>, i64) = connection.query_row(
+                "SELECT condition_started_at, last_observed_at, last_triggered_at, armed FROM watch_runtime_state WHERE rule_id = ?1",
+                [id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            ).expect("reset runtime");
+            assert_eq!(runtime, (None, None, last, armed));
+        }
+        store(&repository, &server.id, &success, 320);
+        assert_state(
+            &repository,
+            &server.id,
+            320,
+            if change == "enabled" {
+                "unknown"
+            } else {
+                "candidate"
+            },
+            if change == "enabled" { None } else { Some(320) },
+        );
+        assert!(repository
+            .consume_notification_outbox()
+            .expect("reset sustain")
+            .is_empty());
+    }
+}
+
+#[test]
 fn disabling_or_changing_server_configuration_resets_observations() {
     for change in ["disable", "host", "interval"] {
         let temp = tempfile::tempdir().expect("temp dir");

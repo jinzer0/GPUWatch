@@ -283,12 +283,11 @@ mod tests {
         let state = test_state();
         let server = save_test_server(&state);
         let (raw_json, success) = success_snapshot();
+        let mut updated_input = server_input(Some(server.id.clone()), &server.name);
+        updated_input.host = "replacement.example.test".to_string();
+        updated_input.port = 2222;
         let collector = MockCollector {
-            outcome: MockOutcome::UpdateServerBeforeSuccess(
-                server_input(Some(server.id.clone()), "Renamed GPU"),
-                raw_json,
-                success,
-            ),
+            outcome: MockOutcome::UpdateServerBeforeSuccess(updated_input, raw_json, success),
         };
 
         let result = poll_server_owned_with_collector(&state, &collector, server.clone())
@@ -298,6 +297,13 @@ mod tests {
         assert!(!result.ok);
         assert_eq!(result.status, "stale_discarded");
         let repository = state.repository.lock().expect("repository mutex poisoned");
+        let current = repository
+            .get_server(&server.id)
+            .expect("server lookup")
+            .expect("server stored");
+        assert_eq!(current.config_revision, server.config_revision + 1);
+        assert_eq!(current.host, "replacement.example.test");
+        assert_eq!(current.port, 2222);
         assert!(repository
             .latest_snapshot(&server.id)
             .expect("snapshot lookup")
@@ -315,6 +321,80 @@ mod tests {
         assert_eq!(health.status, "idle");
         assert!(health.last_poll_started_at.is_some());
         assert!(health.last_poll_finished_at.is_none());
+    }
+
+    #[tokio::test]
+    async fn poll_server_accepts_success_when_only_name_changes() {
+        let state = test_state();
+        let server = save_test_server(&state);
+        let failure_collector = MockCollector {
+            outcome: MockOutcome::Error(AppError::new(
+                "collector",
+                "remote_gpu_query_failed",
+                "base nvidia-smi GPU query failed",
+            )),
+        };
+        let failure = poll_server_owned_with_collector(&state, &failure_collector, server.clone())
+            .await
+            .expect("failure poll");
+        assert!(!failure.ok);
+        assert_eq!(failure.status, "error");
+        {
+            let repository = state.repository.lock().expect("repository mutex poisoned");
+            let health = repository
+                .get_health(&server.id)
+                .expect("health lookup")
+                .expect("health stored");
+            assert_eq!(health.status, "error");
+            assert_eq!(
+                health.last_error_type.as_deref(),
+                Some("remote_gpu_query_failed")
+            );
+        }
+        let (raw_json, success) = success_snapshot();
+        let collector = MockCollector {
+            outcome: MockOutcome::UpdateServerBeforeSuccess(
+                server_input(Some(server.id.clone()), "Renamed GPU"),
+                raw_json.clone(),
+                success,
+            ),
+        };
+
+        let result = poll_server_owned_with_collector(&state, &collector, server.clone())
+            .await
+            .expect("poll result");
+
+        assert!(result.ok);
+        assert_eq!(result.status, "online");
+        assert_eq!(result.message.as_deref(), Some("snapshot stored"));
+        let repository = state.repository.lock().expect("repository mutex poisoned");
+        let current = repository
+            .get_server(&server.id)
+            .expect("server lookup")
+            .expect("server stored");
+        assert_eq!(current.name, "Renamed GPU");
+        assert_eq!(current.config_revision, server.config_revision);
+        let snapshot = repository
+            .latest_snapshot(&server.id)
+            .expect("snapshot lookup")
+            .expect("snapshot stored");
+        assert_eq!(snapshot.raw_json, raw_json);
+        assert_eq!(
+            repository
+                .gpu_history_sample_timestamps(&server.id)
+                .expect("history timestamps"),
+            vec![snapshot.received_at.clone(), snapshot.received_at.clone()]
+        );
+        let health = repository
+            .get_health(&server.id)
+            .expect("health lookup")
+            .expect("health stored");
+        assert_eq!(health.status, "online");
+        assert!(health.last_poll_started_at.is_some());
+        assert_eq!(health.last_success_at.as_ref(), Some(&snapshot.received_at));
+        assert_eq!(health.last_poll_finished_at, health.last_success_at);
+        assert!(health.last_error_type.is_none());
+        assert!(health.last_error_message.is_none());
     }
 
     #[tokio::test]

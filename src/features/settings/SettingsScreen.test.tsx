@@ -624,6 +624,90 @@ describe('Settings management controller regressions', () => {
     expect(screen.queryByText('secret-value')).toBeNull();
   });
 
+  it('clears prior selection and failure summary when a rescan resolves the same alias to a new target', async () => {
+    const firstScan: SshConfigImportResult = {
+      candidates: selectedBulkSshConfigImportResult.candidates.filter((candidate) => candidate.hostAlias === 'gpu-prod-b'),
+      warnings: []
+    };
+    const secondScan: SshConfigImportResult = {
+      candidates: firstScan.candidates.map((candidate) => ({
+        ...candidate,
+        hostname: 'new-b.internal.example',
+        draft: { ...candidate.draft, host: 'new-b-target', username: 'new-user' }
+      })),
+      warnings: []
+    };
+    const listSshConfigHostsBridge = vi.fn()
+      .mockResolvedValueOnce(okBridgeResponse(firstScan))
+      .mockResolvedValueOnce(okBridgeResponse(secondScan));
+    saveServerBridge.mockRejectedValueOnce(new Error('Old target save failed'));
+    setGpuWatcherBridge({
+      listServers: vi.fn().mockResolvedValue(okBridgeResponse([])),
+      listSshConfigHosts: listSshConfigHostsBridge,
+      saveServer: saveServerBridge
+    });
+    renderSettings();
+    await screen.findByText('Remote host requirements');
+    fireEvent.click(screen.getByRole('button', { name: 'Import from SSH config' }));
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select gpu-prod-b for bulk import' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save selected hosts' }));
+    await screen.findByText('Saved 0, skipped 0, failed 1.');
+    expect(screen.getByRole('checkbox', { name: 'Select gpu-prod-b for bulk import' })).toHaveProperty('checked', true);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Import from SSH config' }));
+    await screen.findByText('new-b.internal.example');
+    expect(screen.getByRole('checkbox', { name: 'Select gpu-prod-b for bulk import' })).toHaveProperty('checked', false);
+    expect(screen.queryByText('Bulk import summary')).toBeNull();
+    expect(screen.queryByText(/Old target save failed/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Save selected hosts' })).toHaveProperty('disabled', true);
+    fireEvent.click(screen.getByRole('button', { name: 'Save selected hosts' }));
+    expect(saveServerBridge).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select gpu-prod-b for bulk import' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save selected hosts' }));
+    await screen.findByText('Saved 1, skipped 0, failed 0.');
+    expect(saveServerBridge).toHaveBeenCalledTimes(2);
+    expect(saveServerBridge.mock.calls[1]?.[0].input).toMatchObject({
+      id: null, host: 'new-b-target', username: 'new-user', enabled: false
+    });
+  });
+
+  it('keeps successfully imported servers excluded after clearing rescan results with a stale registry', async () => {
+    const scan: SshConfigImportResult = {
+      candidates: selectedBulkSshConfigImportResult.candidates.filter((candidate) => ['gpu-prod-a', 'gpu-prod-b'].includes(candidate.hostAlias)),
+      warnings: []
+    };
+    const listSshConfigHostsBridge = vi.fn().mockResolvedValue(okBridgeResponse(scan));
+    saveServerBridge.mockImplementation((payload: { input: ServerInput }) => payload.input.host === 'gpu-prod-b'
+      ? Promise.reject(new Error('B not saved yet'))
+      : Promise.resolve(okBridgeResponse(serverFromInput(payload.input))));
+    setGpuWatcherBridge({
+      listServers: vi.fn().mockResolvedValue(okBridgeResponse([])),
+      listSshConfigHosts: listSshConfigHostsBridge,
+      saveServer: saveServerBridge
+    });
+    renderSettings();
+    await screen.findByText('Remote host requirements');
+    fireEvent.click(screen.getByRole('button', { name: 'Import from SSH config' }));
+    await screen.findByRole('checkbox', { name: 'Select gpu-prod-a for bulk import' });
+    fireEvent.click(screen.getByRole('button', { name: 'Select all valid hosts' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save selected hosts' }));
+    await screen.findByText('Saved 1, skipped 0, failed 1.');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Import from SSH config' }));
+    await waitFor(() => expect(screen.queryByText('Bulk import summary')).toBeNull());
+    expect(listSshConfigHostsBridge).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole('checkbox', { name: 'Select gpu-prod-a for bulk import' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('checkbox', { name: 'Select gpu-prod-b for bulk import' })).toHaveProperty('checked', false);
+    expect(screen.getByRole('button', { name: 'Save selected hosts' })).toHaveProperty('disabled', true);
+
+    saveServerBridge.mockImplementation((payload: { input: ServerInput }) => Promise.resolve(okBridgeResponse(serverFromInput(payload.input))));
+    fireEvent.click(screen.getByRole('button', { name: 'Select all valid hosts' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save selected hosts' }));
+    await screen.findByText('Saved 1, skipped 0, failed 0.');
+    expect(saveServerBridge.mock.calls.map(([payload]) => payload.input.host)).toEqual(['gpu-prod-a', 'gpu-prod-b', 'gpu-prod-b']);
+  });
+
   it('renders connection diagnostics guidance for known and unknown test failures', async () => {
     // Given: a saved server whose connection tests return typed diagnostics from the desktop backend.
     const testConnectionBridge = vi

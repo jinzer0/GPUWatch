@@ -31,6 +31,7 @@ export const ServerManagerSheet = () => {
   const lastControlId = useRef<string | null>(null);
   const mutationLatch = useRef(false);
   const invokerRef = useRef(document.activeElement instanceof HTMLElement ? document.activeElement : null);
+  const modalRef = useRef<HTMLDivElement>(null);
 
   const requestClose = useCallback(() => {
     const state = current.current;
@@ -49,8 +50,12 @@ export const ServerManagerSheet = () => {
   useEffect(() => {
     return () => {
       if (!invokerRef.current?.isConnected) {
+        const requestId = useUiStore.getState().managementRequestId;
+        const fallback = document.querySelector<HTMLButtonElement>('[data-server-add-trigger]');
         requestAnimationFrame(() => {
-          if (!document.querySelector('.server-manager-modal')) document.querySelector<HTMLButtonElement>('[data-server-add-trigger]')?.focus();
+          const state = useUiStore.getState();
+          if (state.managementRequestId === requestId && !state.managementOpen &&
+            fallback?.isConnected && !document.querySelector('.server-manager-modal')) fallback.focus();
         });
       }
     };
@@ -69,10 +74,16 @@ export const ServerManagerSheet = () => {
   }, [controller.operationPending]);
 
   const continueEditing = () => {
+    const requestId = useUiStore.getState().managementRequestId;
+    const modal = modalRef.current;
+    const controlId = lastControlId.current;
     setReviewDiscard(false);
     requestAnimationFrame(() => {
-      const field = lastControlId.current ? document.getElementById(lastControlId.current) : null;
-      (field ?? document.querySelector<HTMLButtonElement>('.server-manager-modal button[aria-label="Close drawer"]'))?.focus();
+      const state = useUiStore.getState();
+      if (state.managementRequestId !== requestId || !state.managementOpen || !modal?.isConnected) return;
+      const field = controlId ? document.getElementById(controlId) : null;
+      const target = field && modal.contains(field) ? field : modal.querySelector<HTMLButtonElement>('button[aria-label="Close drawer"]');
+      target?.focus();
     });
   };
   const confirmDelete = () => {
@@ -85,7 +96,7 @@ export const ServerManagerSheet = () => {
     (!savedTargetRequired || controller.form.id !== null);
 
   return createPortal(
-    <div className="server-manager-modal">
+    <div className="server-manager-modal" ref={modalRef}>
       <RightDrawer ariaLabel={titles[action]} onClose={requestClose} title={titles[action]}>
         {closeBlocked ? <p role="status">저장 또는 삭제 처리 중입니다. 결과를 확인한 뒤 닫아 주세요.</p> : null}
         {reviewDiscard ? (

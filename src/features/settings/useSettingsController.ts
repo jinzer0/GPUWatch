@@ -138,7 +138,11 @@ export const useSettingsController = () => {
   });
   const sshConfigImportMutation = useMutation({
     mutationFn: listSshConfigHosts,
-    onSuccess: setImportResult
+    onSuccess: (result) => {
+      setImportResult(result);
+      setSelectedImportHostAliases([]);
+      setBulkImportSaveResult(null);
+    }
   });
   const bulkImportCandidateMetadata = useMemo(
     () => getBulkImportCandidateMetadata({ candidates: importResult?.candidates ?? [], existingServers: [...(servers ?? []), ...importedServers] }),

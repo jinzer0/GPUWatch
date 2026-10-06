@@ -360,6 +360,79 @@ describe('ServerManagerSheet', () => {
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Add fallback' })));
   });
 
+  it('does not let an old fallback frame steal focus after a later sheet closes', async () => {
+    const frames: FrameRequestCallback[] = [];
+    const animationFrame = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => frames.push(callback));
+    const temporaryInvoker = document.createElement('button');
+    try {
+      renderWithQueryClient(<ModalHost />);
+      document.body.append(temporaryInvoker);
+      temporaryInvoker.focus();
+      act(() => useUiStore.getState().openServerManager('add'));
+      await screen.findByLabelText('Name');
+      temporaryInvoker.remove();
+      fireEvent.click(screen.getByRole('button', { name: 'Close drawer' }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      expect(frames).toHaveLength(1);
+
+      const newInvoker = screen.getByRole('button', { name: 'Open manager' });
+      newInvoker.focus();
+      fireEvent.click(newInvoker);
+      await screen.findByLabelText('Name');
+      fireEvent.click(screen.getByRole('button', { name: 'Close drawer' }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      expect(document.activeElement).toBe(newInvoker);
+      act(() => frames.forEach((callback) => callback(0)));
+      expect(document.activeElement).toBe(newInvoker);
+    } finally {
+      temporaryInvoker.remove();
+      animationFrame.mockRestore();
+    }
+  });
+
+  it('does not let a previous continue-editing frame override a retargeted delete confirmation', async () => {
+    const frames: FrameRequestCallback[] = [];
+    const animationFrame = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => frames.push(callback));
+    try {
+      openModal('edit', 'server-b');
+      const name = await screen.findByLabelText('Name');
+      name.focus();
+      fireEvent.change(name, { target: { value: 'Dirty Beta' } });
+      fireEvent.keyDown(name, { key: 'Escape' });
+      await screen.findByRole('alertdialog', { name: /미저장 변경/ });
+      fireEvent.click(screen.getByRole('button', { name: '계속 편집' }));
+      expect(frames).toHaveLength(1);
+
+      act(() => useUiStore.getState().openServerManager('delete', 'server-a'));
+      await screen.findByRole('button', { name: 'Confirm delete Alpha GPU' });
+      const cancel = screen.getByRole('button', { name: 'Cancel delete' });
+      expect(document.activeElement).toBe(cancel);
+      act(() => frames.forEach((callback) => callback(0)));
+      expect(document.activeElement).toBe(cancel);
+    } finally {
+      animationFrame.mockRestore();
+    }
+  });
+
+  it('restores the edited field when the continue-editing frame belongs to the current request', async () => {
+    const frames: FrameRequestCallback[] = [];
+    const animationFrame = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => frames.push(callback));
+    try {
+      openModal('edit', 'server-b');
+      const name = await screen.findByLabelText('Name');
+      name.focus();
+      fireEvent.change(name, { target: { value: 'Dirty Beta' } });
+      fireEvent.keyDown(name, { key: 'Escape' });
+      await screen.findByRole('alertdialog', { name: /미저장 변경/ });
+      fireEvent.click(screen.getByRole('button', { name: '계속 편집' }));
+      act(() => frames.forEach((callback) => callback(0)));
+      expect(document.activeElement).toBe(screen.getByLabelText('Name'));
+      expect(screen.getByLabelText('Name')).toHaveProperty('value', 'Dirty Beta');
+    } finally {
+      animationFrame.mockRestore();
+    }
+  });
+
   it('reviews an unsaved import selection on Escape and keeps native checkbox focus', async () => {
     openModal('import');
     fireEvent.click(await screen.findByRole('button', { name: 'Import from SSH config' }));

@@ -31,6 +31,7 @@ fn repository_server_validation_crud_poll_targets_and_due_queries_keep_current_c
     let mut edited = sample_server_input();
     edited.id = Some(server.id.clone());
     edited.name = "Renamed Lab".to_string();
+    edited.host = "changed.example.test".to_string();
     let updated = repository.save_server(edited).expect("server updated");
 
     assert_eq!(host_error.error_type, "server_config_invalid");
@@ -40,6 +41,7 @@ fn repository_server_validation_crud_poll_targets_and_due_queries_keep_current_c
         .get_health("missing-server")
         .expect("health lookup")
         .is_none());
+    assert_eq!(updated.config_revision, server.config_revision + 1);
     assert!(!repository
         .poll_target_current(&server.id, server.config_revision)
         .expect("old revision stale"));
@@ -53,6 +55,145 @@ fn repository_server_validation_crud_poll_targets_and_due_queries_keep_current_c
     assert!(repository.due_servers().expect("due").is_empty());
     repository.delete_server(&updated.id).expect("deleted");
     assert!(repository.list_servers().expect("servers").is_empty());
+}
+
+#[test]
+fn equivalent_server_saves_preserve_record_health_and_in_flight_poll_revision() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let db_path = temp_dir.path().join("repository.sqlite3");
+    let repository = open_repository(&db_path);
+    let server = repository
+        .save_server(sample_server_input())
+        .expect("server saved");
+    let error = AppError::new("transport_ssh", "ssh_timeout", "timeout");
+    repository
+        .store_failure(&server.id, &error, "2026-06-01T00:00:00+00:00")
+        .expect("offline health");
+    for polling in [false, true] {
+        if polling {
+            repository
+                .mark_poll_started(&server.id, "2026-06-01T00:00:30+00:00")
+                .expect("poll started");
+        }
+        let health = repository.get_health(&server.id).expect("health lookup");
+        for normalized in [false, true] {
+            let mut unchanged = sample_server_input();
+            unchanged.id = Some(server.id.clone());
+            if normalized {
+                unchanged.name = " Lab GPU ".to_string();
+                unchanged.host = " gpu.example.test ".to_string();
+                unchanged.username = " alice ".to_string();
+                unchanged.ssh_key_path = Some(" /Users/alice/.ssh/id_ed25519 ".to_string());
+                unchanged.port = -1;
+                unchanged.polling_interval_seconds = Some(30);
+            }
+            let saved = repository.save_server(unchanged).expect("equivalent save");
+            assert_eq!(saved, server);
+            assert_eq!(
+                repository.get_health(&server.id).expect("preserved health"),
+                health
+            );
+            assert!(repository
+                .poll_target_current(&server.id, server.config_revision)
+                .expect("poll target remains current"));
+        }
+    }
+}
+
+#[test]
+fn name_only_server_save_keeps_in_flight_poll_current_and_allows_completion() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let db_path = temp_dir.path().join("repository.sqlite3");
+    let repository = open_repository(&db_path);
+    let server = repository
+        .save_server(sample_server_input())
+        .expect("server saved");
+    repository
+        .mark_poll_started(&server.id, "2026-06-01T00:00:00+00:00")
+        .expect("poll started");
+    let health = repository.get_health(&server.id).expect("health lookup");
+    assert_eq!(health.as_ref().expect("health row").status, "polling");
+    let mut renamed = sample_server_input();
+    renamed.id = Some(server.id.clone());
+    renamed.name = "Renamed Lab".to_string();
+    let saved = repository.save_server(renamed).expect("name updated");
+    assert_eq!(saved.name, "Renamed Lab");
+    assert_eq!(saved.config_revision, server.config_revision);
+    assert_eq!(
+        repository.get_health(&server.id).expect("preserved health"),
+        health
+    );
+    assert!(repository
+        .poll_target_current(&server.id, server.config_revision)
+        .expect("in-flight poll current"));
+    let error = AppError::new("transport_ssh", "ssh_timeout", "timeout");
+    repository
+        .store_failure(&server.id, &error, "2026-06-01T00:00:30+00:00")
+        .expect("poll completion accepted");
+    let completed = repository
+        .get_health(&server.id)
+        .expect("completed health")
+        .expect("health row");
+    assert_eq!(completed.status, "offline");
+    assert_eq!(
+        completed.last_poll_finished_at.as_deref(),
+        Some("2026-06-01T00:00:30+00:00")
+    );
+    assert_eq!(
+        repository
+            .due_servers()
+            .expect("polling no longer stranded")
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn server_save_compares_the_record_after_waiting_for_a_wal_writer() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let db_path = temp_dir.path().join("repository.sqlite3");
+    let repository = open_repository(&db_path);
+    let server = repository
+        .save_server(sample_server_input())
+        .expect("server saved");
+    let (ready_tx, ready_rx) = mpsc::channel();
+    let (attempt_tx, attempt_rx) = mpsc::channel();
+    let writer_path = db_path.clone();
+    let server_id = server.id.clone();
+    let save_attempt = thread::spawn(move || {
+        let repository = Repository::open(&writer_path).expect("repository open");
+        ready_tx.send(()).expect("ready signal");
+        attempt_rx.recv().expect("save signal");
+        let mut input = sample_server_input();
+        input.id = Some(server_id);
+        repository.save_server(input)
+    });
+    ready_rx
+        .recv_timeout(Duration::from_secs(1))
+        .expect("connection ready");
+    let writer = Connection::open(&db_path).expect("writer connection");
+    writer
+        .execute_batch("BEGIN IMMEDIATE;")
+        .expect("writer lock held");
+    writer.execute(
+        "UPDATE servers SET name = 'Concurrent rename', config_revision = config_revision + 1 WHERE id = ?1",
+        [&server.id],
+    ).expect("concurrent edit");
+    attempt_tx.send(()).expect("save attempted");
+    thread::sleep(Duration::from_millis(50));
+    writer
+        .execute_batch("COMMIT;")
+        .expect("release writer lock");
+    let saved = save_attempt
+        .join()
+        .expect("save thread joined")
+        .expect("save after writer");
+    assert_eq!(saved.name, server.name);
+    assert_eq!(saved.config_revision, server.config_revision + 1);
+    assert_eq!(
+        repository.get_server(&server.id).expect("server lookup"),
+        Some(saved)
+    );
 }
 
 #[test]
