@@ -199,11 +199,13 @@ describe('App window roles', () => {
   it('keeps server management reachable and returns to detail through actual shell navigation', async () => {
     mountApp();
     await screen.findByRole('region', { name: 'Selected server detail' });
-    fireEvent.click(screen.getByRole('button', { name: '서버 관리' }));
+    fireEvent.click(document.querySelector('[data-server-add-trigger]') as HTMLElement);
+    fireEvent.click(screen.getByRole('menuitem', { name: '직접 추가' }));
     expect(screen.getByRole('region', { name: 'Server management screen' })).toBeDefined();
     expect(screen.queryByRole('heading', { name: '외형' })).toBeNull();
-    expect(screen.queryByRole('region', { name: 'Selected server detail' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: /Alpha Node/ }));
+    expect(screen.getByRole('region', { name: 'Selected server detail' }).textContent).toBe('beta');
+    act(() => useUiStore.getState().closeServerManager());
+    fireEvent.click(screen.getByRole('button', { name: 'Alpha Node online' }));
     expect(screen.getByRole('region', { name: 'Selected server detail' }).textContent).toBe('alpha');
     expect(useUiStore.getState().managementOpen).toBe(false);
     expect(localStorage.getItem(LAST_SERVER_STORAGE_KEY)).toBe('alpha');

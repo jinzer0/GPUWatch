@@ -54,15 +54,15 @@ describe('UI store', () => {
     expect(localStorage.getItem(storageKey)).toBe('new-server');
   });
 
-  it('persists reselection, closes management, and replaces a deleted selected server', async () => {
+  it('persists reselection without discarding management, and replaces a deleted selected server', async () => {
     const store = await loadStore();
     store.getState().reconcileServers(['server-1', 'server-2']);
-    store.getState().setManagementOpen(true);
+    store.getState().openServerManager('add');
 
     store.getState().selectServer('server-2');
 
     expect(store.getState().selectedServerId).toBe('server-2');
-    expect(store.getState().managementOpen).toBe(false);
+    expect(store.getState().managementOpen).toBe(true);
     expect(localStorage.getItem(storageKey)).toBe('server-2');
 
     store.getState().reconcileServers(['server-1']);
@@ -86,13 +86,30 @@ describe('UI store', () => {
     expect(store.getState().managementOpen).toBe(true);
     expect(store.getState().selectedServerId).toBe('server-1');
 
-    store.getState().setManagementOpen(false);
+    store.getState().closeServerManager();
     expect(store.getState().managementOpen).toBe(false);
     store.getState().editServer(null);
 
     expect(store.getState().editingServerId).toBeNull();
     expect(store.getState().managementOpen).toBe(true);
     expect(localStorage.getItem(storageKey)).toBe('server-1');
+  });
+
+  it.each(['edit', 'delete', 'test'] as const)('binds %s to its requested server independently of selection', async (action) => {
+    const store = await loadStore();
+    store.getState().selectServer('server-1');
+    store.getState().openServerManager(action, 'server-2');
+    expect(store.getState().managementAction).toBe(action);
+    expect(store.getState().editingServerId).toBe('server-2');
+    expect(store.getState().selectedServerId).toBe('server-1');
+    const request = store.getState().managementRequestId;
+    store.getState().closeServerManager();
+    expect(store.getState().managementRequestId).toBeGreaterThan(request);
+    expect(store.getState().editingServerId).toBeNull();
+    expect(store.getState().managementOpen).toBe(false);
+    store.getState().openServerManager('import', 'server-2');
+    expect(store.getState().managementAction).toBe('import');
+    expect(store.getState().editingServerId).toBeNull();
   });
 
   it('keeps selection usable when localStorage is unavailable', async () => {
@@ -116,10 +133,10 @@ describe('UI store', () => {
     const store = await loadStore();
 
     expect(store.getState().selectedServerId).toBeNull();
-    store.getState().setManagementOpen(true);
+    store.getState().openServerManager('add');
     expect(() => store.getState().selectServer('server-2')).not.toThrow();
     expect(store.getState().selectedServerId).toBe('server-2');
-    expect(store.getState().managementOpen).toBe(false);
+    expect(store.getState().managementOpen).toBe(true);
     expect(() => store.getState().reconcileServers(['server-1'])).not.toThrow();
     expect(store.getState().selectedServerId).toBe('server-1');
     expect(() => store.getState().selectServer(null)).not.toThrow();

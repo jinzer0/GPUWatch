@@ -36,11 +36,12 @@ const MainScreen = () => {
   return (
     <Shell overview={overview}>
       {error ? <ErrorState message={error.message} /> : null}
-      {managementOpen ? <SettingsScreen /> : initializeQuery.isPending || overviewQuery.isLoading ? (
+      {initializeQuery.isPending || overviewQuery.isLoading ? (
         <LoadingState label="Loading servers..." />
       ) : error && !overviewQuery.data ? null : (
         <ServerDetailScreen selectedServerId={validSelectedServerId} />
       )}
+      {managementOpen ? <SettingsScreen /> : null}
     </Shell>
   );
 };

@@ -2,6 +2,8 @@ import { create } from 'zustand';
 
 export const LAST_SERVER_STORAGE_KEY = 'gpuwatcher:last-server-id';
 
+export type ServerManagementAction = 'add' | 'edit' | 'delete' | 'test' | 'import';
+
 export interface GpuDisclosure {
   expanded: boolean;
   metricsExpanded: boolean;
@@ -29,10 +31,13 @@ const persistSelectedServerId = (serverId: string | null): void => {
 
 interface UiState {
   managementOpen: boolean;
+  managementAction: ServerManagementAction;
+  managementRequestId: number;
   selectedServerId: string | null;
   editingServerId: string | null;
   gpuDisclosures: Record<string, Record<string, GpuDisclosure>>;
-  setManagementOpen: (managementOpen: boolean) => void;
+  openServerManager: (action: ServerManagementAction, serverId?: string | null) => void;
+  closeServerManager: () => void;
   selectServer: (serverId: string | null) => void;
   reconcileServers: (ids: readonly string[]) => void;
   setGpuDisclosure: (serverId: string, gpuKey: string, disclosure: Partial<GpuDisclosure>) => void;
@@ -41,13 +46,21 @@ interface UiState {
 
 export const useUiStore = create<UiState>((set) => ({
   managementOpen: false,
+  managementAction: 'add',
+  managementRequestId: 0,
   selectedServerId: restoreSelectedServerId(),
   editingServerId: null,
   gpuDisclosures: {},
-  setManagementOpen: (managementOpen) => set({ managementOpen }),
+  openServerManager: (managementAction, serverId = null) => set((state) => ({
+    managementOpen: true,
+    managementAction,
+    managementRequestId: state.managementRequestId + 1,
+    editingServerId: managementAction === 'add' || managementAction === 'import' ? null : serverId
+  })),
+  closeServerManager: () => set((state) => ({ managementOpen: false, editingServerId: null, managementAction: 'add', managementRequestId: state.managementRequestId + 1 })),
   selectServer: (selectedServerId) => {
     persistSelectedServerId(selectedServerId);
-    set({ selectedServerId, managementOpen: false });
+    set({ selectedServerId });
   },
   reconcileServers: (ids) => set((state) => {
     const selectedServerId = state.selectedServerId !== null && ids.includes(state.selectedServerId)
@@ -71,5 +84,5 @@ export const useUiStore = create<UiState>((set) => ({
       }
     }
   })),
-  editServer: (editingServerId) => set({ editingServerId, managementOpen: true })
+  editServer: (editingServerId) => set((state) => ({ editingServerId, managementOpen: true, managementAction: editingServerId === null ? 'add' : 'edit', managementRequestId: state.managementRequestId + 1 }))
 }));
