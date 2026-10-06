@@ -201,6 +201,7 @@ Task #29 Stage 3: 서버 관리 메뉴와 편집 시트 통합
 - helper `request.rs`, `dispatch.rs`, `contract.rs`, `tests/helper_cli.rs`.
 - `electron/helperContract.ts`, `helperContract/actions.ts`, `ipc/payloadValidation.ts`, `scheduler.ts`, `main.ts`, `notifications.ts`와 관련 테스트. main-only action은 preload에 노출하지 않음.
 - `src/lib/types.ts`, `DetailGpuCard.tsx`, `useServerDetailController.ts`와 관련 API/화면 테스트.
+- `src/features/settings/useSettingsController.ts`, `src/features/settings/ServerManagerSheet.test.tsx`: 자동 saved-target 연결 테스트의 StrictMode effect replay 및 지연 응답 회귀 보완.
 - `smoke/electron-first-run-ui-parity.mjs`, `electron-packaged-app-smoke.mjs`, 새 탐색에 종속된 기존 smoke의 직접 영향 부분.
 - `README.md`, `docs/smoke-checklist.md`, `docs/demo/demo-script.md`.
 - `mydocs/working/task_m001_29_stage4.md`, `mydocs/report/task_m001_29_report.md`, 오늘할일.
@@ -218,6 +219,7 @@ Task #29 Stage 3: 서버 관리 메뉴와 편집 시트 통합
 9. rule/outbox 기본 구조를 보존한다. 계속 유휴인 동안 반복하지 않고 관측된 사용 상태 후 다시 sustain 조건과 cooldown을 함께 만족해야 재알림한다. failed/unknown 관측은 지속 구간을 끊지만 알림 발송 이력·재준비를 임의 초기화하지 않는다.
 10. 카드 안 on/off·저장 조건·권한 확인 불가·저장/읽기 실패를 실제 결과에 연결한다. 실제 OS 허용 상태를 모르면 확인 불가를 유지한다. 새 임계값 편집기·자동 권한 허용·배너 노출 보장은 추가하지 않는다.
 11. 실제 관측과 무관한 HTML 예시·fake helper는 테스트에만 둔다. 전체 사용자 여정·문서·smoke를 새 구조로 맞추고 최종 검증 한계를 기록한다.
+12. 관리 시트의 명시적 연결 테스트는 저장 대상이 준비된 뒤 StrictMode effect replay에도 정확히 한 번만 시작한다. 취소된 effect에서 자동 요청을 시작하지 않고 기존 management request/version fence를 유지한다. StrictMode와 deferred helper 응답 회귀로 정확한 대상·1회 호출·pending 종료와 실패 표시를 검증한다. 이 보완은 통합 first-run smoke에서 발견한 자동 테스트 pending 문제의 직접 영향 두 파일에 한정하며 관리 UX·저장/삭제/import 계약을 바꾸지 않는다.
 
 ### 검증
 
