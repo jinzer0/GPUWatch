@@ -4,7 +4,7 @@
 GitHub Issue: [#29](https://github.com/jinzer0/GPUWatch/issues/29)
 마일스톤: M001
 작성일: 2026-10-05
-상태: 구현계획서 내용·계획 문서 커밋·Stage 1 진입 승인 완료
+상태: Stage 2 착수·runtime 인덱스 보완 내용·독립 커밋 승인 완료 — 새 구현계획서 exact SHA 확인 대기
 브랜치: `local/task29`
 기준 커밋: `000dac5f33cefdf8cd2f2f12b7c0fcb6a4bd73b1`
 작업 위치: `/Users/kjy/Desktop/Codes/projects/GPUWatch-task29`
@@ -29,6 +29,7 @@ GitHub Issue: [#29](https://github.com/jinzer0/GPUWatch/issues/29)
 | 최종 UX 계약·결정 로그·시안 4개 | `docs/ux/task_m001_29/` | 동일 | OK | Stage 1, 원본 삭제 없이 승인본 사본만 보존 |
 | 사용자 개요 | `README.md` 기존 섹션 | 동일 | OK | Stage 4, 기능·탐색의 직접 영향 부분만 |
 | UI 검증·데모 | `docs/smoke-checklist.md`, `docs/demo/demo-script.md` | 동일 | OK | Stage 4, historical plan/draft는 변경하지 않음 |
+| renderer runtime 인덱스 | 기존 `src/AGENTS.md` | 동일 | OK | Stage 2, App/Shell 탐색·전용 로컬 UI bridge만 정합화. 기존 no-install·보안 규칙 유지 |
 | 오늘할일·수행/구현계획 | `mydocs/orders`, `mydocs/plans` | `20261005.md`, `task_m001_29.md`, `task_m001_29_impl.md` | OK | 이번 작성 범위 |
 | 단계·최종 보고 | `mydocs/working`, `mydocs/report` | `task_m001_29_stage{N}.md`, `task_m001_29_report.md` | OK | 검증 결과와 한계를 기록 |
 
@@ -108,6 +109,7 @@ Task #29 Stage 1: 서버 중심 창과 외형 설정 기반 적용
 
 - `DetailGpuCard.tsx`, `DetailProcessList.tsx`, `ServerDetailScreen.tsx`, `useServerDetailController.ts`, `detailModel.ts`와 관련 테스트.
 - `src/lib/store.ts`, `store.test.ts`, `types.ts`, `index.css`, `App.tsx`의 연결부.
+- `src/AGENTS.md`의 App/Shell 탐색·외형 설정·`window.gpuwatcherUi` 인덱스. 기존 위치의 agent runtime guidance이며 보안·no-install 규칙은 변경하지 않음.
 - `src/features/overview`, `src/features/processes`, `src/features/history`의 화면 전용 경로와 `DetailGpuHistorySection.tsx`를 import/callsite 대조 후 제거. 공유 포맷·실제 필요한 프로세스 정보는 새 카드로 통합하고 중복 UI를 남기지 않음.
 - `mydocs/working/task_m001_29_stage2.md`, 오늘할일.
 
@@ -120,6 +122,7 @@ Task #29 Stage 1: 서버 중심 창과 외형 설정 기반 적용
 5. 추가 지표는 기본 접힘 텍스트 목록으로 구현한다. 기존 memory utilization/free memory, power/limit/fan, encoder/decoder/JPEG/OFA, UUID/PCI/driver/clocks, PCIe RX/TX/gen/width, MIG current/pending/count/가용성 안내를 모두 보존한다.
 6. `useServerDetailController`의 historyQuery·live chart sample 축적 및 UI history invalidation을 제거한다. `list_gpu_history` 등 helper/API와 DB history 저장·retention은 유지한다. 삭제된 화면만 검증하던 테스트는 새 동등 행동 검증으로 교체하고 backend 계약 테스트는 없애지 않는다.
 7. Stage 4의 실제 가용 DTO 연결 전에는 기존 busy/free 수치나 프로세스 수로 `사용 가능`을 만들어내지 않는다. 이 단계 완료 보고는 카드·정보 구조에 한정한다.
+8. `src/AGENTS.md`에서 없어진 탭 탐색·sidebar counts 설명을 서버 선택·GPU detail 경로로 정정하고, 별도 외형 설정 창과 action-specific `window.gpuwatcherUi`를 backend `window.gpuwatcher`와 구분한다. generic IPC 금지·renderer-callable poll_due_servers 금지·원격 no-install 규칙을 유지한다.
 
 ### 검증
 
@@ -288,6 +291,15 @@ Co-authored-by: Sisyphus <clio-agent@sisyphuslabs.ai>
 - **승인 확대**: 이번 수행계획 승인에 제품 구현·커밋·게시 권한을 포함하지 않는다. 아래 승인 요청에서 각각의 경계를 명시한다.
 
 ## 승인 요청 사항
+
+Stage 1 승인 커밋은 `ae85f42f60e52a31c99679428d96fab17a0b822f`이고, 기존 구현계획서 승인 커밋은 `de0277cd2bb38afdc43a0f0ad4272d7fd58e9916`이다. 같은 스레드의 `stage2 착수 승인`을 접수했으며, 이번 보완은 Stage 1 보고서의 runtime 인덱스 위치 제안을 직접 영향 파일·변경 내용에 명시한 것이다. 설계 입력 8개의 고정 해시와 기존 Stage 2 제품 기능·검증 명령은 변경하지 않았다.
+
+같은 스레드의 `보완 내용과 계획 문서 커밋을 승인`으로 아래 보완 내용과 독립 커밋을 승인받았다. 새 exact SHA 확인은 별도 경계이며 이전 Stage 2 착수 승인으로 대체하지 않는다.
+
+- `src/AGENTS.md`의 기존 위치 유지·탐색/외형/bridge 인덱스 보완 내용과 이를 반영한 두 계획서.
+- 수행계획서·오늘할일 보완 기록 이후 `_impl.md`만 독립 커밋하는 것. 새 exact SHA 확인 전에는 제품 소스·runtime 인덱스 수정 및 단계 검증 명령을 실행하지 않음.
+
+아래 항목은 최초 승인 요청 기록이다.
 
 - 네 개 Stage의 파일·변경·검증·의존성과 additive 가용 metadata·main-only lifecycle reset 계약.
 - 기존 사용자 조건을 보존하며 기본 카드와 custom 알림을 구분하고 최소 15분 실효 제한을 적용하는 경계 처리.
