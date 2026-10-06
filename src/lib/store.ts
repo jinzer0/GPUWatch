@@ -1,10 +1,5 @@
 import { create } from 'zustand';
 
-import { appendLiveGpuSamplesFromDetail } from './liveHistory';
-import type { LiveGpuSampleMap } from './liveHistory';
-import type { ServerDetailDto } from './types';
-
-export type DensityMode = 'full' | 'compact';
 export const LAST_SERVER_STORAGE_KEY = 'gpuwatcher:last-server-id';
 
 export interface GpuDisclosure {
@@ -37,16 +32,11 @@ interface UiState {
   selectedServerId: string | null;
   editingServerId: string | null;
   gpuDisclosures: Record<string, Record<string, GpuDisclosure>>;
-  liveSamples: LiveGpuSampleMap;
-  densityMode: DensityMode;
   setManagementOpen: (managementOpen: boolean) => void;
   selectServer: (serverId: string | null) => void;
   reconcileServers: (ids: readonly string[]) => void;
   setGpuDisclosure: (serverId: string, gpuKey: string, disclosure: Partial<GpuDisclosure>) => void;
   editServer: (serverId: string | null) => void;
-  appendLiveSamplesFromDetail: (detail: ServerDetailDto) => void;
-  setDensityMode: (densityMode: DensityMode) => void;
-  toggleDensityMode: () => void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
@@ -54,8 +44,6 @@ export const useUiStore = create<UiState>((set) => ({
   selectedServerId: restoreSelectedServerId(),
   editingServerId: null,
   gpuDisclosures: {},
-  liveSamples: {},
-  densityMode: 'full',
   setManagementOpen: (managementOpen) => set({ managementOpen }),
   selectServer: (selectedServerId) => {
     persistSelectedServerId(selectedServerId);
@@ -83,9 +71,5 @@ export const useUiStore = create<UiState>((set) => ({
       }
     }
   })),
-  editServer: (editingServerId) => set({ editingServerId, managementOpen: true }),
-  appendLiveSamplesFromDetail: (detail) =>
-    set((state) => ({ liveSamples: appendLiveGpuSamplesFromDetail(state.liveSamples, detail) })),
-  setDensityMode: (densityMode) => set({ densityMode }),
-  toggleDensityMode: () => set((state) => ({ densityMode: state.densityMode === 'compact' ? 'full' : 'compact' }))
+  editServer: (editingServerId) => set({ editingServerId, managementOpen: true })
 }));

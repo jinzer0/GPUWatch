@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { detailFixture } from '../test-utils/detail-fixtures';
 
 const storageKey = 'gpuwatcher:last-server-id';
 const loadStore = async () => (await import('./store')).useUiStore;
@@ -127,14 +126,11 @@ describe('UI store', () => {
     expect(store.getState().selectedServerId).toBeNull();
   });
 
-  it('persists only the selected ID, not live samples or density', async () => {
+  it('persists only the selected ID, not GPU or nested disclosure state', async () => {
     const store = await loadStore();
     store.getState().selectServer('server-1');
-    store.getState().setDensityMode('compact');
-    store.getState().appendLiveSamplesFromDetail({ ...detailFixture, receivedAt: '2026-06-02T00:00:00Z' });
     store.getState().setGpuDisclosure('server-1', 'uuid:GPU-1', { expanded: true, metricsExpanded: true });
 
-    expect(store.getState().liveSamples['server-1+0']).toHaveLength(1);
     expect(localStorage.length).toBe(1);
     expect(localStorage.getItem(storageKey)).toBe('server-1');
 
@@ -142,13 +138,7 @@ describe('UI store', () => {
     const restored = await loadStore();
 
     expect(restored.getState().selectedServerId).toBe('server-1');
-    expect(restored.getState().liveSamples).toEqual({});
     expect(restored.getState().gpuDisclosures).toEqual({});
-    expect(restored.getState().densityMode).toBe('full');
-    restored.getState().toggleDensityMode();
-    expect(restored.getState().densityMode).toBe('compact');
-    restored.getState().toggleDensityMode();
-    expect(restored.getState().densityMode).toBe('full');
   });
 
   it('keeps GPU and nested disclosures independent across GPUs, parent closure, and server changes', async () => {

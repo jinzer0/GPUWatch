@@ -9,7 +9,6 @@ export const Shell = ({ children, overview }: { children: ReactNode; overview: S
   const selectServer = useUiStore((state) => state.selectServer);
   const managementOpen = useUiStore((state) => state.managementOpen);
   const setManagementOpen = useUiStore((state) => state.setManagementOpen);
-  const densityMode = useUiStore((state) => state.densityMode);
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const selectedServer = overview?.find((server) => server.id === selectedServerId);
   const runtime = window.gpuWatcherElectron?.isElectron && window.gpuwatcher ? '데스크톱' : '브라우저 · 읽기 전용';
@@ -24,7 +23,7 @@ export const Shell = ({ children, overview }: { children: ReactNode; overview: S
   };
 
   return (
-    <div className="app-shell" data-density={densityMode}>
+    <div className="app-shell">
       <header className="window-titlebar">
         <div className="titlebar-sidebar">
           <div className="traffic-light-space" aria-hidden="true" />

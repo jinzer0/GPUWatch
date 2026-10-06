@@ -1,54 +1,31 @@
 import { useId } from 'react';
 
-import { Button, MetricCard, StatusBadge } from '../../components/ui';
-import { formatKiBPerSecond, formatMiB, formatPercent, formatTemperature, formatUnknown, formatWatts } from '../../lib/format';
-import { getLiveGpuSampleKey } from '../../lib/liveHistory';
-import type { LiveGpuSample } from '../../lib/liveHistory';
-import type { GpuAvailableWatchInput, GpuCardDto, GpuHistoryResponseDto, ServerDetailDto, WatchRule } from '../../lib/types';
-import { DetailGpuHistorySection } from './DetailGpuHistorySection';
+import { Button, MetricCard } from '../../components/ui';
+import { formatKiBPerSecond, formatMiB, formatPercent, formatTime, formatUnknown, formatWatts } from '../../lib/format';
+import { useUiStore } from '../../lib/store';
+import type { GpuAvailableWatchInput, GpuCardDto, ServerDetailDto, WatchRule } from '../../lib/types';
 import { DetailProcessList } from './DetailProcessList';
+import { GpuMetricMeter } from './GpuMetricMeter';
 import {
   formatClockMhz,
   formatMigInstanceCount,
   formatPcieGeneration,
   formatPcieWidth,
   migAvailabilityCopy,
-  migBadgeLabel,
   migModeLabel,
-  resolveGpuHistoryChartData
+  shouldShowLastSuccessNote
 } from './detailModel';
 
-const GpuMetricSection = ({ children, eyebrow, title }: { readonly children: React.ReactNode; readonly eyebrow?: string; readonly title: string }) => (
-  <section className="mt-5">
-    <h5 className="font-[var(--font-display)] text-xl font-bold tracking-[-0.05em]">{title}</h5>
-    {eyebrow ? <div className="eyebrow mt-2">{eyebrow}</div> : null}
+const GpuMetricSection = ({ children, title }: { readonly children: React.ReactNode; readonly title: string }) => (
+  <section className="mt-4">
+    <h5 className="text-sm font-semibold">{title}</h5>
     <div className="mt-3 grid grid-cols-4 gap-3">{children}</div>
-  </section>
-);
-
-const MigSummarySection = ({ gpu }: { readonly gpu: GpuCardDto }) => (
-  <section className="mt-5">
-    <div className="eyebrow">MIG</div>
-    <div className="surface mt-3 p-4">
-      <p className="text-sm font-semibold text-[color:var(--color-text)]">Mode current: {migModeLabel(gpu.migModeCurrent)}</p>
-      <p className="mt-2 text-sm font-semibold text-[color:var(--color-text)]">Mode pending: {migModeLabel(gpu.migModePending)}</p>
-      <p className="mt-2 text-sm font-semibold text-[color:var(--color-text)]">Instance count: {formatMigInstanceCount(gpu.migInstanceCount)}</p>
-      <p className="mt-3 text-sm leading-6 text-[color:var(--color-muted)]">{migAvailabilityCopy(gpu)}</p>
-    </div>
-    <div className="mt-3 grid grid-cols-4 gap-3">
-      <MetricCard label="Current mode" value={migModeLabel(gpu.migModeCurrent)} />
-      <MetricCard label="Pending mode" value={migModeLabel(gpu.migModePending)} />
-      <MetricCard label="Instance count" value={formatUnknown(gpu.migInstanceCount)} />
-    </div>
   </section>
 );
 
 export const DetailGpuCard = ({
   detail,
   gpu,
-  liveSamples,
-  storedHistory,
-  storedHistoryReady,
   watchRulesReady,
   watchPending,
   watchRule,
@@ -56,21 +33,34 @@ export const DetailGpuCard = ({
 }: {
   readonly detail: ServerDetailDto;
   readonly gpu: GpuCardDto;
-  readonly liveSamples: Readonly<Record<string, readonly LiveGpuSample[]>>;
-  readonly storedHistory: GpuHistoryResponseDto | null;
-  readonly storedHistoryReady: boolean;
   readonly watchRulesReady: boolean;
   readonly watchPending: boolean;
   readonly watchRule: WatchRule | null;
   readonly saveWatch: (input: GpuAvailableWatchInput) => void;
 }) => {
   const watchDescriptionId = useId();
-  const chartData = resolveGpuHistoryChartData({
-    gpu,
-    history: storedHistory,
-    isStoredHistoryReady: storedHistoryReady,
-    sessionSamples: liveSamples[getLiveGpuSampleKey(detail.server.id, gpu.index)] ?? []
-  });
+  const gpuKey = gpu.uuid.trim() ? `uuid:${gpu.uuid}` : `index:${gpu.index}`;
+  const disclosure = useUiStore((state) => state.gpuDisclosures[detail.server.id]?.[gpuKey]);
+  const expanded = disclosure?.expanded ?? false;
+  const metricsExpanded = disclosure?.metricsExpanded ?? false;
+  const syncDisclosure = (field: 'expanded' | 'metricsExpanded', open: boolean) => {
+    const state = useUiStore.getState();
+    if ((state.gpuDisclosures[detail.server.id]?.[gpuKey]?.[field] ?? false) !== open) {
+      state.setGpuDisclosure(detail.server.id, gpuKey, { [field]: open });
+    }
+  };
+  const toggleDisclosure = (field: 'expanded' | 'metricsExpanded') => {
+    const state = useUiStore.getState();
+    state.setGpuDisclosure(detail.server.id, gpuKey, {
+      [field]: !(state.gpuDisclosures[detail.server.id]?.[gpuKey]?.[field] ?? false)
+    });
+  };
+  const memoryOccupancy = gpu.memoryTotalMiB !== null && gpu.memoryUsedMiB !== null
+    && Number.isFinite(gpu.memoryTotalMiB) && Number.isFinite(gpu.memoryUsedMiB)
+    && gpu.memoryTotalMiB > 0 && gpu.memoryUsedMiB >= 0 && gpu.memoryUsedMiB <= gpu.memoryTotalMiB
+    ? (gpu.memoryUsedMiB / gpu.memoryTotalMiB) * 100
+    : null;
+  const processesUnavailable = detail.warnings.some((warning) => /compute[-_]apps/i.test(warning));
   const watchTitle = 'GPU 사용률 ≤ 5%, VRAM ≤ 1GB가 5분 지속되면 알림';
   const toggleWatch = () => {
     if (watchRule?.enabled) {
@@ -102,68 +92,101 @@ export const DetailGpuCard = ({
   };
 
   return (
-    <article className="detail-gpu-panel panel p-5" key={gpu.uuid}>
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="eyebrow">GPU {gpu.index}</div>
-          <div className="mt-1 flex flex-wrap items-center gap-3">
-            <h4 aria-label={`GPU ${gpu.index} ${gpu.name}`} className="break-words font-[var(--font-display)] text-2xl font-bold tracking-[-0.06em]">{gpu.name}</h4>
-            <StatusBadge status={migBadgeLabel(gpu)} />
-          </div>
-          <p className="mt-1 break-words text-xs text-[color:var(--color-muted)]">{gpu.uuid}</p>
+    <article className="gpu-card panel">
+    <details open={expanded} onToggle={(event) => {
+      if (event.target === event.currentTarget) syncDisclosure('expanded', event.currentTarget.open);
+    }}>
+      <summary
+        className="gpu-card-summary"
+        onClick={(event) => {
+          event.preventDefault();
+          toggleDisclosure('expanded');
+        }}
+      >
+        <div className="gpu-card-identity">
+          <span className="eyebrow">GPU {gpu.index}</span>
+          <h4 aria-label={`GPU ${gpu.index} ${gpu.name}`} className="break-words font-semibold">{gpu.name}</h4>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <StatusBadge status={gpu.busy ? 'busy' : 'free'} />
+        <div className="gpu-card-metrics">
+          <GpuMetricMeter label="GPU 사용률" value={gpu.gpuUtilizationPercent} kind="percent" />
+          <GpuMetricMeter label="VRAM 점유율" value={memoryOccupancy} kind="percent" />
+          <GpuMetricMeter label="온도" value={gpu.temperatureCelsius} kind="temperature" />
+          <span className="text-xs text-[color:var(--color-muted)]">
+            VRAM {formatMiB(gpu.memoryUsedMiB)} / {formatMiB(gpu.memoryTotalMiB)} · 점유율 {formatPercent(memoryOccupancy)}
+          </span>
+        </div>
+      </summary>
+      <div className="gpu-card-body">
+        {shouldShowLastSuccessNote(detail) ? (
+          <p className="mb-3 text-sm text-[color:var(--color-muted)]">
+            마지막 성공 스냅샷입니다. 현재 상태가 아닙니다. 마지막 성공: {formatTime(detail.health.lastSuccessAt)}.
+          </p>
+        ) : null}
+        <div className="mb-4 flex flex-wrap items-center gap-2">
           <span className="sr-only" id={watchDescriptionId}>{watchTitle}</span>
           {!watchRulesReady ? (
             <Button aria-describedby={watchDescriptionId} aria-label="Watch status unavailable" disabled size="sm" variant="secondary">
-              Watch unavailable
+              알림 상태 확인 불가
             </Button>
           ) : watchRule?.enabled ? (
-            <div className="flex flex-wrap items-center justify-end gap-2" title={watchTitle}>
-              <span className="text-xs font-semibold text-[color:var(--color-brand)]">Watching</span>
+            <div className="flex flex-wrap items-center gap-2" title={watchTitle}>
+              <span className="text-xs font-semibold">알림 활성화</span>
               <Button aria-describedby={watchDescriptionId} aria-label={`Disable availability watch for GPU ${gpu.index}`} disabled={watchPending} onClick={toggleWatch} size="sm" variant="ghost">
-                Disable
+                알림 해제
               </Button>
             </div>
           ) : (
-            <Button aria-describedby={watchDescriptionId} disabled={watchPending} onClick={toggleWatch} size="sm" title={watchTitle} variant="secondary">
-              Notify when available
+            <Button aria-describedby={watchDescriptionId} aria-label="Notify when available" disabled={watchPending} onClick={toggleWatch} size="sm" title={watchTitle} variant="secondary">
+              사용 가능 시 알림
             </Button>
           )}
         </div>
+        <DetailProcessList processes={gpu.processes} unavailable={processesUnavailable} />
+        <details className="gpu-extra-metrics mt-4" open={metricsExpanded} onToggle={(event) => {
+          if (event.target === event.currentTarget) syncDisclosure('metricsExpanded', event.currentTarget.open);
+        }}>
+          <summary
+            className="text-sm font-semibold"
+            onClick={(event) => {
+              event.preventDefault();
+              toggleDisclosure('metricsExpanded');
+            }}
+          >
+            추가 지표
+          </summary>
+          <GpuMetricSection title="메모리 및 전력">
+            <MetricCard label="Memory activity" value={formatPercent(gpu.memoryUtilizationPercent)} />
+            <MetricCard label="Memory free" value={formatMiB(gpu.memoryFreeMiB)} />
+            <MetricCard label="Power / limit" value={`${formatWatts(gpu.powerDrawWatt)} / ${formatWatts(gpu.powerLimitWatt)}`} />
+            <MetricCard label="Fan" value={formatPercent(gpu.fanSpeedPercent)} />
+            <MetricCard label="스냅샷 프로세스 수" value={processesUnavailable && gpu.processCount === 0 ? 'unknown' : gpu.processCount} />
+          </GpuMetricSection>
+          <GpuMetricSection title="기능 및 식별 정보">
+            <MetricCard label="UUID" value={formatUnknown(gpu.uuid)} />
+            <MetricCard label="Encoder" value={formatPercent(gpu.encoderUtilizationPercent)} />
+            <MetricCard label="Decoder" value={formatPercent(gpu.decoderUtilizationPercent)} />
+            <MetricCard label="JPEG" value={formatPercent(gpu.jpegUtilizationPercent)} />
+            <MetricCard label="OFA" value={formatPercent(gpu.ofaUtilizationPercent)} />
+            <MetricCard label="PCI bus id" value={formatUnknown(gpu.pciBusId)} />
+            <MetricCard label="Per-GPU driver" value={formatUnknown(gpu.driverVersion)} />
+            <MetricCard label="Graphics clock" value={formatClockMhz(gpu.graphicsClockMhz)} />
+            <MetricCard label="Memory clock" value={formatClockMhz(gpu.memoryClockMhz)} />
+          </GpuMetricSection>
+          <GpuMetricSection title="PCIe">
+            <MetricCard label="RX" value={formatKiBPerSecond(gpu.pcieRxKibPerSec)} />
+            <MetricCard label="TX" value={formatKiBPerSecond(gpu.pcieTxKibPerSec)} />
+            <MetricCard label="Link generation" value={formatPcieGeneration(gpu.pcieLinkGenCurrent)} />
+            <MetricCard label="Link width" value={formatPcieWidth(gpu.pcieLinkWidthCurrent)} />
+          </GpuMetricSection>
+          <GpuMetricSection title="MIG">
+            <MetricCard label="Current mode" value={migModeLabel(gpu.migModeCurrent)} />
+            <MetricCard label="Pending mode" value={migModeLabel(gpu.migModePending)} />
+            <MetricCard label="Instance count" value={formatMigInstanceCount(gpu.migInstanceCount)} />
+          </GpuMetricSection>
+          <p className="mt-3 text-sm text-[color:var(--color-muted)]">{migAvailabilityCopy(gpu)}</p>
+        </details>
       </div>
-      <GpuMetricSection eyebrow="Live utilization" title="Primary telemetry">
-        <MetricCard label="Utilization" value={formatPercent(gpu.gpuUtilizationPercent)} />
-        <MetricCard label="Memory" value={formatPercent(gpu.memoryUtilizationPercent)} />
-        <MetricCard label="Temperature" value={formatTemperature(gpu.temperatureCelsius)} />
-        <MetricCard label="Memory used" value={`${formatMiB(gpu.memoryUsedMiB)} / ${formatMiB(gpu.memoryTotalMiB)}`} />
-        <MetricCard label="Memory free" value={formatMiB(gpu.memoryFreeMiB)} />
-        <MetricCard label="Power" value={`${formatWatts(gpu.powerDrawWatt)} / ${formatWatts(gpu.powerLimitWatt)}`} />
-        <MetricCard label="Fan" value={formatPercent(gpu.fanSpeedPercent)} />
-        <MetricCard label="Processes" value={gpu.processCount} />
-      </GpuMetricSection>
-      <GpuMetricSection title="Capabilities and identity">
-        <MetricCard label="Encoder" value={formatPercent(gpu.encoderUtilizationPercent)} />
-        <MetricCard label="Decoder" value={formatPercent(gpu.decoderUtilizationPercent)} />
-        <MetricCard label="JPEG" value={formatPercent(gpu.jpegUtilizationPercent)} />
-        <MetricCard label="OFA" value={formatPercent(gpu.ofaUtilizationPercent)} />
-        <MetricCard label="PCI bus id" value={formatUnknown(gpu.pciBusId)} />
-        <MetricCard label="Per-GPU driver" value={formatUnknown(gpu.driverVersion)} />
-        <MetricCard label="Graphics clock" value={formatClockMhz(gpu.graphicsClockMhz)} />
-        <MetricCard label="Memory clock" value={formatClockMhz(gpu.memoryClockMhz)} />
-      </GpuMetricSection>
-      <GpuMetricSection title="PCIe">
-        <MetricCard label="RX" value={formatKiBPerSecond(gpu.pcieRxKibPerSec)} />
-        <MetricCard label="TX" value={formatKiBPerSecond(gpu.pcieTxKibPerSec)} />
-        <MetricCard label="Link generation" value={formatPcieGeneration(gpu.pcieLinkGenCurrent)} />
-        <MetricCard label="Link width" value={formatPcieWidth(gpu.pcieLinkWidthCurrent)} />
-      </GpuMetricSection>
-      <MigSummarySection gpu={gpu} />
-      <DetailGpuHistorySection detail={detail} gpu={gpu} samples={chartData.samples} source={chartData.source} />
-      <div className="mt-5">
-        <DetailProcessList processes={gpu.processes} />
-      </div>
+    </details>
     </article>
   );
 };

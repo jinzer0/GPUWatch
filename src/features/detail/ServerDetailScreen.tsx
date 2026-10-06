@@ -112,11 +112,8 @@ export const ServerDetailScreen = ({ selectedServerId }: { readonly selectedServ
             <DetailGpuCard
               detail={detail}
               gpu={gpu}
-              key={gpu.uuid}
-              liveSamples={controller.liveSamples}
+              key={`${detail.server.id}:${gpu.uuid.trim() ? `uuid:${gpu.uuid}` : `index:${gpu.index}`}`}
               saveWatch={controller.saveWatch}
-              storedHistory={controller.storedHistory}
-              storedHistoryReady={controller.storedHistoryReady}
               watchPending={watchPending}
               watchRule={watchRule}
               watchRulesReady={controller.watchRulesQuery.isSuccess}

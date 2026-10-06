@@ -1,5 +1,4 @@
-import type { LiveGpuSample } from '../lib/liveHistory';
-import type { GpuHistoryResponseDto, GpuHistorySampleDto, ServerDetailDto } from '../lib/types';
+import type { GpuHistoryResponseDto, ServerDetailDto } from '../lib/types';
 import { savedServer } from './server-fixtures';
 
 export const detailFixture: ServerDetailDto = {
@@ -106,59 +105,6 @@ export const detailFixture: ServerDetailDto = {
     }
   ]
 };
-
-export const historySample = (overrides: Partial<GpuHistorySampleDto> = {}): GpuHistorySampleDto => ({
-  receivedAt: '2026-06-04T00:00:00.000Z',
-  memoryTotalMiB: 49_152,
-  memoryUsedMiB: 12_288,
-  memoryFreeMiB: 36_864,
-  gpuUtilizationPercent: 30,
-  memoryUtilizationPercent: 25,
-  encoderUtilizationPercent: 5,
-  decoderUtilizationPercent: 4,
-  jpegUtilizationPercent: null,
-  ofaUtilizationPercent: null,
-  temperatureCelsius: 50,
-  powerDrawWatt: 150,
-  powerLimitWatt: 300,
-  pcieRxKibPerSec: 512,
-  pcieTxKibPerSec: 768,
-  ...overrides
-});
-
-export const historyResponse = (series: GpuHistoryResponseDto['series'] = []): GpuHistoryResponseDto => ({
-  serverId: 'server-1',
-  serverName: 'Lab GPU',
-  pollingIntervalSeconds: 30,
-  range: '1h',
-  startedAt: '2026-06-04T00:00:00.000Z',
-  finishedAt: '2026-06-04T01:00:00.000Z',
-  series
-});
-
-export const sessionSample = (overrides: Partial<LiveGpuSample> = {}): LiveGpuSample => ({
-  serverId: 'server-1',
-  gpuIndex: 1,
-  gpuUuid: 'GPU-populated',
-  receivedAt: '2026-06-04T00:00:00.000Z',
-  memoryUsedMiB: 24_576,
-  memoryFreeMiB: 24_576,
-  memoryTotalMiB: 49_152,
-  gpuUtilizationPercent: 40,
-  memoryUtilizationPercent: 50,
-  encoderUtilizationPercent: 10,
-  decoderUtilizationPercent: 3,
-  jpegUtilizationPercent: null,
-  ofaUtilizationPercent: null,
-  pcieRxKibPerSec: 1000,
-  pcieTxKibPerSec: null,
-  temperatureCelsius: null,
-  powerDrawWatt: null,
-  powerLimitWatt: null,
-  stale: false,
-  source: 'live',
-  ...overrides
-});
 
 export const apiServerDetail: ServerDetailDto = {
   server: savedServer,

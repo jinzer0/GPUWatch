@@ -59,8 +59,7 @@
   --info-cyan-soft: #303F56;
 }
 
-.app-shell,
-.app-shell[data-density="compact"] {
+.app-shell {
   --shell-sidebar-width: 220px;
   --shell-page-padding: 16px;
   --shell-titlebar-height: 44px;
@@ -80,6 +79,9 @@
   min-height: 28px;
   padding: 4px 8px;
   border-radius: 6px;
+  color: var(--color-text);
+  background: transparent;
+  border: 0;
 }
 
 .sidebar-nav { overflow-y: auto; }
@@ -93,6 +95,9 @@
   padding: 8px;
   border-radius: 6px;
   text-align: left;
+  color: var(--color-text);
+  background: transparent;
+  border: 0;
 }
 .server-sidebar-row:hover { background: var(--color-surface-hover); }
 .server-sidebar-row-selected { background: var(--color-brand-soft); }
@@ -110,3 +115,73 @@ body { min-width: 0; }
 .settings-window { height: 100vh; overflow: auto; background: var(--color-window); }
 .settings-window-titlebar { height: 44px; padding: 12px 16px 8px 88px; font-size: 13px; -webkit-app-region: drag; user-select: none; }
 .settings-window > section { padding: 24px; }
+
+.detail-page { min-width: 0; font-size: 13px; }
+.detail-header { padding-bottom: 12px; }
+.detail-header h2 { font-size: 18px; }
+.detail-health-strip { grid-template-columns: repeat(auto-fit, minmax(115px, 1fr)); gap: 8px; }
+.detail-health-strip > li { padding: 8px 0; background: transparent; border: 0; }
+.detail-health-strip .metric-label { font-size: 11px; }
+.detail-health-strip .metric-value { font-size: 12px; font-weight: 500; overflow-wrap: anywhere; }
+.detail-gpus { gap: 10px; }
+.detail-gpus > h3 { font-size: 13px; }
+.gpu-card { min-width: 0; border-radius: 8px; box-shadow: none; }
+.gpu-card-summary {
+  display: grid;
+  grid-template-columns: 12px minmax(100px, 1fr) minmax(270px, 1.7fr);
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  cursor: pointer;
+  list-style: none;
+}
+.gpu-card-summary::-webkit-details-marker { display: none; }
+.gpu-card-summary::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+}
+.gpu-card > details[open] > .gpu-card-summary::before { transform: rotate(45deg); }
+.gpu-card-summary:focus-visible,
+.gpu-extra-metrics > summary:focus-visible { outline: 2px solid var(--focus-ring-color); outline-offset: -2px; border-radius: 6px; }
+.gpu-card-identity { min-width: 0; overflow-wrap: anywhere; }
+.gpu-card-identity .eyebrow { font-size: 11px; letter-spacing: 0; }
+.gpu-card-identity h4 { margin: 4px 0 0; font-size: 13px; }
+.gpu-card-metrics { min-width: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 14px; }
+.gpu-card-metrics > span { grid-column: 1 / -1; font-size: 11px; overflow-wrap: anywhere; }
+.gpu-metric { min-width: 0; --meter-fill: #2E7D32; }
+.gpu-metric[data-tone="yellow"] { --meter-fill: #F2D000; }
+.gpu-metric[data-tone="red"] { --meter-fill: #C62828; }
+:root[data-appearance="dark"] .gpu-metric { --meter-fill: #74D28C; }
+:root[data-appearance="dark"] .gpu-metric[data-tone="yellow"] { --meter-fill: #FFE14A; }
+:root[data-appearance="dark"] .gpu-metric[data-tone="red"] { --meter-fill: #FF7B72; }
+.gpu-metric-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 6px; margin-bottom: 5px; font-size: 11px; color: var(--color-text); }
+.gpu-metric-label { color: var(--color-muted); }
+.gpu-metric-value { font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.gpu-metric-band { width: 100%; font-size: 10px; color: var(--color-muted); }
+.gpu-meter { height: 8px; gap: 2px; }
+.gpu-meter-segment { min-width: 0; height: 8px; background: var(--color-line); }
+.gpu-meter-segment-fill { height: 100%; background: var(--meter-fill); }
+.gpu-meter[data-tone="unknown"] { border: 1px dashed var(--color-muted); box-sizing: border-box; }
+.gpu-meter[data-tone="unknown"] .gpu-meter-segment { height: 0; background: transparent; }
+.gpu-card-body { min-width: 0; padding: 0 14px 14px; border-top: 1px solid var(--color-line); }
+.gpu-card-body > div:first-of-type { padding-top: 12px; }
+.gpu-card-body > p:first-child { padding-top: 12px; }
+.gpu-extra-metrics { border-top: 1px solid var(--color-line); padding-top: 10px; }
+.gpu-extra-metrics > summary { cursor: pointer; font-size: 12px; padding: 4px 0; }
+.gpu-extra-metrics section { margin-top: 12px; }
+.gpu-extra-metrics section > div { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; }
+.gpu-extra-metrics .surface { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; min-width: 0; }
+.gpu-extra-metrics .metric-label { font-size: 11px; }
+.gpu-extra-metrics .metric-value { margin-top: 2px; font-size: 12px; font-weight: 500; overflow-wrap: anywhere; }
+.gpu-card .detail-process-table-shell { max-width: 100%; overflow-x: auto; }
+.gpu-card .detail-process-table { min-width: 480px; font-size: 12px; }
+.gpu-card .detail-process-table td { overflow-wrap: anywhere; }
+.gpu-card .detail-process-table th { font-weight: 500; }
+@media (max-width: 760px) {
+  .gpu-card-summary { grid-template-columns: 12px minmax(0, 1fr); }
+  .gpu-card-metrics { grid-column: 2; }
+}
