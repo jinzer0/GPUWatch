@@ -3,9 +3,53 @@
 GitHub Issue: [#29](https://github.com/jinzer0/GPUWatch/issues/29)
 마일스톤: M001
 작성일: 2026-10-06
-상태: Stage 1–5 승인·커밋 완료, Stage 5 포함 최종 보고서 갱신·통합 재검증 완료 — 보고서/오늘할일 전용 커밋 승인 대기
+갱신일: 2026-10-08
+상태: Stage 1–6 승인·커밋 완료, Stage 6 제품 커밋 수용 재검증·보고 갱신 완료 — 보고서/오늘할일 전용 커밋 승인 대기; 게시 검증 미완료
 수행계획서: [`task_m001_29.md`](../plans/task_m001_29.md)
 구현계획서: [`task_m001_29_impl.md`](../plans/task_m001_29_impl.md)
+
+## 최신 갱신 — Stage 6 재리뷰 대응과 최종 수용 근거
+
+아래 기존 Stage 1–5 요약·정량 diff·15명령·smoke 이력은 당시 기록으로 보존한다. 최신 단계 수는 **6**, 최신 제품 수용 HEAD는 `9d60c532719e7f971149a95d2f81a0b9ad316d00`이다. 과거 core148/storage46 및 기존 final report/evidence/publication tuple을 새 수용에 재사용하지 않는다.
+
+### 승인·구현·문서 위치
+
+- Stage 6은 Codex review `5437422548`, comment `4202873637`의 P2 한 건이다. `set_server_enabled`가 동일 값을 받으면 Immediate transaction 안에서 최신 서버를 읽고 변경 없이 반환한다. record·revision·health·snapshot·가용 관측·watch sustain/cooldown/armed를 보존하며 실제 전환의 reset·revision 증가·원자성과 없는 서버 오류는 유지한다.
+- 계획서 단독 커밋·생성 SHA 결박·구현·검증을 같은 스레드에서 일괄 승인받았다. 계획 OID `3486d08e2646e8f41d2560a6c85dffcc89d7929a`, blob `f55e0f7159785aaab89671fc8db2dc3733a9557d`, mode `100644`. 미래 SHA를 사용자가 실제 조회한 것으로 표현하지 않는다. 적용 근거는 계획·단계 보고에 보존했다.
+- `커밋 승인 및 푸시 승인` 중 단계 커밋을 집행했다. Stage 6 commit `9d60c532719e7f971149a95d2f81a0b9ad316d00`, parent `3486d08e2646e8f41d2560a6c85dffcc89d7929a`, tree `a1fe1564b013999a64d3f47d3df6f59ecea83384`. exact5경로·mode/blob·parent/tree·attribution·clean을 검증했다. 푸시는 새 final report/evidence 및 publication tuple 경계가 충족되지 않아 실행하지 않았다.
+- 직전 **최종 보고 갱신 착수 승인** 요청에 대한 `보고 승인`은 이번 갱신·제품 커밋 재검증에만 적용한다. 보고서 커밋·새 수용·게시·merge·close 승인을 대신하지 않는다.
+- 제품 변경은 `crates/gpuwatcher-core/src/repository/servers.rs`, `tests/storage/repository_server_contract.rs`, `tests/gpu_availability.rs`다. API/DTO/schema/callsite/UI·제품 문서는 변경하지 않았다. 내부 기록은 기존 `mydocs/plans/`, [`task_m001_29_stage6.md`](../working/task_m001_29_stage6.md), 이 보고서, 기존 `mydocs/orders/20261005.md`를 유지한다. 새로운 제품 문서 위치나 일반 manual/skill 규칙은 만들지 않았다.
+
+### Stage 6 제품 커밋 최종 재검증
+
+clean worktree/index·branch/HEAD·replace ref 없음, 계획 commit의 단일 경로·ancestor·100644를 먼저 확인했다. 승인본·HEAD·index·working tree의 계획 blob이 일치한 제품 commit에서 **2026-10-08 07:44:32–07:44:42 +09:00** 재실행했다.
+
+```bash
+cargo test --manifest-path crates/gpuwatcher-core/Cargo.toml --test storage_read_model_state server_enabled
+cargo test --manifest-path crates/gpuwatcher-core/Cargo.toml --test gpu_availability repeated_enabled
+cargo test --manifest-path crates/gpuwatcher-core/Cargo.toml --test storage_read_model_state
+cargo test --manifest-path crates/gpuwatcher-core/Cargo.toml --test gpu_availability
+cargo fmt --manifest-path crates/gpuwatcher-core/Cargo.toml --all -- --check
+cargo test --manifest-path crates/gpuwatcher-core/Cargo.toml
+cargo test --manifest-path crates/gpuwatcher-helper/Cargo.toml
+npm run test -- --run
+git diff --check
+```
+
+- **9명령 모두 exit0**. core **151 passed**(lib59 + availability18 + parser20 + SSH config5 + storage49), 기존 live SSH **2 ignored**; helper CLI **25 passed**; Vitest **27 files / 420 passed**. focused storage3/availability1, 전체 storage49/availability18, format/diff check 통과.
+- 반복 true/false의 record·health·updated_at·revision 보존, in-flight poll 완료, WAL writer 이후 최신 값 비교 및 실제 전환을 검증했다. 가용/watch 지속 구간·cooldown/armed·snapshot을 유지하고 600초 조건이 원래 시작 시점 기준으로 완료됨을 확인했다. 기존 실제 전환 저장 실패 rollback 테스트도 전체 storage에서 실행했다.
+- source 수정 전 **3 fail/1 pass**와 Stage 6 수정 후 9명령 통과는 단계 보고에 보존했다. 이번 제품 commit 재검증은 별도 원문이며 테스트/경고/timeout/skip 억제는 없었다.
+- 새 수용 원문 source/path: `.omo/evidence/task-29-final-stage6-acceptance-20261007T224432Z.txt`.
+- UTF-8 원문 전체 바이트 SHA-256: `3f9ebc61fb5faf2d2f0530bb6bae0e388ba36e8c580dd881931b01b90d6d29d8`. stdout/stderr·exit status·시각·마지막 줄바꿈을 보존한다. 향후 approval tuple은 이 새 근거를 결박해야 한다.
+- renderer/Electron 변경이 없어 이번 Stage 6에서는 build/packaging/UI smoke를 재실행하지 않았다. 기존 Stage 5 smoke와 unsigned 경고는 역사 증거로 유지하며 최신 Stage 6 package 검증으로 표현하지 않는다. live SSH·운영 DB·실제 OS 입력/VoiceOver/알림도 미검증이다. 기존 helper timeout PID 간헐성의 원인을 수정한 것은 아니다.
+
+### 최신 CI/원격 상태와 게시 미완료 경계
+
+이번 read-only 조회에서 origin fetch/push `git@github.com:jinzer0/GPUWatch.git`, canonical repository ID `1256824919`, 이슈 #29 OPEN/M001, PR #30 OPEN/non-draft/base `devel`/head `publish/task29`/OID `4321fa1afe2d9fcf2dfeeb54f4e02c4a2ec9cbc6`를 확인했다. PR은 MERGEABLE, 등록 check는 없으며 로컬 통과를 CI 통과로 표현하지 않는다. Stage 5 게시 갱신은 완료됐지만 Stage 6은 아직 원격 미게시다. 이번 보고 단계에서 push·PR 본문/댓글·thread resolution·merge·issue close는 실행하지 않았다.
+
+default branch는 `main`, `closingIssuesReferences.nodes=[]`다. [GitHub 공식 linkage 문서](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue)는 non-default base PR의 closing keyword를 무시하며 링크를 생성하지 않고 merge도 이슈에 영향을 주지 않는다고 명시한다. 현재 main/devel 구성과 일치한다. **원인 확인은 게시 gate 수용 변경 승인이 아니다.** devel 유지·명시적 issue reference 검증·별도 exact-close 승인으로 분리하는 절차 보완은 아직 미승인이다. base/default 변경이나 수동 linkage 생성, mandatory gate skip은 실행하지 않았다.
+
+## Stage 1–5 역사 기록
 
 ## 작업 요약
 
@@ -186,7 +230,7 @@ git diff --check
 
 ## 커밋 후 승인 요청
 
-현재 Stage 5 포함 보고서 갱신 착수 승인만 집행했으며 이 문서와 오늘할일 갱신분은 아직 커밋하지 않았다. 새 전용 커밋 승인 후 **정확히 두 경로**의 regular/non-symlink/single-link `0644`, index/commit `100644`, blob/tree 및 repository-wide index를 hooks 비활성 상태에서 검증한다. Stage 5 제품 commit을 다시 묶지 않는다.
+현재 Stage 6 포함 보고서 갱신 착수 승인만 집행했으며 이 문서와 오늘할일 갱신분은 아직 커밋하지 않았다. 새 전용 커밋 승인 후 **정확히 두 경로**의 regular/non-symlink/single-link `0644`, index/commit `100644`, blob/tree 및 repository-wide index를 hooks 비활성 상태에서 검증한다. Stage 6 제품 commit을 다시 묶지 않는다.
 
 ```text
 mydocs/report/task_m001_29_report.md
