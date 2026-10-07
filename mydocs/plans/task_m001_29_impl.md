@@ -362,6 +362,17 @@ git diff --check
 
 Rust formatter는 합쳐진 변경에 한 번 적용한다. renderer/Electron 코드는 변경하지 않으므로 별도 빌드·packaging·UI smoke 재실행 대신 core/helper 전체 및 기존 Vitest 회귀를 실행한다. live SSH·실제 OS 알림·운영 DB는 사용하지 않는다. 게시 linkage 실패는 여전히 별도 미해결 경계로 남긴다.
 
+## Stage 6.1 — 전체 프로세스 명령의 비밀정보 가림 복구
+
+- 기준 HEAD `f972a36fbf3ff44b8676251d3173cac9df644111`, Codex review `5449421556`, comment `4212876195`의 P1 한 건. 같은 스레드의 `codex 리뷰 대응 수정 일괄 승인 수정 커밋 푸시까지`는 해당 리뷰 보완의 계획 기록·구현·검증·단계 커밋을 명시 승인한 것으로 접수한다. 일반 승인 규칙을 변경하거나 merge/close/thread resolution 승인으로 확대하지 않는다. 원격 게시의 artifact 및 exact tuple 경계는 별도로 검증한다.
+- 계획서를 먼저 단독 커밋하고 생성 SHA·단일 경로·blob·ancestor를 결박한다. 기존 여섯 단계는 유지하고 리뷰 보완을 Stage 6의 하위 단계 6.1로 기록한다.
+- 직접 영향 제품 파일: `src/features/detail/DetailProcessList.tsx`, `DetailProcessList.test.tsx`, `ServerDetailScreen.test.tsx`. 기존 `formatDrawerCommand`를 재사용하며 formatter/API/DTO/저장 데이터는 바꾸지 않는다.
+- 전체 명령을 truncation 없이 표시하되 토큰·비밀번호·SSH key 경로·private key material은 cell text와 title 모두에서 기존 sanitizer로 가린다. 1000자 이상 안전한 본문과 tail, 개행·줄바꿈·unknown/실제0은 보존한다.
+- 기존 raw token 노출을 강제하는 테스트를 비밀정보 가림 및 안전한 명령 보존 회귀로 바꾼다. 토큰/비밀번호/키 경로/키 본문을 각각 DOM text와 title에서 검증하고 detail 화면 통합 경로도 검증한다. 수정 전 실패를 기록한다.
+- 내부 기록 위치: 기존 계획서, `mydocs/working/task_m001_29_stage6.1.md`, 기존 `mydocs/orders/20261005.md`, 기존 `mydocs/report/task_m001_29_report.md`. 사용자/제품 문서·src/AGENTS·manual/skill 변경은 없다. 전체 명령 요구의 직접 보안 회귀 복구이므로 설계 사본도 변경하지 않는다.
+- 검증: `npm run test -- --run src/features/detail/DetailProcessList.test.tsx src/features/detail/ServerDetailScreen.test.tsx src/lib/format.test.ts`, `npm run test -- --run`, `npm run build`, `npm run electron:build`, `git diff --check`. 테스트 DOM의 text/title을 직접 검사해 browser-visible 출력의 보안 경계를 확인한다. 스타일/레이아웃·Electron bridge·Rust 변경이 없어 packaging/live SSH/실제 OS 알림은 재실행하지 않는다.
+- 단계 소스·회귀·하위 단계 보고·orders만 묶어 `Task #29 [Stage 6.1]: 프로세스 전체 명령의 비밀정보 가림 복구`로 기록한다. 최종 보고/orders는 별도 보고 commit으로 분리한다. 게시 시 기존 PR #30과 devel을 유지하고 ancestor·exact lease·기존 title/body drift를 검증하며, 이미 승인된 명시적 #29 참조와 별도 exact-close 정책을 유지한다.
+
 ## 검증
 
 - 각 Stage의 검증을 단계 보고 전 실행하고 실패를 숨기거나 tests를 억제하지 않는다. 새 파일을 나열한 명령은 해당 단계에서 테스트를 실제 생성한 뒤 실행한다.
