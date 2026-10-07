@@ -34,7 +34,7 @@ export const ServerDetailScreen = ({ selectedServerId }: { readonly selectedServ
     return <LoadingState label="Loading server detail DTO..." />;
   }
 
-  if (controller.detailQuery.error) {
+  if (controller.detailQuery.error && !detail) {
     return <ErrorState message={controller.detailQuery.error.message} />;
   }
 
@@ -70,6 +70,15 @@ export const ServerDetailScreen = ({ selectedServerId }: { readonly selectedServ
           </section>
         ) : null}
       </header>
+
+      {controller.detailQuery.error ? (
+        <section aria-label="Detail diagnostic" role="alert">
+          <DiagnosticPanel errorType={getErrorType(controller.detailQuery.error)} message={controller.detailQuery.error.message} title="Detail diagnostic" />
+          <p className="mt-3 text-sm text-[color:var(--color-muted)]">
+            상세 정보를 다시 읽지 못했습니다. 마지막 성공 데이터를 표시하며 현재 GPU 가용 여부는 확인할 수 없습니다.
+          </p>
+        </section>
+      ) : null}
 
       <ul aria-label="Server health" className="detail-health-strip grid gap-3" role="list">
         <ServerHealthItem label="Health" value={detail.health.status} />

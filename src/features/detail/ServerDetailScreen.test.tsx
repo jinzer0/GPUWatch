@@ -379,10 +379,14 @@ describe('ServerDetailScreen', () => {
     const { queryClient } = renderDetail(availableDetail);
     const gpu = await gpuDisclosure('NVIDIA Test GPU');
     expect(gpu.closest('article')?.classList.contains('gpu-card-available')).toBe(true);
+    const healthBefore = screen.getByRole('list', { name: 'Server health' }).textContent;
     const { result } = renderHook(() => useServerDetailController('server-1'), {
       wrapper: ({ children }) => <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     });
-    vi.mocked(getServerDetail).mockRejectedValue(new Error('detail read failed'));
+    vi.mocked(getServerDetail).mockRejectedValue(Object.assign(
+      new Error('detail read failed token=read-secret --identity /Users/alice/.ssh/id_ed25519'),
+      { type: 'backend_unavailable' }
+    ));
     await act(async () => {
       await queryClient.refetchQueries({ queryKey: ['server-detail', 'server-1'] });
     });
@@ -391,6 +395,34 @@ describe('ServerDetailScreen', () => {
     expect(queryClient.getQueryData<ServerDetailDto>(['server-detail', 'server-1'])?.gpus[0].availability.state).toBe('available');
     expect(screen.queryByText('사용 가능')).toBeNull();
     expect(screen.getByRole('alert').textContent).toContain('detail read failed');
+    expect(screen.getByRole('heading', { level: 2, name: availableDetail.server.name })).toBeDefined();
+    expect(screen.getByText(`${availableDetail.server.username}@${availableDetail.server.host}:${availableDetail.server.port}`)).toBeDefined();
+    expect(screen.getByRole('list', { name: 'Server health' }).textContent).toBe(healthBefore);
+    expect(screen.getByRole('button', { name: `Refresh ${availableDetail.server.name}` }).hasAttribute('disabled')).toBe(false);
+    const cachedGpu = await gpuDisclosure('NVIDIA Test GPU');
+    expect(cachedGpu.closest('article')?.classList.contains('gpu-card-available')).toBe(false);
+    expect(screen.getByRole('alert', { name: 'Detail diagnostic' }).textContent).toContain('token=[redacted]');
+    expect(screen.getByRole('alert', { name: 'Detail diagnostic' }).textContent).toContain('마지막 성공');
+    expect(document.body.innerHTML).not.toContain('read-secret');
+    expect(document.body.innerHTML).not.toContain('/Users/alice/.ssh/id_ed25519');
+    expect(queryClient.getQueryData(['server-detail', 'server-1'])).toEqual(availableDetail);
+
+    const recovered: ServerDetailDto = {
+      ...availableDetail,
+      server: { ...availableDetail.server, name: 'Recovered GPU server' },
+      receivedAt: '2026-06-07T00:10:00Z',
+      health: { ...availableDetail.health, lastSuccessAt: '2026-06-07T00:10:00Z' }
+    };
+    vi.mocked(getServerDetail).mockResolvedValue(recovered);
+    await act(async () => {
+      await queryClient.refetchQueries({ queryKey: ['server-detail', 'server-1'] });
+    });
+    await waitFor(() => expect(result.current.detailQuery.isSuccess).toBe(true));
+    expect(screen.queryByRole('alert', { name: 'Detail diagnostic' })).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Recovered GPU server' })).toBeDefined();
+    expect(screen.getByRole('list', { name: 'Server health' }).textContent).not.toBe(healthBefore);
+    expect((await gpuDisclosure('NVIDIA Test GPU')).closest('article')?.classList.contains('gpu-card-available')).toBe(true);
+    expect(queryClient.getQueryData(['server-detail', 'server-1'])).toEqual(recovered);
   });
 
   it.each(['online', 'stale'])('does not infer current availability from busy=false with %s health', async (status) => {
