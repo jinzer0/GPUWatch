@@ -4,7 +4,7 @@
 GitHub Issue: [#29](https://github.com/jinzer0/GPUWatch/issues/29)
 마일스톤: M001
 작성일: 2026-10-05
-상태: Stage 1–4 완료, PR #30 Codex 리뷰 보완 내용·계획서 단독 커밋 승인 완료 — 새 exact SHA 승인 전 Stage 5 구현 금지
+상태: Stage 1–5 구현·검증·보고 완료, Stage 6 재리뷰 보완의 계획서 단독 커밋·생성 SHA 결박·구현·검증 일괄 승인
 브랜치: `local/task29`
 기준 커밋: `000dac5f33cefdf8cd2f2f12b7c0fcb6a4bd73b1`
 작업 위치: `/Users/kjy/Desktop/Codes/projects/GPUWatch-task29`
@@ -318,6 +318,49 @@ Rust 구현 변경 후 기존 formatter를 사용하고 최종 합쳐진 변경�
 - Stage 5 예정 커밋 제목: `Task #29 Stage 5: Codex 리뷰의 서버 관측과 SSH 재검색 회귀 수정`.
 - PR #30에는 기존 제품 OID가 게시되어 있다. 새 제품·최종 보고 OID에 대해 기존 publication tuple을 재사용하거나 현재 publish ref를 임의 overwrite하지 않는다. 원격 업데이트의 별도 승인된 절차를 확인한 뒤 진행한다.
 - GraphQL `closingIssuesReferences`가 빈 목록인 게시 검증 문제, default branch/main/devel 정책, framework/manual 수정, PR merge·issue close는 이번 리뷰 수정 범위 밖이다.
+
+## Stage 6 — 반복 서버 enabled 쓰기의 멱등성
+
+### 승인·작업 기준
+
+- 기준 HEAD는 `4321fa1afe2d9fcf2dfeeb54f4e02c4a2ec9cbc6`, 기존 `GPUWatch-task29` worktree와 `local/task29`를 유지한다.
+- PR #30 Codex review `5437422548`, comment `4202873637`의 P2 한 건만 대응한다. 현재 값과 같은 enabled 요청이 revision·관측·watch 지속 구간·health를 초기화하는 문제다.
+- 같은 스레드에서 보완안을 제시한 뒤 작업지시자가 `계획서 단독 커밋 승인 → 새 exact SHA 승인 → 구현·검증 까지 모두 일괄 승인할게`라고 명시했다. 이번 Stage 6에 한해 생성되는 계획서 단독 커밋의 exact SHA를 기록·결박하고 구현·검증까지 진행하는 승인으로 적용한다. 미래 SHA를 이미 조회·확인받았다고 표현하지 않는다. 일반 manual/skill의 승인 규칙은 변경하지 않는다.
+- 계획서만 독립 커밋하고, 해당 commit의 parent·변경 경로·mode·blob·attribution을 검증한다. 구현·검증 전 그 exact SHA의 ancestor 여부와 HEAD/index/working tree 계획 blob 일치를 확인한다.
+- 제품/단계 산출물 커밋, 최종 보고 갱신·커밋·수용, 원격 게시, 리뷰 답변·resolution, merge·issue close·정리는 이번 일괄 승인에 포함하지 않는다.
+
+### 직접 영향 파일과 문서 위치
+
+- `crates/gpuwatcher-core/src/repository/servers.rs`: `set_server_enabled`만 최신 상태를 Immediate transaction 안에서 비교하고 동등 요청은 no-op 반환한다.
+- `crates/gpuwatcher-core/tests/storage/repository_server_contract.rs`: 반복 true/false의 record·health·revision 보존, in-flight poll 보존·완료, WAL writer 이후 최신 상태 비교, 실제 전환을 검증한다.
+- `crates/gpuwatcher-core/tests/gpu_availability.rs`: 반복 요청의 GPU 관측·watch sustain·cooldown·armed·snapshot 보존과 실제 전환 reset을 검증한다.
+- 기존 `crates/gpuwatcher-core/tests/storage/repository_watches.rs`의 실제 전환 저장 실패 rollback 테스트를 실행한다. 직접 영향 회귀 보완이 필요한 경우 이 파일 안에서만 수행한다.
+- 내부 계획은 이 `_impl.md`, 단계 보고는 `mydocs/working/task_m001_29_stage6.md`, 진행 기록은 기존 `mydocs/orders/20261005.md`를 사용한다. 기존 내부 기록 독자·공식화 수준·위치를 유지하며 제품 문서/API/DTO/schema/UI/manual/skill은 변경하지 않는다. 최종 보고서는 별도 승인 후 기존 위치에서 갱신한다.
+
+### 변경 내용과 수용 기준
+
+1. `BEGIN IMMEDIATE`로 writer를 확보한 뒤 서버를 읽는다. 없는 서버는 기존 `server_not_found`를 유지한다.
+2. 현재 enabled가 요청과 같으면 SQL UPDATE/reset 없이 commit 후 읽은 서버를 그대로 반환한다. revision·updated_at·health·snapshot·availability/watch runtime·outbox를 보존한다.
+3. 실제 true/false 전환에서만 revision 증가 및 기존 availability/watch reset·idle/disabled health 처리를 수행하며 전체 rollback 원자성을 유지한다.
+4. 동등 true 요청이 진행 중 poll을 stale로 만들거나 polling health를 idle로 바꾸지 않는다. 동등 false도 저장 상태를 변경하지 않는다.
+5. 동시 WAL writer가 먼저 바꾼 최신 enabled 값과 비교한다. 저장 실패를 무시하거나 재시도 fallback으로 덮지 않는다.
+6. 수정 전 새 회귀의 실패를 기록하고, 수정 후 focused 및 전체 회귀 결과를 단계 보고에 남긴다. 기존 live SSH ignored 테스트를 강제로 실행하거나 실패/경고를 억제하지 않는다.
+
+### 검증 명령
+
+```bash
+cargo test --manifest-path crates/gpuwatcher-core/Cargo.toml --test storage_read_model_state server_enabled
+cargo test --manifest-path crates/gpuwatcher-core/Cargo.toml --test gpu_availability repeated_enabled
+cargo test --manifest-path crates/gpuwatcher-core/Cargo.toml --test storage_read_model_state
+cargo test --manifest-path crates/gpuwatcher-core/Cargo.toml --test gpu_availability
+cargo fmt --manifest-path crates/gpuwatcher-core/Cargo.toml --all -- --check
+cargo test --manifest-path crates/gpuwatcher-core/Cargo.toml
+cargo test --manifest-path crates/gpuwatcher-helper/Cargo.toml
+npm run test -- --run
+git diff --check
+```
+
+Rust formatter는 합쳐진 변경에 한 번 적용한다. renderer/Electron 코드는 변경하지 않으므로 별도 빌드·packaging·UI smoke 재실행 대신 core/helper 전체 및 기존 Vitest 회귀를 실행한다. live SSH·실제 OS 알림·운영 DB는 사용하지 않는다. 게시 linkage 실패는 여전히 별도 미해결 경계로 남긴다.
 
 ## 검증
 
