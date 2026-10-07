@@ -373,6 +373,16 @@ Rust formatter는 합쳐진 변경에 한 번 적용한다. renderer/Electron �
 - 검증: `npm run test -- --run src/features/detail/DetailProcessList.test.tsx src/features/detail/ServerDetailScreen.test.tsx src/lib/format.test.ts`, `npm run test -- --run`, `npm run build`, `npm run electron:build`, `git diff --check`. 테스트 DOM의 text/title을 직접 검사해 browser-visible 출력의 보안 경계를 확인한다. 스타일/레이아웃·Electron bridge·Rust 변경이 없어 packaging/live SSH/실제 OS 알림은 재실행하지 않는다.
 - 단계 소스·회귀·하위 단계 보고·orders만 묶어 `Task #29 [Stage 6.1]: 프로세스 전체 명령의 비밀정보 가림 복구`로 기록한다. 최종 보고/orders는 별도 보고 commit으로 분리한다. 게시 시 기존 PR #30과 devel을 유지하고 ancestor·exact lease·기존 title/body drift를 검증하며, 이미 승인된 명시적 #29 참조와 별도 exact-close 정책을 유지한다.
 
+## Stage 6.2 — refetch 실패 시 마지막 성공 상세 보존
+
+- 기준 HEAD `72ee689cf0bb43f63fe3fb6d2184eb46b412ecdd`, Codex review `5449561295`, comment `4212998080` P2 한 건. 같은 스레드의 `codex 재리뷰 대응 수정 진행 일괄 승인`에 따라 직접 영향 계획·수정·검증·단계 커밋을 진행한다. 계획서는 먼저 단독 커밋해 exact SHA와 blob·ancestor를 결박한다. 일반 manual/skill, merge/issue close/thread resolution 및 원격 publication exact gate는 변경하지 않는다.
+- 제품 파일: `src/features/detail/ServerDetailScreen.tsx`, `ServerDetailScreen.test.tsx`. 이미 구현된 controller의 캐시 availability unknown 처리와 query cache는 변경하지 않는다.
+- 캐시 없는 최초 오류만 전체 ErrorState로 반환한다. 캐시가 있으면 서버 identity·health·마지막 snapshot·GPU/process 정보·refresh 조작을 보존하고 기존 DiagnosticPanel로 정제된 detail read 오류와 stale 데이터 안내를 함께 표시한다. 캐시의 availability를 실제 available로 표시하지 않는다.
+- 기존 refetch 실패 테스트를 화면 identity/health/snapshot/refresh/GPU의 실제 보존, unknown 강조 해제, 정제된 alert 및 캐시 무변경 검증으로 확장한다. 성공 refetch 후 오류 안내 제거·fresh identity/snapshot·available 강조 복귀까지 검증한다. 최초 loading/error·missing/null·선택 없음 회귀는 유지한다. 수정 전 실패를 기록한다.
+- 내부 기록: 기존 계획서·orders·report와 `mydocs/working/task_m001_29_stage6.2.md`. 제품/사용자 문서·API/DTO/DB·controller·AGENTS·설계 사본은 변경하지 않는다.
+- 검증 명령: `npm run test -- --run src/features/detail/ServerDetailScreen.test.tsx`, `npm run test -- --run`, `npm run build`, `npm run electron:build`, `git diff --check`. 실제 React Query refetch와 화면 DOM 검증을 사용한다. layout/bridge/Rust 변경이 없어 packaging/live SSH/OS 입력·알림은 실행하지 않는다.
+- 제품2경로+하위 단계 보고+orders만 `Task #29 [Stage 6.2]: 상세 재조회 실패 시 마지막 성공 화면 보존`으로 묶는다. 최종 보고 갱신·수용 및 원격 게시 tuple은 새 근거로 별도 결박한다. 기존 PR #30/devel·ancestor/exact lease·명시적 #29 참조/별도 exact-close 정책은 유지한다.
+
 ## 검증
 
 - 각 Stage의 검증을 단계 보고 전 실행하고 실패를 숨기거나 tests를 억제하지 않는다. 새 파일을 나열한 명령은 해당 단계에서 테스트를 실제 생성한 뒤 실행한다.
