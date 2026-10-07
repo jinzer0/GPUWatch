@@ -425,13 +425,15 @@ describe('ServerDetailScreen', () => {
 
   it('keeps full host, UUID and commands while distinguishing unknown process memory from real zero', async () => {
     const longCommand = '/opt/ml/experiments/phase-4/bin/train --model llama-70b --dataset /mnt/research/extremely-long-dataset-name --notes keep-full-command-visible';
+    const secretCommand = `${longCommand} --token=integration-secret --password "private phrase" --identity /Users/alice/.ssh/id_ed25519 --epochs 10`;
+    const safeCommand = `${longCommand} --token=[redacted] --password=[redacted] --identity [path redacted] --epochs 10`;
     const longUuid = 'GPU-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee-ffffffffffff-111111111111';
     const longHost = 'gpu-node-with-a-very-long-hostname.research-cluster.example.test';
     renderDetail({
       ...detailFixture,
       server: { ...detailFixture.server, host: longHost },
       gpus: [{ ...detailFixture.gpus[0], uuid: longUuid, processCount: 2, processes: [
-        { pid: 4321, username: 'very-long-service-account-name', command: longCommand,
+        { pid: 4321, username: 'very-long-service-account-name', command: secretCommand,
           gpuMemoryUsedMiB: null, gpuUtilizationPercent: null, cpuPercent: null, hostMemoryUsedMiB: null },
         { pid: 4322, username: 'alice', command: 'idle worker',
           gpuMemoryUsedMiB: 0, gpuUtilizationPercent: 0, cpuPercent: 0, hostMemoryUsedMiB: 0 }
@@ -441,8 +443,11 @@ describe('ServerDetailScreen', () => {
     const gpu = await gpuDisclosure('NVIDIA Test GPU');
     await openAdditionalMetrics(gpu);
     expect(within(gpu).getByText(longUuid)).toBeDefined();
-    const command = within(gpu).getByText(longCommand);
-    expect(command.getAttribute('title')).toBe(longCommand);
+    const command = within(gpu).getByText(safeCommand);
+    expect(command.getAttribute('title')).toBe(safeCommand);
+    for (const secret of ['integration-secret', 'private phrase', '/Users/alice/.ssh/id_ed25519']) {
+      expect(document.body.innerHTML).not.toContain(secret);
+    }
     const unknownRow = command.closest('tr');
     const zeroRow = within(gpu).getByText('idle worker').closest('tr');
     expect(unknownRow).not.toBeNull();

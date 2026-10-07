@@ -1,4 +1,4 @@
-import { formatMiB, formatUnknown } from '../../lib/format';
+import { formatDrawerCommand, formatMiB, formatUnknown } from '../../lib/format';
 import type { CollectorProcess } from '../../lib/types';
 
 export const DetailProcessList = ({ processes, unavailable = false }: {
@@ -37,7 +37,7 @@ export const DetailProcessList = ({ processes, unavailable = false }: {
         </thead>
         <tbody>
           {processes.map((process) => {
-            const command = formatUnknown(process.command);
+            const command = formatDrawerCommand(process.command);
 
             return (
               <tr className="border-t border-[color:var(--color-border)]" key={`${process.pid}-${process.gpuMemoryUsedMiB ?? 'unknown'}`}>

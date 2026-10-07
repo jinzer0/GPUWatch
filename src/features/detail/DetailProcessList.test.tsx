@@ -33,18 +33,35 @@ describe('DetailProcessList', () => {
     expect(within(region).queryByRole('button')).toBeNull();
   });
 
-  it('preserves the entire original command beyond 1000 characters in wrapped text and title', () => {
+  it('preserves the entire safe command beyond 1000 characters while redacting text and title', () => {
     const command = `python train.py\n  --description="${'long command '.repeat(100)}" --token=original-value`;
+    const expected = `python train.py\n--description="${'long command '.repeat(100)}" --token=[redacted]`;
     render(<DetailProcessList processes={[{ ...process, command }]} />);
 
     const table = screen.getByRole('table', { name: 'GPU 프로세스' });
     const commandCell = within(within(table).getAllByRole('row')[1]).getAllByRole('cell')[2];
 
     expect(command.length).toBeGreaterThan(1000);
-    expect(commandCell.textContent).toBe(command);
-    expect(commandCell.getAttribute('title')).toBe(command);
+    expect(commandCell.textContent).toBe(expected);
+    expect(commandCell.getAttribute('title')).toBe(expected);
+    expect(document.body.innerHTML).not.toContain('original-value');
     expect(commandCell.classList.contains('whitespace-pre-wrap')).toBe(true);
     expect(commandCell.classList.contains('break-words')).toBe(true);
+  });
+
+  it.each([
+    { command: 'python train.py --token=token-value --epochs 10', expected: 'python train.py --token=[redacted] --epochs 10', secret: 'token-value' },
+    { command: 'python train.py --password "secret words" --epochs 10', expected: 'python train.py --password=[redacted] --epochs 10', secret: 'secret words' },
+    { command: 'python train.py --identity /Users/alice/.ssh/id_ed25519 --epochs 10', expected: 'python train.py --identity [path redacted] --epochs 10', secret: '/Users/alice/.ssh/id_ed25519' },
+    { command: 'python train.py -----BEGIN OPENSSH PRIVATE KEY-----\nprivate-material\n-----END OPENSSH PRIVATE KEY----- --epochs 10', expected: 'python train.py [private key redacted] --epochs 10', secret: 'private-material' }
+  ])('redacts $secret from both visible command and tooltip', ({ command, expected, secret }) => {
+    render(<DetailProcessList processes={[{ ...process, command }]} />);
+    const table = screen.getByRole('table', { name: 'GPU 프로세스' });
+    const cell = within(within(table).getAllByRole('row')[1]).getAllByRole('cell')[2];
+
+    expect(cell.textContent).toBe(expected);
+    expect(cell.getAttribute('title')).toBe(expected);
+    expect(document.body.innerHTML).not.toContain(secret);
   });
 
   it('keeps null metadata unknown and actual zero values intact', () => {
