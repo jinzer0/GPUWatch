@@ -33,7 +33,12 @@ pub fn get_server_detail(
     };
     let health = repository.get_health(&id)?;
     let snapshot = repository.latest_snapshot(&id)?;
-    build_server_detail(server, health, snapshot).map(Some)
+    let mut detail = build_server_detail(server, health, snapshot)?;
+    let at = now_string();
+    for gpu in &mut detail.gpus {
+        gpu.availability = repository.gpu_availability(&id, &gpu.uuid, gpu.index, &at)?;
+    }
+    Ok(Some(detail))
 }
 
 pub fn list_processes(state: &AppState) -> Result<Vec<ProcessRowDto>, AppError> {

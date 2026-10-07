@@ -72,6 +72,7 @@ describe('Electron scheduler helper integration', () => {
     const recordingRunner: HelperRunner = {
       run(request) {
         helperActions.push(request.action);
+        if (request.action === 'list_servers') return Promise.resolve({ ok: true, data: [] });
         return runner.run(request);
       }
     };
@@ -115,21 +116,24 @@ describe('Electron scheduler helper integration', () => {
 
     const show = vi.fn();
     const scheduler = createScheduler({ notifier: { show } });
-    scheduler.start();
+    await scheduler.start(recordingRunner);
+    expect(helperActions).toContain('reset_availability_observations');
+    expect(helperActions.indexOf('consume_notification_events')).toBeLessThan(helperActions.indexOf('reset_availability_observations'));
+    expect(show).not.toHaveBeenCalled();
 
     await expect(scheduler.run(recordingRunner, { action: 'refresh_server', payload: { id: savedServer.data.id } })).resolves.toMatchObject({
       ok: true,
       data: { ok: true, status: 'online' }
     });
     expect(show).toHaveBeenCalledOnce();
-    expect(show).toHaveBeenCalledWith({ title: 'GPU available', body: 'Integration GPU Host · GPU 0 is available' });
+    expect(show).toHaveBeenCalledWith({ title: 'Configured condition met', body: 'Integration GPU Host · GPU 0: configured condition met' });
 
     await expect(scheduler.run(recordingRunner, { action: 'refresh_server', payload: { id: savedServer.data.id } })).resolves.toMatchObject({
       ok: true,
       data: { ok: true, status: 'online' }
     });
     expect(show).toHaveBeenCalledOnce();
-    expect(helperActions.filter((action) => action === 'consume_notification_events')).toHaveLength(2);
+    expect(helperActions.filter((action) => action === 'consume_notification_events')).toHaveLength(3);
     scheduler.stop();
   });
 });

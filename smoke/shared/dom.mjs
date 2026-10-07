@@ -62,20 +62,6 @@ export async function waitForEnabledClickableText(cdp, text, timeoutMs = 15000) 
   }, timeoutMs);
 }
 
-export async function clickNav(cdp, text) {
-  await evaluate(
-    cdp,
-    `(() => {
-      const needle = ${JSON.stringify(text)};
-      const element = Array.from(document.querySelectorAll('nav button')).find((candidate) =>
-        candidate.textContent.trim() === needle && !candidate.disabled
-      );
-      if (!element) throw new Error('No enabled nav button with text: ' + needle);
-      element.click();
-      return true;
-    })()`
-  );
-}
 
 export async function selectByLabel(cdp, label, value) {
   await evaluate(

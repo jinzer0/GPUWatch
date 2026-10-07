@@ -46,14 +46,37 @@ impl Repository {
         } = normalized;
 
         if let Some(id) = id {
-            let current = self.get_server(&id)?.ok_or_else(|| {
-                AppError::new("storage_app", "server_not_found", "server not found")
-            })?;
-            let changed = self.conn.execute(
+            let transaction = rusqlite::Transaction::new_unchecked(
+                &self.conn,
+                rusqlite::TransactionBehavior::Immediate,
+            )?;
+            let current = transaction
+                .query_row(
+                    "SELECT id, name, host, port, username, ssh_key_path,
+                            polling_interval_seconds, enabled, config_revision, created_at, updated_at
+                     FROM servers WHERE id = ?1",
+                    params![&id],
+                    read_server,
+                )
+                .optional()?
+                .ok_or_else(|| {
+                    AppError::new("storage_app", "server_not_found", "server not found")
+                })?;
+            let observations_changed = current.host != host
+                || current.port != port
+                || current.username != username
+                || current.ssh_key_path != ssh_key_path
+                || current.polling_interval_seconds != polling_interval_seconds
+                || current.enabled != enabled;
+            if !observations_changed && current.name == name {
+                transaction.commit()?;
+                return Ok(current);
+            }
+            let changed = transaction.execute(
                 "UPDATE servers
                  SET name = ?1, host = ?2, port = ?3, username = ?4, ssh_key_path = ?5,
                      polling_interval_seconds = ?6, enabled = ?7,
-                     config_revision = config_revision + 1, updated_at = ?8
+                     config_revision = config_revision + ?10, updated_at = ?8
                 WHERE id = ?9",
                 params![
                     &name,
@@ -64,7 +87,8 @@ impl Repository {
                     polling_interval_seconds,
                     bool_to_i64(enabled),
                     &now,
-                    &id
+                    &id,
+                    bool_to_i64(observations_changed)
                 ],
             )?;
             if changed == 0 {
@@ -74,7 +98,12 @@ impl Repository {
                     "server not found",
                 ));
             }
-            self.ensure_health(&id, if enabled { "idle" } else { "disabled" })?;
+            if observations_changed {
+                super::availability::reset_server(&transaction, &id)?;
+                super::watches::reset_server(&transaction, &id, &now)?;
+                transaction.execute("INSERT INTO server_health(server_id, status) VALUES(?1, ?2) ON CONFLICT(server_id) DO UPDATE SET status=excluded.status", params![id, if enabled { "idle" } else { "disabled" }])?;
+            }
+            transaction.commit()?;
             return self.get_server(&id)?.ok_or_else(|| {
                 AppError::new(
                     "storage_app",
@@ -128,9 +157,27 @@ impl Repository {
 
     pub fn set_server_enabled(&self, id: &str, enabled: bool) -> Result<Server, AppError> {
         let now = now_string();
-        let changed = self.conn.execute(
+        let transaction = rusqlite::Transaction::new_unchecked(
+            &self.conn,
+            rusqlite::TransactionBehavior::Immediate,
+        )?;
+        let current = transaction
+            .query_row(
+                "SELECT id, name, host, port, username, ssh_key_path,
+                        polling_interval_seconds, enabled, config_revision, created_at, updated_at
+                 FROM servers WHERE id = ?1",
+                params![id],
+                read_server,
+            )
+            .optional()?
+            .ok_or_else(|| AppError::new("storage_app", "server_not_found", "server not found"))?;
+        if current.enabled == enabled {
+            transaction.commit()?;
+            return Ok(current);
+        }
+        let changed = transaction.execute(
             "UPDATE servers SET enabled = ?1, config_revision = config_revision + 1, updated_at = ?2 WHERE id = ?3",
-            params![bool_to_i64(enabled), now, id],
+            params![bool_to_i64(enabled), &now, id],
         )?;
         if changed == 0 {
             return Err(AppError::new(
@@ -139,7 +186,10 @@ impl Repository {
                 "server not found",
             ));
         }
-        self.ensure_health(id, if enabled { "idle" } else { "disabled" })?;
+        super::availability::reset_server(&transaction, id)?;
+        super::watches::reset_server(&transaction, id, &now)?;
+        transaction.execute("INSERT INTO server_health(server_id, status) VALUES(?1, ?2) ON CONFLICT(server_id) DO UPDATE SET status=excluded.status", params![id, if enabled { "idle" } else { "disabled" }])?;
+        transaction.commit()?;
         self.get_server(id)?
             .ok_or_else(|| AppError::new("storage_app", "server_not_found", "server not found"))
     }

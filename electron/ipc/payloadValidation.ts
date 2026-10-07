@@ -89,6 +89,13 @@ export function validateHelperPayload(action: HelperAction, payload: unknown): H
       : invalidPayload(`Payload for ${action} must be empty.`);
   }
 
+  if (action === 'reset_availability_observations') {
+    return Object.keys(payload).length === 1 && Object.hasOwn(payload, 'serverId')
+      && (payload.serverId === null || isNonEmptyString(payload.serverId))
+      ? { ok: true, data: { serverId: payload.serverId } }
+      : invalidPayload('Reset payload must be exactly {serverId: non-empty string | null}.');
+  }
+
   if (idPayloadActions.has(action)) {
     return isNonEmptyString(payload.id)
       ? { ok: true, data: { id: payload.id } }

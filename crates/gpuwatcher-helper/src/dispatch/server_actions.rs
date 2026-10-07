@@ -10,7 +10,7 @@ use crate::dispatch::payload::{
     SetServerEnabledPayload,
 };
 use crate::dispatch::with_state;
-use crate::response::{app_error_response, ok_response, to_value};
+use crate::response::{app_error_response, helper_payload_error, ok_response, to_value};
 
 pub(super) fn dispatch_empty_payload_action(
     action: HelperAction,
@@ -37,6 +37,7 @@ pub(super) fn dispatch_empty_payload_action(
             | HelperAction::TestConnection
             | HelperAction::RefreshServer
             | HelperAction::PollDueServers
+            | HelperAction::ResetAvailabilityObservations
             | HelperAction::ListWatchRules
             | HelperAction::SaveGpuAvailableWatch
             | HelperAction::DeleteWatchRule => Err(dispatch_route_error(action)),
@@ -48,6 +49,34 @@ pub(super) fn dispatch_ssh_config_import(payload: serde_json::Map<String, Value>
     expect_empty_payload(&payload)
         .and_then(|()| ssh_config_import::import_ssh_config().and_then(to_value))
         .map_or_else(app_error_response, ok_response)
+}
+
+pub(super) fn dispatch_availability_reset(payload: serde_json::Map<String, Value>) -> Value {
+    let server_id = match reset_server_id(&payload) {
+        Ok(server_id) => server_id,
+        Err(error) => return app_error_response(error),
+    };
+    with_state(payload, |state, _payload| {
+        service::reset_availability_observations(&state, server_id).map(|()| Value::Null)
+    })
+}
+
+fn reset_server_id(payload: &serde_json::Map<String, Value>) -> Result<Option<String>, AppError> {
+    if payload.len() != 1 || !payload.contains_key("serverId") {
+        return Err(helper_payload_error(
+            "reset payload must contain exactly serverId",
+        ));
+    }
+    match &payload["serverId"] {
+        Value::Null => Ok(None),
+        Value::String(server_id) => {
+            require_non_empty(server_id, "serverId")?;
+            Ok(Some(server_id.clone()))
+        }
+        _ => Err(helper_payload_error(
+            "reset payload serverId must be a string or null",
+        )),
+    }
 }
 
 pub(super) fn dispatch_stateful_payload_action(
@@ -111,6 +140,7 @@ pub(super) fn dispatch_stateful_payload_action(
         | HelperAction::SeedDemoData
         | HelperAction::ListProcesses
         | HelperAction::PollDueServers
+        | HelperAction::ResetAvailabilityObservations
         | HelperAction::ConsumeNotificationEvents
         | HelperAction::Health => Err(dispatch_route_error(action)),
     })

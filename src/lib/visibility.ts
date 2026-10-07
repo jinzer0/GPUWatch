@@ -1,3 +1,7 @@
+import type { ProcessRowDto } from './types';
+
+export const processRowKey = (row: ProcessRowDto) => `${row.serverId}-${row.gpuUuid}-${row.pid}`;
+
 export { filterOverviewRows, sortOverviewRows } from './visibility/overview';
 export { filterProcessRows } from './visibility/processFilter';
 export { getVisibleProcessRows } from './visibility/processRows';

@@ -1,195 +1,214 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { listServers, queryKeys, setServerEnabled } from '../lib/api';
 import { useUiStore } from '../lib/store';
-import type { ServerOverviewDto, TabId } from '../lib/types';
+import type { Server, ServerOverviewDto } from '../lib/types';
 import { Shell } from './Shell';
 
-const tabCases: ReadonlyArray<{ readonly id: TabId; readonly label: string }> = [
-  { id: 'overview', label: 'Fleet' },
-  { id: 'detail', label: 'GPU Detail' },
-  { id: 'processes', label: 'Processes' },
-  { id: 'history', label: 'History' },
-  { id: 'settings', label: 'Settings' }
-];
+vi.mock('../lib/api', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../lib/api')>(),
+  listServers: vi.fn(),
+  setServerEnabled: vi.fn()
+}));
 
-const buildOverviewServer = ({ id, status }: { readonly id: string; readonly status: string }): ServerOverviewDto => ({
-  id,
-  name: `Server ${id}`,
-  host: `${id}.example.test`,
-  status,
-  gpuTotal: 2,
-  busyGpuCount: 1,
-  freeGpuCount: 1,
-  averageGpuUtilizationPercent: 62,
-  averageMemoryUsagePercent: 25,
-  maxTemperatureCelsius: 61,
-  lastSuccessAt: null,
-  lastErrorType: null,
-  lastErrorMessage: null,
+const server = (id: string, status: string): ServerOverviewDto => ({
+  id, name: `Server ${id}`, host: `${id}.example.test`, status,
+  gpuTotal: 2, busyGpuCount: 1, freeGpuCount: 1,
+  averageGpuUtilizationPercent: 62, averageMemoryUsagePercent: 25, maxTemperatureCelsius: 61,
+  lastSuccessAt: null, lastErrorType: null, lastErrorMessage: null
 });
-
-const overviewFixture: ServerOverviewDto[] = [buildOverviewServer({ id: 'server-1', status: 'online' })];
-
-const mixedStatusOverview: ServerOverviewDto[] = [
-  buildOverviewServer({ id: 'server-1', status: 'ONLINE' }),
-  buildOverviewServer({ id: 'server-2', status: 'offline' }),
-  buildOverviewServer({ id: 'server-3', status: 'online' })
-];
-
-const renderShell = (overview: ServerOverviewDto[] | null = overviewFixture) =>
-  render(
-    <Shell overview={overview}>
-      <section aria-label="Screen content">Metrics stay visible</section>
-    </Shell>
-  );
-
-const getRequiredElement = (container: HTMLElement, selector: string): HTMLElement => {
-  const element = container.querySelector(selector);
-
-  if (element instanceof HTMLElement) {
-    return element;
-  }
-
-  throw new Error(`Expected ${selector} to render`);
+const savedServer = (id: string, enabled: boolean): Server => ({
+  id, name: `Server ${id}`, host: `${id}.example.test`, port: 22, username: 'tester',
+  sshKeyPath: null, pollingIntervalSeconds: 10, enabled, configRevision: 1,
+  createdAt: '', updatedAt: ''
+});
+const renderShell = (overview: ServerOverviewDto[] | null = [server('one', 'disabled'), server('two', 'stale')]) => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  const view = render(<QueryClientProvider client={client}>
+    <Shell overview={overview}><section aria-label="Telemetry">Existing GPU detail</section></Shell>
+  </QueryClientProvider>);
+  return { ...view, client };
+};
+const openRowMenu = async (id = 'two') => {
+  const trigger = screen.getByRole('button', { name: `Server ${id} 서버 메뉴` });
+  fireEvent.click(trigger);
+  await waitFor(() => expect((screen.getByRole('menuitem', { name: '서버 편집' }) as HTMLButtonElement).disabled).toBe(false));
+  return trigger;
 };
 
-describe('Shell density mode', () => {
+describe('server-centered Shell', () => {
   beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(listServers).mockResolvedValue([savedServer('one', true), savedServer('two', false)]);
     window.localStorage.clear();
     delete window.gpuwatcher;
+    delete window.gpuwatcherUi;
     delete window.gpuWatcherElectron;
     useUiStore.setState(useUiStore.getInitialState(), true);
   });
 
-  it('defaults to full density and exposes a session-only toggle path', () => {
-    expect(useUiStore.getState().densityMode).toBe('full');
-
-    useUiStore.getState().toggleDensityMode();
-
-    expect(useUiStore.getState().densityMode).toBe('compact');
-    expect(window.localStorage.getItem('densityMode')).toBeNull();
-
-    useUiStore.getState().toggleDensityMode();
-
-    expect(useUiStore.getState().densityMode).toBe('full');
-  });
-
-  it('renders every primary navigation item', () => {
+  it('selects actual server IDs and keeps detail visible without a broad management entry', () => {
     renderShell();
-
-    const navigation = screen.getByRole('navigation');
-    expect(within(navigation).getAllByRole('button').map((button) => button.textContent)).toEqual(tabCases.map((tab) => tab.label));
+    expect(screen.queryByRole('button', { name: '서버 관리' })).toBeNull();
+    fireEvent.click(within(screen.getByRole('navigation', { name: '서버' })).getByRole('button', { name: 'Server two stale' }));
+    expect(useUiStore.getState().selectedServerId).toBe('two');
+    expect(screen.getByRole('button', { name: 'Server two stale' }).getAttribute('aria-current')).toBe('page');
+    expect(screen.queryByRole('button', { name: 'History' })).toBeNull();
+    expect(screen.getByRole('main', { name: 'Server detail content' })).toBeDefined();
+    expect(screen.getByText('Existing GPU detail')).toBeDefined();
+    expect(listServers).not.toHaveBeenCalled();
   });
 
-  it('clicking each navigation item updates the active tab and screen through the real store', () => {
+  it.each([['직접 추가', 'add'], ['SSH config 가져오기', 'import']] as const)('opens %s from the + menu', (label, action) => {
     renderShell();
-
-    const navigation = screen.getByRole('navigation');
-
-    for (const tab of tabCases) {
-      const tabButton = within(navigation).getByRole('button', { name: tab.label });
-
-      fireEvent.click(tabButton);
-
-      expect(useUiStore.getState().activeTab).toBe(tab.id);
-      expect(useUiStore.getState().activeScreen).toBe(tab.id);
-      expect(tabButton.getAttribute('aria-current')).toBe('page');
-      expect(
-        within(navigation)
-          .getAllByRole('button')
-          .filter((button) => button.getAttribute('aria-current') === 'page')
-          .map((button) => button.textContent)
-      ).toEqual([tab.label]);
-    }
+    const trigger = screen.getByRole('button', { name: '서버 추가 또는 가져오기' });
+    expect(trigger.hasAttribute('data-server-add-trigger')).toBe(true);
+    fireEvent.click(trigger);
+    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: '직접 추가' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: label }));
+    expect(useUiStore.getState()).toMatchObject({ managementOpen: true, managementAction: action, editingServerId: null });
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+    expect(screen.getByRole('main', { name: 'Server detail content' })).toBeDefined();
   });
 
-  it('renders Display density controls and applies the root density attribute', () => {
-    const view = renderShell();
-
-    const shell = getRequiredElement(view.container, '.app-shell');
-    const fullButton = screen.getByRole('button', { name: 'Use full density' });
-    const compactButton = screen.getByRole('button', { name: 'Use compact density' });
-
-    expect(screen.getByText('Display density')).toBeDefined();
-    expect(shell.matches('.app-shell[data-density="full"]')).toBe(true);
-    expect(fullButton.getAttribute('aria-pressed')).toBe('true');
-    expect(compactButton.getAttribute('aria-pressed')).toBe('false');
-
-    fireEvent.click(compactButton);
-
-    expect(useUiStore.getState().densityMode).toBe('compact');
-    expect(shell.matches('.app-shell[data-density="compact"]')).toBe(true);
-    expect(compactButton.getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByText('Metrics stay visible')).toBeDefined();
-    expect(window.localStorage.getItem('densityMode')).toBeNull();
-
-    fireEvent.click(fullButton);
-
-    expect(useUiStore.getState().densityMode).toBe('full');
-    expect(shell.matches('.app-shell[data-density="full"]')).toBe(true);
+  it.each([['서버 편집', 'edit'], ['서버 삭제', 'delete'], ['연결 테스트', 'test']] as const)('binds %s to its row rather than selection', async (label, action) => {
+    useUiStore.getState().selectServer('one');
+    renderShell();
+    const trigger = await openRowMenu();
+    expect(trigger.getAttribute('data-server-menu-trigger')).toBe('two');
+    fireEvent.click(screen.getByRole('menuitem', { name: label }));
+    expect(useUiStore.getState()).toMatchObject({ selectedServerId: 'one', editingServerId: 'two', managementAction: action, managementOpen: true });
+    expect(document.activeElement).toBe(trigger);
+    expect(screen.getByRole('button', { name: 'Server one disabled' }).getAttribute('aria-current')).toBe('page');
   });
 
-  it('renders titlebar identity and updates the active page label', () => {
-    const view = renderShell();
-    const titlebar = getRequiredElement(view.container, '.window-titlebar');
-
-    expect(within(titlebar).getByText('GPUWatcher')).toBeDefined();
-    expect(within(titlebar).getAllByText('Fleet')).toHaveLength(2);
-    expect(within(titlebar).getByText('GPU Activity Monitor')).toBeDefined();
-    expect(screen.getByRole('main', { name: 'Fleet content' })).toBeDefined();
-
-    fireEvent.click(screen.getByRole('button', { name: 'History' }));
-
-    expect(within(titlebar).getByText('History')).toBeDefined();
-    expect(screen.getByRole('main', { name: 'History content' })).toBeDefined();
+  it('supports menu arrows, Home/End, Escape and outside dismissal with focus return', async () => {
+    renderShell();
+    const trigger = await openRowMenu();
+    const menu = screen.getByRole('menu');
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: '서버 편집' })));
+    fireEvent.keyDown(menu, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: '서버 삭제' }));
+    fireEvent.keyDown(menu, { key: 'End' });
+    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: '모니터링 시작' }));
+    fireEvent.keyDown(menu, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: '서버 편집' }));
+    fireEvent.keyDown(menu, { key: 'ArrowUp' });
+    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: '모니터링 시작' }));
+    fireEvent.keyDown(menu, { key: 'Home' });
+    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: '서버 편집' }));
+    fireEvent.keyDown(menu, { key: 'Escape' });
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+    fireEvent.click(trigger);
+    fireEvent.pointerDown(screen.getByText('Existing GPU detail'));
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
   });
 
-  it('identifies browser fallback and desktop backend runtime states without changing the Shell API', () => {
-    const fallbackView = renderShell();
-    const fallbackStatus = within(getRequiredElement(fallbackView.container, '.titlebar-status'));
-
-    expect(fallbackStatus.getByText('Runtime')).toBeDefined();
-    expect(fallbackStatus.getByText('Browser fallback')).toBeDefined();
-    expect(fallbackStatus.getByTitle('Runtime: Browser fallback')).toBeDefined();
-
-    fallbackView.unmount();
-    window.gpuwatcher = {};
-    window.gpuWatcherElectron = { isElectron: true, platform: 'darwin', versions: {} };
-
-    const desktopView = renderShell();
-    const desktopStatus = within(getRequiredElement(desktopView.container, '.titlebar-status'));
-
-    expect(desktopStatus.getByText('Desktop backend')).toBeDefined();
-    expect(desktopStatus.getByTitle('Runtime: Desktop backend')).toBeDefined();
+  it('uses saved enabled state and retains it after a failed target-bound toggle', async () => {
+    useUiStore.getState().selectServer('two');
+    let reject!: (error: Error) => void;
+    vi.mocked(setServerEnabled).mockImplementation(() => new Promise((_, fail) => { reject = fail; }));
+    renderShell();
+    await openRowMenu('one');
+    fireEvent.click(screen.getByRole('menuitem', { name: '모니터링 중지' }));
+    expect(setServerEnabled).toHaveBeenCalledWith('one', false);
+    expect((screen.getByRole('menuitem', { name: '모니터링 중지' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole('status').textContent).toContain('Server one: 모니터링 변경 중');
+    expect(useUiStore.getState().managementOpen).toBe(false);
+    reject(new Error('Permission denied'));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Server one: Permission denied'));
+    expect((screen.getByRole('menuitem', { name: '모니터링 중지' }) as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
+    expect(screen.getByRole('alert').textContent).toContain('Permission denied');
   });
 
-  it('renders unknown server counts when overview data has not loaded', () => {
-    renderShell(null);
-
-    expect(screen.getAllByText('unknown')).toHaveLength(2);
+  it('uses the same keyboard and dismissal contract for the + menu', () => {
+    renderShell();
+    const trigger = screen.getByRole('button', { name: '서버 추가 또는 가져오기' });
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+    const menu = screen.getByRole('menu');
+    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: '직접 추가' }));
+    fireEvent.keyDown(menu, { key: 'ArrowUp' });
+    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'SSH config 가져오기' }));
+    fireEvent.keyDown(menu, { key: 'Home' });
+    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: '직접 추가' }));
+    fireEvent.keyDown(menu, { key: 'End' });
+    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'SSH config 가져오기' }));
+    fireEvent.keyDown(menu, { key: 'Escape' });
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+    expect(useUiStore.getState().managementOpen).toBe(false);
   });
 
-  it('renders zero server and online count labels for an empty overview', () => {
+  it('invalidates saved servers and overview after a successful toggle without opening a sheet', async () => {
+    vi.mocked(setServerEnabled).mockResolvedValue(savedServer('two', true));
+    const { client } = renderShell();
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+    await openRowMenu();
+    vi.mocked(listServers).mockResolvedValue([savedServer('one', true), savedServer('two', true)]);
+    fireEvent.click(screen.getByRole('menuitem', { name: '모니터링 시작' }));
+    await waitFor(() => expect(screen.getByRole('menuitem', { name: '모니터링 중지' })).toBeDefined());
+    expect(setServerEnabled).toHaveBeenCalledWith('two', true);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.servers });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.overview });
+    expect(useUiStore.getState().managementOpen).toBe(false);
+  });
+
+  it('disables missing and loading targets with named diagnostics', async () => {
+    let resolve!: (servers: Server[]) => void;
+    vi.mocked(listServers).mockImplementation(() => new Promise((done) => { resolve = done; }));
+    renderShell();
+    fireEvent.click(screen.getByRole('button', { name: 'Server two 서버 메뉴' }));
+    expect(screen.getByRole('status').textContent).toContain('Server two: 저장된 서버를 확인 중');
+    expect((screen.getByRole('menuitem', { name: '모니터링 변경' }) as HTMLButtonElement).disabled).toBe(true);
+    resolve([]);
+    await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Server two: 저장된 서버를 찾을 수 없습니다'));
+    fireEvent.click(screen.getByRole('menuitem', { name: '서버 삭제' }));
+    expect(useUiStore.getState().managementOpen).toBe(false);
+    expect(setServerEnabled).not.toHaveBeenCalled();
+  });
+
+  it('distinguishes unavailable server data from an empty registry', () => {
+    const view = renderShell(null);
+    expect(screen.getByText('서버 목록을 확인할 수 없습니다')).toBeDefined();
+    expect(screen.queryByText('등록된 서버가 없습니다')).toBeNull();
+    view.unmount();
     renderShell([]);
-
-    expect(screen.getByText('0 servers')).toBeDefined();
-    expect(screen.getByText('0 online')).toBeDefined();
+    expect(screen.getByText('등록된 서버가 없습니다')).toBeDefined();
+    expect(screen.getByText('GPUWatcher', { selector: '.titlebar-page-title' })).toBeDefined();
+    expect(screen.getByText('브라우저 · 읽기 전용')).toBeDefined();
   });
 
-  it('counts online servers case-insensitively in the shell status copy', () => {
-    renderShell(mixedStatusOverview);
-
-    expect(screen.getByText('3 servers')).toBeDefined();
-    expect(screen.getByText('2 online')).toBeDefined();
-    expect(screen.getByTitle('Fleet: 3 servers')).toBeDefined();
-    expect(screen.getByTitle('Online servers: 2 online')).toBeDefined();
+  it('reports named query failure and blocks menu mutations', async () => {
+    vi.mocked(listServers).mockRejectedValue(new Error('Registry unavailable'));
+    renderShell();
+    fireEvent.click(screen.getByRole('button', { name: 'Server two 서버 메뉴' }));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Server two: 서버 조회 실패 — Registry unavailable'));
+    expect((screen.getByRole('menuitem', { name: '서버 편집' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('menuitem', { name: '모니터링 변경' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(setServerEnabled).not.toHaveBeenCalled();
   });
 
-  it('renders children inside the semantic page container', () => {
-    const view = renderShell();
-    const pageContainer = getRequiredElement(view.container, '.app-content .page-container');
+  it('opens settings through the dedicated local UI method, not a helper action', async () => {
+    const openSettings = vi.fn().mockResolvedValue({ ok: true, data: undefined });
+    window.gpuwatcherUi = {
+      openSettings,
+      getAppearance: vi.fn(), setAppearance: vi.fn(), onAppearanceChanged: vi.fn()
+    };
+    renderShell();
+    fireEvent.click(screen.getByRole('button', { name: '외형 설정 열기' }));
+    await waitFor(() => expect(openSettings).toHaveBeenCalledOnce());
+    expect(window.gpuwatcher).toBeUndefined();
+  });
 
-    expect(within(pageContainer).getByText('Metrics stay visible')).toBeDefined();
+  it('reports settings window failure instead of pretending a browser window opened', async () => {
+    renderShell();
+    fireEvent.click(screen.getByRole('button', { name: '외형 설정 열기' }));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/backend|desktop|unavailable/i));
   });
 });
