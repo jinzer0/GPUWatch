@@ -4,11 +4,24 @@ GitHub Issue: [#29](https://github.com/jinzer0/GPUWatch/issues/29)
 마일스톤: M001
 작성일: 2026-10-06
 갱신일: 2026-10-08
-상태: Stage 1–6 승인·커밋 완료, Stage 6 제품 커밋 수용 재검증·보고 갱신 완료 — 보고서/오늘할일 전용 커밋 승인 대기; 게시 검증 미완료
+상태: Stage 6.1 보안 재리뷰 수정·커밋·제품 커밋 수용 재검증 완료, 새 보고/증거 및 publication exact 결박 대기
 수행계획서: [`task_m001_29.md`](../plans/task_m001_29.md)
 구현계획서: [`task_m001_29_impl.md`](../plans/task_m001_29_impl.md)
 
-## 최신 갱신 — Stage 6 재리뷰 대응과 최종 수용 근거
+## 최신 갱신 — Stage 6.1 전체 명령의 비밀정보 가림
+
+- Codex review `5449421556`, comment `4212876195` P1 대응. 같은 스레드의 `codex 리뷰 대응 수정 일괄 승인 수정 커밋 푸시까지`에 따라 계획·수정·검증·단계 커밋과 직접 영향 보고 기록을 진행한다. 일반 manual/skill을 변경하거나 실제 확인 전 future SHA가 승인됐다고 표현하지 않는다. 새 artifact/exact publication 경계와 merge/close/thread resolution은 구분한다.
+- 계획 commit `23cd9574533badfff69acab03eafb9c68fe520ef`, blob `37cb5332992ceeaaceb35fdc03746b2367993cd1`; 제품 commit `1f0c0e4902e4e6d1ca0755732672bc48a84a7f4e`, parent `23cd9574533badfff69acab03eafb9c68fe520ef`, tree `703f59e2803c72956df4e2b89b6b2b38c908898e`. 계획 단독 커밋과 제품5경로 커밋을 분리하고 path/mode/blob·parent/tree·attribution·clean을 확인했다.
+- `DetailProcessList.tsx`에서 기존 `formatDrawerCommand`를 재사용해 cell text와 title 양쪽을 정제한다. 1000자 이상 안전한 전체 명령·tail은 유지하고 token/password/key path/private key material을 가린다. 기존 노출 강제 테스트를 교체하고 component 및 실제 detail 경로 회귀를 추가했다. unknown/실제0/API/DTO/DB와 나머지 UI는 그대로다.
+- 직접 영향 파일: `src/features/detail/DetailProcessList.tsx`, `DetailProcessList.test.tsx`, `ServerDetailScreen.test.tsx`. 내부 보고는 기존 위치와 [`task_m001_29_stage6.1.md`](../working/task_m001_29_stage6.1.md)를 사용한다. 제품 문서·AGENTS/manual/skill·설계 사본 변경은 없다.
+- 수정 전 focused **6 failed / 65 passed**(exit1), 수정 후 focused **71 passed** 및 전체 **27 files / 424 passed**. 제품 commit에서 focused·전체 Vitest, `npm run build`, `npm run electron:build`, `git diff --check`의 **5명령 재실행도 모두 exit0**다. 정확한 명령은 하위 단계 보고와 원문에 있다.
+- 최신 제품 commit 수용 원문 `.omo/evidence/task-29-final-stage6.1-acceptance.txt`, 전체 UTF-8 바이트 SHA-256 `12eaa336dd80daf40664933fe2cb6fb8286301b9af1e8fb4c9c4279dac09fc3a`. 이전 Stage 6 근거·tuple은 새 수용에 재사용하지 않는다. 수정 전/구현 중 증거 hash와 실행 한계는 하위 단계 보고에 보존한다.
+- DOM text/title/전체 HTML에서 비밀 값이 없음을 직접 확인하고 안전한 전체 명령과 exact 일치를 검사했다. 기존 sanitizer의 지원 패턴을 복구한 것이며 임의 형식의 모든 비밀을 검출한다고 주장하지 않는다. formatter 설정 부재로 임의 JS/TS formatter를 설치하지 않았다.
+- Rust·bridge·레이아웃 변경이 없어 이번 하위 단계는 Cargo/packaging/UI smoke/live SSH/실제 OS 입력/알림을 재실행하지 않았다. core151/helper25는 이전 Stage 6 관측이며 이번 재실행 수치가 아니다. 기존 unsigned 및 helper timeout 간헐성 한계는 유지한다.
+- Stage 6 final `f972a36fbf3ff44b8676251d3173cac9df644111`까지 PR #30 갱신은 승인된 ancestor+exact lease로 완료됐다. 이번 Task 한정 명시적 #29 본문 참조/별도 exact-close 승인 정책도 승인되어 게시 검증이 통과했다. receipt `.omo/evidence/task-29-pr30-stage6-publication-20261007T225356Z.txt`, SHA-256 `e7c013f77df7518086417c6eb9c76bfcf7659fa9900d0355bc45000301f009f1`. 자동 closing linkage는 빈 목록인 진단 그대로며 자동 close 성공을 주장하지 않는다.
+- Stage 6.1은 아직 원격 미게시이며 새 exact artifact/publication 결박이 필요하다. merge·issue close·댓글/thread resolution은 실행하지 않았다. 아래 Stage 6/Stage 1–5 절은 역사 기록이고 그 당시 미게시·절차 미승인 표시는 최신 상태가 아니다.
+
+## Stage 6 역사 기록 — 재리뷰 대응과 최종 수용 근거
 
 아래 기존 Stage 1–5 요약·정량 diff·15명령·smoke 이력은 당시 기록으로 보존한다. 최신 단계 수는 **6**, 최신 제품 수용 HEAD는 `9d60c532719e7f971149a95d2f81a0b9ad316d00`이다. 과거 core148/storage46 및 기존 final report/evidence/publication tuple을 새 수용에 재사용하지 않는다.
 
