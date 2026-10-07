@@ -389,8 +389,15 @@ fn absent_uuid_uses_index_identity_and_index_change_starts_new_condition() {
 }
 
 #[test]
-fn equivalent_and_name_only_server_saves_preserve_availability_watch_sustain_and_health() {
-    for change in ["unchanged", "normalized", "normalized_key", "name"] {
+fn equivalent_and_name_only_server_saves_and_repeated_enabled_preserve_availability_watch_sustain_and_health(
+) {
+    for change in [
+        "unchanged",
+        "normalized",
+        "normalized_key",
+        "name",
+        "repeated_enabled",
+    ] {
         let temp = tempfile::tempdir().expect("temp dir");
         let path = temp.path().join("availability.sqlite3");
         let repository = repository(&path);
@@ -471,7 +478,29 @@ fn equivalent_and_name_only_server_saves_preserve_availability_watch_sustain_and
                 }
                 _ => {}
             }
-            let saved = repository.save_server(updated).expect("save");
+            let snapshot_before =
+                serde_json::to_value(repository.latest_snapshot(&server.id).expect("snapshot"))
+                    .expect("snapshot JSON");
+            let saved = if change == "repeated_enabled" {
+                let first = repository
+                    .set_server_enabled(&server.id, true)
+                    .expect("first repeated enable");
+                assert_eq!(first, current);
+                repository
+                    .set_server_enabled(&server.id, true)
+                    .expect("second repeated enable")
+            } else {
+                repository.save_server(updated).expect("save")
+            };
+            assert_eq!(
+                serde_json::to_value(
+                    repository
+                        .latest_snapshot(&server.id)
+                        .expect("preserved snapshot")
+                )
+                .expect("snapshot JSON"),
+                snapshot_before
+            );
             if change == "name" {
                 assert_eq!(
                     saved.name,

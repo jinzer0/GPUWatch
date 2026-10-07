@@ -157,7 +157,24 @@ impl Repository {
 
     pub fn set_server_enabled(&self, id: &str, enabled: bool) -> Result<Server, AppError> {
         let now = now_string();
-        let transaction = self.conn.unchecked_transaction()?;
+        let transaction = rusqlite::Transaction::new_unchecked(
+            &self.conn,
+            rusqlite::TransactionBehavior::Immediate,
+        )?;
+        let current = transaction
+            .query_row(
+                "SELECT id, name, host, port, username, ssh_key_path,
+                        polling_interval_seconds, enabled, config_revision, created_at, updated_at
+                 FROM servers WHERE id = ?1",
+                params![id],
+                read_server,
+            )
+            .optional()?
+            .ok_or_else(|| AppError::new("storage_app", "server_not_found", "server not found"))?;
+        if current.enabled == enabled {
+            transaction.commit()?;
+            return Ok(current);
+        }
         let changed = transaction.execute(
             "UPDATE servers SET enabled = ?1, config_revision = config_revision + 1, updated_at = ?2 WHERE id = ?3",
             params![bool_to_i64(enabled), &now, id],

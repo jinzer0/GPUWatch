@@ -101,6 +101,134 @@ fn equivalent_server_saves_preserve_record_health_and_in_flight_poll_revision() 
 }
 
 #[test]
+fn repeated_server_enabled_writes_preserve_record_health_and_poll_completion() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repository = open_repository(&temp_dir.path().join("repository.sqlite3"));
+    let server = repository
+        .save_server(sample_server_input())
+        .expect("server");
+    for enabled in [true, false, true] {
+        let current = repository
+            .set_server_enabled(&server.id, enabled)
+            .expect("transition");
+        for polling in [false, true] {
+            if polling && enabled {
+                repository
+                    .mark_poll_started(&server.id, "2026-06-01T00:00:00Z")
+                    .expect("poll started");
+            }
+            let health = repository.get_health(&server.id).expect("health");
+            for _ in 0..2 {
+                assert_eq!(
+                    repository
+                        .set_server_enabled(&server.id, enabled)
+                        .expect("repeated write"),
+                    current
+                );
+                assert_eq!(
+                    repository.get_health(&server.id).expect("preserved health"),
+                    health
+                );
+                assert_eq!(
+                    repository
+                        .poll_target_current(&server.id, current.config_revision)
+                        .expect("poll current"),
+                    enabled
+                );
+            }
+        }
+        if enabled {
+            repository
+                .store_failure(
+                    &server.id,
+                    &AppError::new("transport_ssh", "ssh_timeout", "timeout"),
+                    "2026-06-01T00:00:30Z",
+                )
+                .expect("poll completes");
+            let health = repository
+                .get_health(&server.id)
+                .expect("health")
+                .expect("health row");
+            assert_eq!(health.status, "offline");
+            assert_eq!(
+                health.last_poll_finished_at.as_deref(),
+                Some("2026-06-01T00:00:30Z")
+            );
+        }
+    }
+}
+
+#[test]
+fn server_enabled_transitions_increment_revision_and_invalidate_poll_targets() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let repository = open_repository(&temp_dir.path().join("repository.sqlite3"));
+    let mut current = repository
+        .save_server(sample_server_input())
+        .expect("server");
+    for enabled in [false, true] {
+        let changed = repository
+            .set_server_enabled(&current.id, enabled)
+            .expect("transition");
+        assert_eq!(changed.config_revision, current.config_revision + 1);
+        assert_eq!(changed.enabled, enabled);
+        assert!(!repository
+            .poll_target_current(&current.id, current.config_revision)
+            .expect("old target stale"));
+        assert_eq!(
+            repository
+                .get_health(&current.id)
+                .expect("health")
+                .expect("health row")
+                .status,
+            if enabled { "idle" } else { "disabled" }
+        );
+        current = changed;
+    }
+}
+
+#[test]
+fn server_enabled_compares_latest_value_after_waiting_for_a_wal_writer() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let path = temp_dir.path().join("repository.sqlite3");
+    let repository = open_repository(&path);
+    let server = repository
+        .save_server(sample_server_input())
+        .expect("server");
+    let (ready_tx, ready_rx) = mpsc::channel();
+    let (attempt_tx, attempt_rx) = mpsc::channel();
+    let worker_path = path.clone();
+    let id = server.id.clone();
+    let worker = thread::spawn(move || {
+        let repository = Repository::open(&worker_path).expect("worker repository");
+        ready_tx.send(()).expect("ready");
+        attempt_rx.recv().expect("attempt");
+        repository.set_server_enabled(&id, false)
+    });
+    ready_rx
+        .recv_timeout(Duration::from_secs(1))
+        .expect("worker ready");
+    let writer = Connection::open(&path).expect("writer");
+    writer
+        .execute_batch("BEGIN IMMEDIATE;")
+        .expect("writer lock");
+    writer.execute("UPDATE servers SET enabled = 0, config_revision = config_revision + 1, updated_at = '2026-06-01T00:00:00Z' WHERE id = ?1", [&server.id]).expect("concurrent transition");
+    attempt_tx.send(()).expect("attempt");
+    thread::sleep(Duration::from_millis(50));
+    writer.execute_batch("COMMIT;").expect("release lock");
+    let saved = worker
+        .join()
+        .expect("worker joined")
+        .expect("latest value no-op");
+    assert!(!saved.enabled);
+    assert_eq!(saved.config_revision, server.config_revision + 1);
+    assert_eq!(saved.updated_at, "2026-06-01T00:00:00Z");
+    assert_eq!(
+        repository.get_server(&server.id).expect("server"),
+        Some(saved)
+    );
+}
+
+#[test]
 fn name_only_server_save_keeps_in_flight_poll_current_and_allows_completion() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let db_path = temp_dir.path().join("repository.sqlite3");
