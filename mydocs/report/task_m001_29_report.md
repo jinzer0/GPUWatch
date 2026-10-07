@@ -4,11 +4,22 @@ GitHub Issue: [#29](https://github.com/jinzer0/GPUWatch/issues/29)
 마일스톤: M001
 작성일: 2026-10-06
 갱신일: 2026-10-08
-상태: Stage 6.1 보안 재리뷰 수정·커밋·제품 커밋 수용 재검증 완료, 새 보고/증거 및 publication exact 결박 대기
+상태: Stage 6.2 재리뷰 수정·커밋·제품 커밋 수용 재검증 완료, 새 보고/증거 및 publication exact 결박 대기
 수행계획서: [`task_m001_29.md`](../plans/task_m001_29.md)
 구현계획서: [`task_m001_29_impl.md`](../plans/task_m001_29_impl.md)
 
-## 최신 갱신 — Stage 6.1 전체 명령의 비밀정보 가림
+## 최신 갱신 — Stage 6.2 상세 재조회 실패와 회복
+
+- Codex review `5449561295`, comment `4212998080` P2에 대한 같은 스레드의 재리뷰 수정 진행 일괄 승인으로 계획·구현·검증·단계 커밋과 직접 영향 보고를 진행했다. 새 final report/evidence와 publication exact 결박, merge/close/thread resolution 경계는 유지한다.
+- 계획 OID `95b4fdc89714091c7c1af7ce5726c5eb67a87916`, blob `3518335d295ebe6b76e14ecbe679b305741ff681`; 제품 OID `3c10ff65a654797cf973a847482153fac7fd7ebc`, parent `95b4fdc89714091c7c1af7ce5726c5eb67a87916`, tree `48ef3f91d628f97d87790311ef1cde53ea8b430e`. 계획 단일 경로·현재 blob, 제품4경로·100644·blob·parent/tree·attribution·clean을 확인했다.
+- `ServerDetailScreen.tsx`와 해당 테스트만 수정했다. 최초 error는 전체 오류로 반환하되 cached refetch failure는 마지막 성공 identity/health/snapshot/GPU/refresh와 정제된 Detail diagnostic alert·stale 안내를 함께 표시한다. controller의 availability unknown projection/cache는 변경하지 않았고 실제 available 강조는 해제한다. 성공 refetch 후 오류 안내가 사라지고 fresh identity/시각·available 강조가 복귀한다.
+- 수정 전 focused1 fail로 서버 heading 소실을 재현했다. 수정 후 detail48·전체27 files/424 및 renderer/Electron build·diff check 통과. 제품 commit에서 동일5명령 최종 재검증도 모두 exit0다. 명령: `npm run test -- --run src/features/detail/ServerDetailScreen.test.tsx`, `npm run test -- --run`, `npm run build`, `npm run electron:build`, `git diff --check`.
+- 최신 수용 원문 `.omo/evidence/task-29-final-stage6.2-acceptance.txt`, 전체 UTF-8 바이트 SHA-256 `89f76f1e4c0a449047d070725e373b7adce6ec82850f6cb21d4156e9a5a92e80`. 이전 tuple/evidence를 새 수용에 재사용하지 않는다. 실패/구현 중 근거는 [`task_m001_29_stage6.2.md`](../working/task_m001_29_stage6.2.md)에 보존했다.
+- 실제 React Query refetch 및 DOM 검증이다. 캐시 무변경·캐시 없는 error·정제된 token/key path 진단·실패 중 refresh 가능·성공 재조회 복구를 확인했다. OS 물리 입력/live SSH/실제 알림의 성공 증거가 아니다. Rust/bridge/metric layout 변경이 없어 Cargo/packaging/smoke는 이번 하위 단계에서 재실행하지 않았다. core151/helper25·unsigned 및 timeout 간헐성 한계는 이전 관측으로 유지한다.
+- 내부 문서 위치는 기존 계획/working/orders/report를 유지하며 API/DTO/DB·controller·제품 문서/AGENTS/manual/skill·설계 사본은 변경하지 않았다.
+- Stage 6.1 final `72ee689cf0bb43f63fe3fb6d2184eb46b412ecdd`까지 PR #30에 게시 검증 완료했다. receipt `.omo/evidence/task-29-pr30-stage6.1-publication-20261007T231344Z.txt`, SHA-256 `9e27c9062fb7e7ef3f36b1adf909afcc85659a28a6314a003c8f896b31c50a72`. 이번 Stage 6.2는 아직 원격 미게시다. PR #30/devel·ancestor/exact lease·명시적 #29 본문 참조와 별도 exact-close 정책은 유지하며 새 tuple이 필요하다. merge/issue close/thread resolution은 실행하지 않았다.
+
+## Stage 6.1 역사 기록 — 전체 명령의 비밀정보 가림
 
 - Codex review `5449421556`, comment `4212876195` P1 대응. 같은 스레드의 `codex 리뷰 대응 수정 일괄 승인 수정 커밋 푸시까지`에 따라 계획·수정·검증·단계 커밋과 직접 영향 보고 기록을 진행한다. 일반 manual/skill을 변경하거나 실제 확인 전 future SHA가 승인됐다고 표현하지 않는다. 새 artifact/exact publication 경계와 merge/close/thread resolution은 구분한다.
 - 계획 commit `23cd9574533badfff69acab03eafb9c68fe520ef`, blob `37cb5332992ceeaaceb35fdc03746b2367993cd1`; 제품 commit `1f0c0e4902e4e6d1ca0755732672bc48a84a7f4e`, parent `23cd9574533badfff69acab03eafb9c68fe520ef`, tree `703f59e2803c72956df4e2b89b6b2b38c908898e`. 계획 단독 커밋과 제품5경로 커밋을 분리하고 path/mode/blob·parent/tree·attribution·clean을 확인했다.
