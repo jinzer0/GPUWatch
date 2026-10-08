@@ -4,7 +4,7 @@
 GitHub Issue: [#31](https://github.com/jinzer0/GPUWatch/issues/31)
 마일스톤: M001
 작성일: 2026-10-08
-상태: 수행계획 내용 승인 반영·구현계획 내용 승인 대기, 제품 구현 미착수
+상태: 원계획 승인·Stage 1 완료, Stage 2 signed runtime smoke 실패 보존. Stage 2.1 보정안 내용 승인 대기, 보정 제품 수정 미착수
 수행계획 기록 commit: `11e79f7e05e9ce22185be7bb3445a60ada75e6ea`
 수행계획 blob: `d8f3f56b7b01968970d690dc8056806e028bf41a`
 작업 위치: `/Users/kjy/Desktop/Codes/projects/GPUWatch-task31`, `local/task31`
@@ -15,9 +15,10 @@ GitHub Issue: [#31](https://github.com/jinzer0/GPUWatch/issues/31)
 |---|---|---|---|
 | 1 | v0.2.0·서명/공증 실행 경계 | 버전·lockfile, signed driver와 signer, 최소 entitlements, signed smoke·unit tests | focused/전체 Vitest, Cargo, 빌드, unsigned 회귀, remote 제출 없는 mock gate |
 | 2 | 실제 서명·Apple 공증·패키지 수용 | signed app/DMG/ZIP, exact 제출 입력, Accepted·ticket·hash evidence | 앱/helper/DMG 서명, arm64/version, spctl/stapler, 격리 packaged smoke |
+| 2.1 | signed smoke 보정·실제 검증 재개 | 서명 보존 startup·fault 분리·최신 plan 결박, 보정 단계 보고 | mock/전체 회귀·unsigned 보존, 별도 승인된 새 source/run의 실제 signed gate |
 | 3 | 문서·통합 수용·배포 준비 보고 | 기존 README/체크리스트/AGENTS, 단계·최종 보고 | 전체 gate, 최종 artifact 재검증, 문서 경계·provenance 확인 |
 
-Stage 1에 실제 Stage 2 실행 driver·검증기와 mock 테스트까지 포함한다. Stage 2에서 미커밋 제품 코드를 사용해 원격 제출하지 않도록 Stage 1 제품 commit에 빌드·검증 경로를 고정한다. Stage 2는 승인된 코드로 실제 artifact를 만들고 검증하는 단계다.
+Stage 1에 실제 Stage 2 실행 driver·검증기와 mock 테스트까지 포함한다. Stage 2에서 미커밋 제품 코드를 사용해 원격 제출하지 않도록 Stage 1 제품 commit에 빌드·검증 경로를 고정한다. Stage 2는 승인된 코드로 실제 artifact를 만들고 검증하는 단계다. 아래 Stage 2.1은 발견된 검증기 결함을 보완하기 위한 별도 승인 경계이며 원 Stage 1/Apple 승인 기록을 소급 변경하지 않는다.
 
 ## 문서 위치 확인
 
@@ -181,6 +182,84 @@ Task #31 Stage 2: arm64 앱과 배포 패키지 서명 공증 수용 검증
 
 실제 검증이 모두 통과한 뒤 Stage 2 report/orders만 commit한다. 바이너리·credential·개인키·ignored 원문 evidence를 git stage하지 않는다. 단계 commit/다음 단계는 별도 승인이다.
 
+## Stage 2.1 — signed runtime smoke 보정안
+
+### 기존 승인과 실제 실패
+
+- 원계획 commit `42acefc7cef15c4e7d87b239f2b9634565ffe207`, Stage 1 제품 commit `03e0c22e5c9c2350cdf49f13037f09502d931bca`와 그 시점의 승인/검증 결과를 보존한다.
+- 기존 앱 공증 `aa059898-23d3-4be2-bbe8-cf2353c072f6`, DMG 공증 `be26d136-0042-4b5c-8fed-c5275f423fc7`는 실제 Accepted·staple·Gatekeeper까지 통과했다. 기존 app seal `3125d872b43bd46bf636fac83ae6e3ecf132cb84b2fda09cf19d740d534290ea`, 최종 DMG `b515b138a87b8f68f55e3c00a73cf27b75d1f818d87f41d3d64f2c5f11401cac`, ZIP `5efacfae89d8f595b34a6e105e44b8998f32e731c8ee4c085ce9e07eb8d9b2cb`를 당시 성공 범위로만 기록한다.
+- 전체 signed artifact smoke는 exit1이다. 기존 startup이 disposable copy의 helper를 `.real`로 옮긴 뒤 guard 스크립트로 교체한다. 실제 strict codesign은 교체 전 exit0, 교체 후 exit1(`a sealed resource is missing or invalid`); 해당 startup은 SIGKILL과 CDP timeout을 관측했다. 이 결과는 backend helper 오류 수용 또는 정상 signed startup 성공이 아니다.
+- 원래 Desktop worktree 위치의 unmodified app 직접 실행은 renderer ERR_FAILED/blank UI였다. 이유를 TCC/entitlement로 확정하지 않는다. 원 helper·동일 app seal/signature/ticket을 보존한 canonical 임시 복사본에서는 UI·action-specific bridge·실제 helper v0.2.0·빈 registry가 통과했다. 권한 확대나 제품 UI 수정의 근거로 사용하지 않는다.
+- 증거: `.omo/evidence/task-31-stage2-partial-status.json`, SHA256 `5aa8b6e82b9b2712b0160d977824734d80ed80d8c3c79474c0a2b60de322252b`. 연결된 실패/진단/OS 원문을 지우거나 최종 성공으로 덮어쓰지 않는다.
+
+### exact 산출물과 문서 위치
+
+| 파일 | 변경 범위 |
+|---|---|
+| `smoke/scenarios/packaged-app.mjs` | 명시적 signed/unsigned 검증 모드·시나리오 전달. no-arg unsigned 기본 유지 |
+| `smoke/scenarios/packaged-app/startup.mjs` | signed는 canonical 서명/ticket 보존 복사본과 원 helper만 사용; unsigned guard 경로 분리 |
+| `smoke/scenarios/packaged-app/helper-error.mjs` | signed disposable nonexec fault의 실제 signature/OS 상태와 backend 오류를 구별; 기존 unsigned 수용 보존 |
+| `smoke/scenarios/packaged-app/evidence.mjs` | signed/unsigned·서명 무변경/의도적 fault·guard 사용 여부와 관측 결과를 사실대로 표기 |
+| `smoke/electron-signed-dist-artifacts.mjs` | signed 모드 전달과 runtime receipt 수용; 원본/ZIP/DMG/hash/Apple/OS 검증은 유지 |
+| `smoke/electron-signed-dist-artifacts.test.ts` | 모드 전달·잘못된 signed 수용·실패 전파·source seal 보존 회귀 |
+| `smoke/scenarios/packaged-app.test.ts` | 신규 Node mock 회귀: signed 무교체·canonical copy·검증 전 launch 거부·fault 분류·unsigned guard·cleanup |
+| `electron/signedRelease.mjs` | `APPROVED_PLAN_OID`를 단독 commit·exact SHA 확인된 최신 보정 계획으로 갱신하는 한 항목만 변경. 검증 완화/옛 plan fallback 금지 |
+| `mydocs/working/task_m001_31_stage2.1.md` | 기존 mydocs/working 내부 단계 보고 위치: 보정 실패/결과·검증·제품 commit 승인 요청 |
+| `mydocs/orders/20261008.md` | 타스크는 진행중 유지, 보정 및 실제 Stage 2 재진입 승인 상태 기록 |
+
+제품 문서 위치 선택은 원계획 그대로다. 이번 단계는 위 8개 검증/plan 결박 코드와 2개 내부 작업 문서만 수정한다. 패키지/version/lockfile·React/Electron runtime/preload/IPC·Rust/DB·native signer·entitlement·제출 알고리즘 변경은 범위 밖이다. 추가 파일/권한/제품 입력 보완이 필요하면 다시 계획 내용 승인을 받는다.
+
+### 변경 계약
+
+1. 같은 스레드의 이번 승인은 이 보정안 작성만 허용했다. 보정 내용 승인·이 계획 한 파일 단독 commit 승인·새 exact SHA 확인/Stage 2.1 구현 승인 전에 제품 소스·테스트·바이너리를 바꾸지 않는다.
+2. 검증 모드는 명시적으로 구분한다. signed 정상 startup은 격리된 canonical temp HOME/data/cwd·app copy를 사용하며 source/copy app seal과 실제 codesign/stapler를 launch 전에 확인한다. helper rename·guard 삽입·chmod 등 정상 bundle 변경은 금지한다. 원본 signed app은 read-only 검증/복사에만 사용하고 직접 launch/변경하지 않으며 production DB는 접속/변경하지 않는다.
+3. signed 정상 startup에서도 기존 UI save/list/navigation 검증과 action-specific bridge/실제 helper envelope를 실행한다. 등록할 test host는 `smoke.invalid`·enabled=false로 고정한다. guard action 목록을 꾸미지 않고 실제 저장 후 disabled 상태를 확인한다. mock/DOM/CDP를 실제 SSH·OS 입력·알림 성공으로 표현하지 않는다.
+4. unsigned 정상 startup의 guard와 기존 fault/error·UI 수용 assertion을 그대로 보존한다. signed 지원을 이유로 unsigned 검증을 약화하거나 건너뛰지 않는다.
+5. signed nonexec fault는 별도 disposable copy에서만 만든다. 파일 교체/재서명/새 entitlement/원본 변경을 하지 않는다. fault 전후 실제 signature와 launch 결과를 기록한다. 앱 실행이 가능하면 structured helper error와 기존 UI 오류/탐색성을 검증한다. OS 차단·SIGKILL·CDP 미준비는 명시적 OS fault 결과로 분리하고 backend 수용 성공으로 바꾸지 않는다. 단순 timeout/불명확한 종료를 OS fault 성공으로 허용하지 않으며 전체 gate를 실패시키고 진단한다.
+6. 공통 evidence의 기존 hardcoded unsigned/task29/first-match 표현을 모드와 실제 explicit discovery에 맞춘다. signed 정상 결과에는 guard를 사용하지 않았음·launch 전 copy 검증·실제 UI/helper와 source 무변경을 기록한다. 임의 성공 receipt·empty placeholder·다른 run 증거 재사용은 금지한다.
+7. 모든 실제 command는 argv 배열·bounded timeout·exit/signal 검사다. mock 테스트에서 실제 signing/Apple/SSH/GUI를 호출하지 않는다. subprocess/CDP/temp copy/HOME/data 정리는 finally에서 소유한 대상만 수행하며 cleanup 오류는 성공으로 무시하지 않는다.
+
+### provenance와 실제 Stage 2 재개
+
+- 최신 보정 plan은 별도 승인된 새 commit P로 고정한다. 원 계획/기존 manifest의 승인 CID를 임의 변경하지 않는다. 기존 driver의 원계획 blob 검증을 우회하거나 두 plan을 동시에 허용하는 호환 경로를 넣지 않는다.
+- 보정 source에는 driver의 단일 `APPROVED_PLAN_OID=P` 갱신을 포함하고, P의 plan-only 경로·mode/blob·index/working 동일성·ancestor를 기존과 같은 강도로 검증한다. 나머지 signing/submit 코드와 native callback은 변경하지 않는다.
+- 보정 source/tests/Stage 2.1 report/orders 총 10경로의 검증 및 commit 승인을 먼저 받는다. 생성된 보정 제품 commit C의 exact SHA 확인과 실제 Stage 2 재개 승인은 다시 별도 요청한다. 미커밋 검증기로 실제 제출하지 않는다.
+- 재개 후 P/C에 결박된 **새 signing run**을 생성한다. 기존 성공 run은 역사적 증거로 그대로 보존하며 새 source/P의 최신 수용으로 재라벨하지 않는다. 이는 실패/불확실한 Apple 요청의 자동 retry가 아니다.
+- 새 app ZIP·DMG는 각각 새 canonical artifact/manifest SHA·app seal·P/C·identity/Team/profile tuple을 출력하고 같은 스레드에서 별도 승인받은 뒤만 제출한다. 이번 계획 내용/구현/Stage 2 재개 승인에 Apple 제출 승인을 포함하지 않는다.
+- 기존 run을 이용한 검증기 진단은 read-only/소유 temp copy에 한정하며 Stage 2 최종 수용을 대신하지 않는다. 최신 driver가 옛 manifest를 거부하는 검증을 완화하지 않는다.
+
+### 검증 및 수용
+
+```bash
+npm run test -- --run smoke/scenarios/packaged-app.test.ts smoke/electron-signed-dist-artifacts.test.ts electron/signedRelease.test.ts electron/signPackagedApp.test.ts
+npm run test -- --run
+npm run build
+npm run electron:build
+npm run helper:build
+cargo test --manifest-path crates/gpuwatcher-core/Cargo.toml
+cargo test --manifest-path crates/gpuwatcher-helper/Cargo.toml
+cargo fmt --manifest-path crates/gpuwatcher-core/Cargo.toml -- --check
+cargo fmt --manifest-path crates/gpuwatcher-helper/Cargo.toml -- --check
+npm run electron:dist:unsigned
+node smoke/electron-unsigned-dist-artifacts.mjs
+node smoke/electron-packaged-app-smoke.mjs
+git diff --check
+```
+
+- Vitest의 local helper integration 전에 debug helper가 최신 source에서 build됐는지 확인한다. unsigned freshness 값은 해당 build 직전 캡처해 artifact gate에 전달한다. 185/609 등의 과거 통과 수치를 보정 후 결과로 사용하지 않는다.
+- mock에서는 signed 무교체/원 helper, canonical copy, copy seal/signature/ticket 실패 시 launch 미호출, backend error와 확정 OS fault/불확실 timeout 구별, unsigned 기존 guard 유지, cleanup 실패·원본 byte/mode 불변을 검증한다.
+- 실제 재개 후 새 P/C manifest로 Stage 2의 app/DMG Apple 별도 승인·Accepted/log uploaded SHA·staple·Gatekeeper와 ZIP/DMG app 동등성·signed UI/helper/fault 분리·source seal·최종 hash gate를 모두 다시 통과해야 한다. Stage 2 전체 완료는 그때만 기록한다.
+- entitlements를 넓히거나 signed normal 검증을 unsigned/mock/OS fault 결과로 대체하지 않는다. Desktop 원본 경로 실행 실패와 canonical temp copy 성공은 실행 위치가 다른 관측으로 보존한다.
+
+### commit과 승인 경계
+
+```text
+Task #31: signed runtime smoke 보정 구현계획 확정
+Task #31 [Stage 2.1]: 서명 보존 startup과 fault 검증 분리
+```
+
+첫 줄은 내용/단독 commit 승인 후 이 계획 파일 하나만 포함한다. 둘째 줄은 별도 승인된 위 10경로의 보정 단계 commit이다. 각각 attribution과 exact SHA 확인을 따른다. 현재는 둘 다 미승인·미실행이다. 기존 Stage 2 report/orders commit과 Stage 3 진입·최종 수용·GitHub 작업의 별도 경계는 유지한다.
+
 ## Stage 3 — 문서·통합 수용·배포 준비 보고
 
 ### 산출물
@@ -251,6 +330,7 @@ Co-authored-by: Sisyphus <clio-agent@sisyphuslabs.ai>
 
 - 구현계획 내용·단독 commit·exact SHA 확인 → Stage 1.
 - Stage 1 결과·report·commit 승인 → Stage 2 진입 승인 → 실제 signing build → 앱 제출 exact tuple 승인 → app 수용/DMG 준비 → DMG 제출 exact tuple 승인 → Stage 2 수용.
+- Stage 2 runtime 실패 → 기존 계획 보정안 작성 → 보정 내용/계획 단독 commit 승인 → 새 exact plan SHA/Stage 2.1 구현 승인 → 보정 검증/제품 commit 승인 → 새 exact 제품 SHA/Stage 2 재개 승인 → 새 run의 앱/DMG 각각 제출 tuple 승인 → 실제 Stage 2 전체 재검증.
 - Stage 2 report/commit 승인 → Stage 3 진입 승인 → 통합 결과/단계 보고·commit → 별도 최종 보고/evidence acceptance → task publication.
 - GitHub release PR/merge/tag/Release·main → devel sync와 issue close/cleanup은 각 해당 절차의 별도 승인이다.
 
