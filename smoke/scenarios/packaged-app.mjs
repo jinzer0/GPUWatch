@@ -15,10 +15,10 @@ async function packagedWaitForText(cdp, text, timeoutMs = 30000) {
   return waitForText(cdp, text, { evidenceDir, missingPrefix: taskEvidenceName, timeoutMs });
 }
 
-async function runScenario(logs, screenshots, spawnLogged) {
+async function runScenario(logs, screenshots, spawnLogged, options) {
   await mkdir(evidenceDir, { recursive: true });
   const startedAt = timestamp();
-  const appPath = await discoverAppPath();
+  const appPath = await discoverAppPath(options.appPath);
   const helperPath = helperPathForApp(appPath);
   const executablePath = appExecutable(appPath);
   await verifyPackagedRuntimePaths({ executablePath, helperPath });
@@ -26,25 +26,29 @@ async function runScenario(logs, screenshots, spawnLogged) {
   const success = await runPackagedStartupScenario({ appPath, helperPath, logs, screenshots, spawnLogged, cdpPort: cdpPortBase, waitForText: packagedWaitForText, timestamp });
   const failure = await runPackagedHelperErrorScenario({ appPath, helperPath, logs, screenshots, spawnLogged, cdpPort: cdpPortBase + 1, waitForText: packagedWaitForText, timestamp });
   await access(helperPath, constants.X_OK);
-  const evidence = await buildPackagedEvidence({ taskEvidenceName, startedAt, appPath, helperPath, executablePath, helperMode, success, failure, logs, timestamp });
-  await writeFile(path.join(evidenceDir, `${taskEvidenceName}.txt`), `${evidence.launchEvidence}\n\n${evidence.failureEvidence}\n`);
-  await writeFile(path.join(evidenceDir, `${taskEvidenceName}-helper-resolution-failures.txt`), `${evidence.failureEvidence}\n`);
-  await writeFile(path.join(evidenceDir, `${taskEvidenceName}-packaged-app.log`), logs.join(''));
+  const prefix = options.evidencePrefix ?? taskEvidenceName;
+  const evidence = await buildPackagedEvidence({ taskEvidenceName: prefix, startedAt, appPath, helperPath, executablePath, helperMode, success, failure, logs, timestamp });
+  await writeFile(path.join(evidenceDir, `${prefix}.txt`), `${evidence.launchEvidence}\n\n${evidence.failureEvidence}\n`);
+  await writeFile(path.join(evidenceDir, `${prefix}-helper-resolution-failures.txt`), `${evidence.failureEvidence}\n`);
+  await writeFile(path.join(evidenceDir, `${prefix}-packaged-app.log`), logs.join(''));
   console.log(evidence.launchEvidence);
   console.log('');
   console.log(evidence.failureEvidence);
 }
 
-export async function runPackagedAppSmoke() {
+export async function runPackagedAppSmoke(options = {}) {
+  const prefix = options.evidencePrefix ?? taskEvidenceName;
+  if (!/^[a-zA-Z0-9_-]+$/.test(prefix)) throw new Error('Invalid packaged evidence prefix');
   const logs = [];
   const screenshots = [];
   const processSet = createProcessSet();
   try {
-    await runScenario(logs, screenshots, processSet.spawnLogged);
+    await runScenario(logs, screenshots, processSet.spawnLogged, options);
   } catch (error) {
     await mkdir(evidenceDir, { recursive: true });
-    await writeFile(path.join(evidenceDir, `${taskEvidenceName}-packaged-smoke-failure.txt`), `${error.stack ?? error.message}\n`);
-    await writeFile(path.join(evidenceDir, `${taskEvidenceName}-packaged-app.log`), logs.join(''));
+    await writeFile(path.join(evidenceDir, `${prefix}-packaged-smoke-failure.txt`), `${error.stack ?? error.message}\n`);
+    await writeFile(path.join(evidenceDir, `${prefix}-packaged-app.log`), logs.join(''));
+    if (options.appPath !== undefined) throw error;
     console.error(error);
     process.exitCode = 1;
   } finally {
