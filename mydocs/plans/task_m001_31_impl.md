@@ -348,3 +348,58 @@ Co-authored-by: Sisyphus <clio-agent@sisyphuslabs.ai>
 1. 이 3단계의 exact 산출물·version·최소 권한·native signer 사용, signing-only 후보와 Apple 공증의 분리, 앱/DMG별 exact 제출 tuple, 검증/문서 경계에 대한 구현계획 **내용 승인**.
 2. 이 `_impl.md` 하나만 포함하는 **단독 commit 승인**.
 3. commit 뒤 출력할 exact SHA 확인과 Stage 1 진입 승인. 내용 승인만으로 commit/SHA/단계 진입 또는 Apple 제출 승인을 간주하지 않는다.
+
+## Stage 4 — PR #32 Codex source provenance 보정
+
+### 요청·발견과 승인 경계
+
+- 작업지시자는 같은 스레드에서 Codex 리뷰 대응 수정·commit·push까지 요청했다. 기존 하이퍼-워터폴의 보정 계획 내용/plan-only commit/exact SHA·단계 진입 경계는 유지한다. 이 절은 그 요청을 실행하기 위한 보정 내용이며 제품 source는 아직 수정하지 않았다.
+- P1 review comment `4231004786`: runtime이 승인 plan commit P의 HEAD ancestor와 과거 commit object를 요구한다. 현재 topic HEAD0ca에서는 ancestor 검증 exit0이지만 squash/release history에서는 그 commit이 reachable하지 않아 immutable 계획 내용이 같아도 signed build/후속 action이 실패한다. 현재 topic도 실패한다고 표현하지 않는다.
+- P2 review comment `4231004797`: finalized verifier는 manifest sourceCommit의 형식만 확인한다. 실제 Git source와 현재 제품/packaging 입력의 동일성 또는 문서-only 차이를 검증하지 않아 옛 Accepted artifact를 변경된 제품의 최신 수용으로 반환할 수 있다.
+- 기존 accepted source225 run, request IDs, report/evidence approvals는 역사적 수용으로 유지한다. 보정 후 제품 입력이 달라지므로 옛 artifact를 새 source의 최종 성공으로 사용하지 않는다. 새 실제 signing/Apple 제출/Release는 이번 commit·push 요청에서 자동 승인되지 않는다.
+
+### 정확한 산출물·문서 위치
+
+| 경로 | 변경 | 위치 판단 |
+|---|---|---|
+| `electron/signedRelease.mjs` | squash-safe immutable plan blob 검증, 공통 Git source/diff proof | 기존 driver에 source 검증을 모아 중복 규칙 방지 |
+| `electron/signedRelease.test.ts` | reachable-plan 가정 제거·blob/metadata/source drift 회귀 | 기존 driver 테스트 |
+| `smoke/electron-signed-dist-artifacts.mjs` | Apple 조회·mount·runtime 전에 공통 제품 source proof 필수 | 기존 finalized verifier |
+| `smoke/electron-signed-dist-artifacts.test.ts` | product/packaging/dirty/unknown source 거부, 문서-only 동일성 수용 | 기존 verifier 테스트 |
+| `AGENTS.md` | squash-safe runtime 계획 결박과 final source gate 인덱스 보완 | 이미 승인된 기존 루트 운영 인덱스 |
+| `mydocs/working/task_m001_31_stage4.md`, `mydocs/orders/20261008.md` | 리뷰 재현/보정·검증·새 산출물 필요 상태 | 기존 내부 stage/orders 위치 |
+
+이 계획은 기존 `mydocs/plans/task_m001_31_impl.md`에만 추가한다. 수행계획서의 문서 위치 선택은 유지한다. 최종 보고서/orders의 후속 갱신은 Stage 4 결과 승인 뒤 별도 final report/evidence 경계에서 처리한다. package/version/lockfile·entitlement·native signer·React/IPC/Rust/DB·submit 알고리즘 변경은 범위 밖이다.
+
+### 변경 계약
+
+1. 보정 plan-only commit P4의 exact SHA 및 blob B4를 승인 후 source에 pin한다. `APPROVED_PLAN_OID=P4`는 승인 이력/manifest tuple의 anchor로 유지하되 runtime에서 과거 plan commit의 존재/ancestor를 요구하지 않는다. runtime은 승인된 immutable `APPROVED_PLAN_BLOB_OID=B4`와 현재 HEAD/index/working 계획 파일의 mode/blob·bytes가 동일한지 검증한다. 계획 변경을 자유롭게 허용하거나 옛 plan fallback을 추가하지 않는다.
+2. 작업 단계의 승인 검증에는 P4의 plan-only 경로·실제 승인·topic ancestor를 계속 확인한다. runtime의 squash-safe 검증과 사람/작업 단계의 승인 검증을 혼동하지 않는다. runtime Git root/override·replace refs·canonical regular0644/single-link·stage0/mode100644와 signing 전 clean source 조건은 유지한다.
+3. driver의 source 검증을 canonical 공통 함수로 노출해 finalized verifier에서 재사용한다. verifier는 manifest source object의 존재와 현재 HEAD source snapshot을 검증하고, source→HEAD 및 HEAD→working/index의 변경이 명시적인 문서 경로 subset인지 확인한다. unknown/untracked/non-document 변경은 실패다. 경로 구분은 NUL-separated Git 결과와 literal paths로 처리한다.
+4. 문서 허용 subset은 기존 루트 README/AGENTS, 공식 docs의 문서 파일, mydocs의 내부 문서 파일이다. 문서처럼 보이는 package/build/electron/smoke/src/crates 입력, symlink/실행파일, binary 변경은 허용하지 않는다. 계획 파일은 별도의 B4 불변 검증을 통과해야 한다. helper signing·packaging 입력이 하나라도 달라지면 새 run/새 앱·DMG tuple 승인이 필요하다고 실패한다.
+5. 제품 source ancestry가 없더라도 squash/rebase된 현재 tree의 제품 입력이 manifest source와 동일한지 Git tree diff로 비교할 수 있다. manifest source 자체가 없거나 비교할 수 없으면 불확실 성공/자동 fetch로 대체하지 않는다. source OID만 같은 형태인지 확인하는 gate를 실제 tree proof로 바꾼다.
+6. 기존 manifest를 새 P4/source로 다시 쓰지 않는다. 새 plan pin으로 옛 P manifest가 거부되는 회귀는 유지하고 새 mock manifest로 경계를 검증한다. 최종 actual old run 검증은 그 run의 원 승인 source/검증기에서만 역사적으로 구분하며 최신 보정 수용으로 사용하지 않는다.
+
+### 재현·검증
+
+- 수정 전 P1은 parent history에 plan commit이 없는 실제 임시 Git fixture의 동일 승인 blob으로 재현한다. topic ancestor 통과와 squash history 실패를 구분한다.
+- 수정 전 P2는 finalized mock run 뒤 renderer/helper/package/signing/smoke 입력이 달라진 실제 Git fixture에서 과거 artifact가 수용되는 실패 테스트로 재현한다. 버전만 같은 경우도 거부한다.
+- 보정 후 동일 B4·HEAD/index/working bytes의 squash-safe signing source proof는 통과해야 한다. 계획 blob/mode/index/symlink/hardlink·root/override/replace/dirty signing 입력은 계속 거부한다.
+- source→HEAD 문서-only 및 문서-only working 변경은 final verifier가 수용하되 제품/packaging 변경·삭제·rename·unknown source·비문서 untracked 변경은 Apple/native/mount/runtime 호출 전에 거부한다. source proof 결과와 원본 보존이 final receipt에 결박돼야 한다.
+- driver/verifier focused tests, 전체 Vitest, renderer/Electron/helper builds, core/helper tests·fmt check, fresh unsigned dist/artifact·실제 unsigned startup/fault/UI, diff check를 parent가 실행한다. 일반 tests는 live SSH·Apple upload를 호출하지 않는다. 실패/간헐성은 보존하며 timeout/수용 조건을 완화하지 않는다.
+- 최신 보정 source의 실제 signed 최종 수용은 새 run·app/DMG 각각 승인/Accepted/staple 뒤만 주장한다. 그 실행은 별도 승인이다.
+
+### commit·게시 경계
+
+```text
+Task #31: Codex 리뷰 source provenance 보정계획 확정
+Task #31 Stage 4: squash-safe 계획 결박과 signed source drift 검증
+```
+
+계획 한 파일 단독 commit·exact SHA/Stage 4 진입 뒤 승인 범위만 구현한다. 제품/report/orders commit과 최종 report/evidence 수용은 기존 단계 승인 경계를 유지한다. 게시 시 PR #32의 최신 exact head/base/title/body와 review 상태를 fresh 조회하고, 승인된 새 exact OID만 기존 publish ref의 exact-old lease·fast-forward로 갱신한다. 본 요청은 merge·issue close·새 Apple 제출·Release 게시를 허용하지 않는다. #31의 명시 본문 참조/별도 close 예외는 유지하고 매뉴얼을 바꾸지 않는다.
+
+### 승인 요청
+
+- 이 Stage 4 보정 내용 승인.
+- 이 계획 파일 한 경로 단독 commit 승인. 제품/테스트/AGENTS는 아직 수정하지 않았다.
+- plan commit 후 새 exact SHA 확인 및 Stage 4 구현 진입 승인은 별도로 요청한다.
