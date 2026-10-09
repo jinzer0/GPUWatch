@@ -26,6 +26,15 @@ async function copyApp(directory: string, name = 'GPUWatcher.app') {
 const calls = (exe: string) => deps.command.mock.calls.filter(([executable]: any[]) => executable === exe);
 const verify = () => runSignedArtifactSmoke({ manifest: manifestPath }, deps);
 
+function runtimeReceipt(): any {
+  const signature = () => ({ sourceSealSha256: manifest.appSealSha256, copySealSha256: manifest.appSealSha256, codesign: ok(), stapler: ok() });
+  return {
+    ok: true, artifactMode: 'signed', sourceUnchanged: true, sourceSealSha256: manifest.appSealSha256,
+    success: { artifactMode: 'signed', guardUsed: false, signatureProof: signature(), helperHealth: { ok: true, data: { helperVersion: '0.2.0' } }, servers: [{ enabled: false }], isolatedCopyRemoved: true },
+    failure: { artifactMode: 'signed', faultClass: 'backend-error', signatureBefore: signature(), isolatedCopyRemoved: true, bridgeError: { ok: false, error: { layer: 'helper_contract', type: 'helper_spawn_failed' } }, errorBody: 'permission denied EACCES', navigableBody: 'GPUWatcher Save server' }
+  };
+}
+
 beforeEach(async () => {
   root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'gpuwatcher-signed-smoke-test-')));
   run = path.join(root, 'release/electron/signed/run');
@@ -71,7 +80,7 @@ beforeEach(async () => {
   override = undefined;
   deps = {
     root, env: { CSC_NAME: identity, GPUWATCHER_SIGNING_TEAM_ID: team, APPLE_KEYCHAIN_PROFILE: manifest.keychainProfile, APPLE_KEYCHAIN: manifest.keychain }, platform: 'darwin', arch: 'arm64',
-    runtimeSmoke: vi.fn(async () => {}),
+    runtimeSmoke: vi.fn(async () => runtimeReceipt()),
     command: vi.fn(async (exe: string, args: string[]) => {
       const overridden = await override?.(exe, args);
       if (overridden !== undefined) return overridden;
@@ -113,7 +122,7 @@ describe('signed artifact smoke', () => {
     const before = await sealApp(manifest.appPath);
     const manifestBefore = await fs.readFile(manifestPath, 'utf8');
     await expect(verify()).resolves.toMatchObject({ state: 'verified', appPath: manifest.appPath });
-    expect(deps.runtimeSmoke).toHaveBeenCalledWith({ appPath: manifest.appPath, evidencePrefix: 'task-31-signed-dist' });
+    expect(deps.runtimeSmoke).toHaveBeenCalledWith({ appPath: manifest.appPath, evidencePrefix: 'task-31-signed-dist', artifactMode: 'signed' });
     expect(await discoverAppPath(manifest.appPath)).toBe(manifest.appPath);
     expect(await sealApp(manifest.appPath)).toEqual(before);
     expect(await fs.readFile(manifestPath, 'utf8')).toBe(manifestBefore);
@@ -329,8 +338,37 @@ describe('signed artifact smoke', () => {
     deps.runtimeSmoke.mockRejectedValueOnce(new Error('runtime failed'));
     await expect(verify()).rejects.toThrow('runtime failed');
     expect(await temporaryDirectories()).toEqual([]);
-    deps.runtimeSmoke.mockImplementationOnce(async () => { await fs.appendFile(path.join(manifest.appPath, 'Contents/ticket'), 'mutation'); });
+    deps.runtimeSmoke.mockImplementationOnce(async () => { await fs.appendFile(path.join(manifest.appPath, 'Contents/ticket'), 'mutation'); return runtimeReceipt(); });
     await expect(verify()).rejects.toThrow('Source app seal');
+  });
+
+  it.each(['missing', 'unsigned', 'guard', 'copy-seal', 'signature', 'signature-incomplete', 'helper-version', 'enabled-server', 'cleanup', 'fault-baseline', 'fault-incomplete', 'fault-unknown', 'fake-os-kill', 'backend-ui'])('rejects incomplete or misleading signed runtime receipt %s', async failure => {
+    const receipt = runtimeReceipt();
+    if (failure === 'unsigned') receipt.artifactMode = 'unsigned';
+    if (failure === 'guard') receipt.success.guardUsed = true;
+    if (failure === 'copy-seal') receipt.success.signatureProof.copySealSha256 = '0'.repeat(64);
+    if (failure === 'signature') receipt.success.signatureProof.codesign.code = 1;
+    if (failure === 'signature-incomplete') receipt.success.signatureProof.codesign = { code: 0 };
+    if (failure === 'helper-version') receipt.success.helperHealth.data.helperVersion = '0.1.0';
+    if (failure === 'enabled-server') receipt.success.servers[0].enabled = true;
+    if (failure === 'cleanup') receipt.success.isolatedCopyRemoved = false;
+    if (failure === 'fault-baseline') receipt.failure.signatureBefore.stapler.code = 1;
+    if (failure === 'fault-incomplete') receipt.failure.signatureBefore.stapler = { code: 0, signal: null };
+    if (failure === 'fault-unknown') receipt.failure.faultClass = 'unresolved';
+    if (failure === 'fake-os-kill') { receipt.failure.faultClass = 'os-signature-block'; receipt.failure.launchOutcome = { signal: 'SIGKILL' }; }
+    if (failure === 'backend-ui') receipt.failure.navigableBody = '';
+    deps.runtimeSmoke.mockResolvedValueOnce(failure === 'missing' ? undefined : receipt);
+    await expect(verify()).rejects.toThrow();
+    expect(await temporaryDirectories()).toEqual([]);
+    expect((await sealApp(manifest.appPath)).sha256).toBe(manifest.appSealSha256);
+  });
+
+  it('rejects the old approved plan instead of relabeling previous Accepted artifacts', async () => {
+    manifest.approvedPlanOid = '42acefc7cef15c4e7d87b239f2b9634565ffe207';
+    await save();
+    await expect(verify()).rejects.toThrow('provenance');
+    expect(deps.command).not.toHaveBeenCalled();
+    expect(deps.runtimeSmoke).not.toHaveBeenCalled();
   });
 
   it('rejects symlink manifest and explicit app paths', async () => {

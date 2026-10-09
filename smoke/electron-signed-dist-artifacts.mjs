@@ -3,6 +3,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { APPROVED_PLAN_OID, REPOSITORY, verifyGatekeeper, executeCommand, loadManifest, safePath, sealApp, sha256File, validateApp, validateCredentials } from '../electron/signedRelease.mjs';
 import { runPackagedAppSmoke } from './scenarios/packaged-app.mjs';
+import { commandSucceeded } from './scenarios/packaged-app/startup.mjs';
+import { classifyPackagedFault } from './scenarios/packaged-app/helper-error.mjs';
 
 const defaultRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const hash = /^[a-f0-9]{64}$/;
@@ -184,9 +186,32 @@ export async function runSignedArtifactSmoke(options = {}, dependencies = {}) {
       if (mounted) await run('hdiutil', ['detach', mountpoint]);
       await fs.rm(mountOwner, { recursive: true, force: true });
     }
-    await runtimeSmoke({ appPath: manifest.appPath, evidencePrefix: 'task-31-signed-dist' });
+    const runtime = await runtimeSmoke({ appPath: manifest.appPath, evidencePrefix: 'task-31-signed-dist', artifactMode: 'signed' });
+    if (runtime?.ok !== true || runtime.artifactMode !== 'signed' || runtime.sourceUnchanged !== true || runtime.sourceSealSha256 !== manifest.appSealSha256) fail('Missing signature-preserving signed runtime receipt');
+    const success = runtime.success;
+    const proof = success?.signatureProof;
+    if (success?.artifactMode !== 'signed' || success.guardUsed !== false ||
+        proof?.sourceSealSha256 !== manifest.appSealSha256 || proof.copySealSha256 !== manifest.appSealSha256 ||
+        !proof.codesign || !proof.stapler ||
+        !commandSucceeded(proof.codesign) || !commandSucceeded(proof.stapler)) fail('Signed startup did not preserve verified bundle signature/ticket');
+    if (success.helperHealth?.ok !== true || success.helperHealth.data?.helperVersion !== manifest.version ||
+        !Array.isArray(success.servers) || success.servers.length !== 1 || success.servers[0].enabled !== false ||
+        success.isolatedCopyRemoved !== true) fail('Missing actual signed helper/UI/isolated cleanup proof');
+    const fault = runtime.failure;
+    if (fault?.artifactMode !== 'signed' || fault.isolatedCopyRemoved !== true ||
+        fault.signatureBefore?.copySealSha256 !== manifest.appSealSha256 ||
+        !fault.signatureBefore.codesign || !fault.signatureBefore.stapler ||
+        !commandSucceeded(fault.signatureBefore.codesign) || !commandSucceeded(fault.signatureBefore.stapler)) fail('Missing isolated signed fault baseline');
+    if (fault.faultClass === 'backend-error') {
+      if (fault.bridgeError?.ok !== false || fault.bridgeError.error?.layer !== 'helper_contract' ||
+          !/^helper_(spawn_failed|runner_error)$/.test(fault.bridgeError.error?.type ?? '') ||
+          !/permission denied|EACCES|failed to spawn helper|spawn .*gpuwatcher-helper/i.test(fault.errorBody ?? '') ||
+          !fault.navigableBody?.includes('Save server')) fail('Missing signed backend fault/UI proof');
+    } else if (fault.faultClass !== 'os-signature-block' || classifyPackagedFault(fault) !== 'os-signature-block') {
+      fail('Unresolved signed fault is not backend or confirmed OS-policy evidence');
+    }
     await artifacts();
-    return { manifestPath, appPath: manifest.appPath, state: 'verified', evidencePrefix: 'task-31-signed-dist' };
+    return { manifestPath, appPath: manifest.appPath, state: 'verified', evidencePrefix: 'task-31-signed-dist', runtime };
   } finally { await preserveApp(); }
 }
 

@@ -4,7 +4,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const APPROVED_PLAN_OID = '42acefc7cef15c4e7d87b239f2b9634565ffe207';
+export const APPROVED_PLAN_OID = '810089769e8a1ea1dcbd8476bf250ab8b3eb94d9';
 export const REPOSITORY = Object.freeze({ host: 'github.com', repository: 'jinzer0/GPUWatch', repository_id: 1256824919, issue_number: 31 });
 export const ACTIONS = Object.freeze(['build', 'prepare-app', 'submit-app', 'package', 'prepare-dmg', 'submit-dmg']);
 const DEFAULT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
