@@ -53,7 +53,8 @@
 
 #### High-Value Paths
 
-- `package.json`: npm scripts and Electron Builder config; packaged output goes to `release/electron/` with `identity: null`.
+- `package.json`: npm scripts and Electron Builder unsigned defaults (`identity: null`). Signed runs use the explicit driver/native callback and live under `release/electron/signed/<run>/`; unsigned discovery must exclude that namespace.
+- `electron/signedRelease.mjs` and `electron/signPackagedApp.mjs`: approved plan/source/hash-bound Developer ID signing and separate app ZIP/DMG approval gates. Keep app JIT-only and helper empty entitlements; no unsigned/ad-hoc fallback or automatic retry of uncertain Apple submissions.
 - `electron/main.ts`: BrowserWindow security settings and scheduler startup; keep `contextIsolation: true` and `nodeIntegration: false`.
 - `electron/helperContract.ts`: canonical TS action contract. `poll_due_servers` is `main-only`; renderer/preload must not expose it.
 - `electron/preload.ts` and `electron/preload-runtime.cts`: action-specific `window.gpuwatcher` bridge. No generic `invoke`, `runAction`, or helper path exposure.
@@ -77,6 +78,9 @@ npm run electron:build              # tsc -p tsconfig.electron.json, includes .c
 npm run helper:build                # cargo build for helper binary
 npm run electron:pack               # build + helper build + unsigned electron-builder dir package
 npm run electron:dist:unsigned      # internal/test unsigned DMG+ZIP artifacts, no publish
+npm run electron:pack:signed        # explicit identity/Team/profile; signing-only candidate, no Apple submit
+npm run electron:dist:signed -- --manifest "$SIGNED_MANIFEST" # formats the same Accepted/stapled app, no app resign
+node smoke/electron-signed-dist-artifacts.mjs --manifest "$SIGNED_MANIFEST" # same selectors; finalized explicit manifest required
 npm run smoke:electron:first-run    # Electron dev-surface UI smoke; requires built helper
 node smoke/electron-packaged-app-smoke.mjs  # packaged .app smoke after electron:pack
 cargo test --manifest-path crates/gpuwatcher-core/Cargo.toml
@@ -89,6 +93,9 @@ GPUWATCHER_LIVE_SSH_TARGET=tml-server cargo test --manifest-path crates/gpuwatch
 - Normal tests must not require live SSH or `tml-server`; live checks stay ignored and env-gated with the exact command above.
 - `npm run electron:pack` creates an unsigned local `.app` directory, not a signed/notarized/DMG/uploaded release. Discover the app path with `find release/electron -name GPUWatcher.app -type d` instead of hardcoding `mac` vs `mac-arm64`.
 - `npm run electron:dist:unsigned` creates internal/test unsigned DMG+ZIP artifacts only. They are not signed, notarized, uploaded, auto-updated, production release-ready, or external distribution-ready.
+- Signed workflow: fresh P/C-bound run → prepare-app → exact app tuple approval → submit-app/Accepted/staple → package/prepare-dmg → separate exact DMG tuple approval → submit-dmg/Accepted/staple → final verifier. ZIP itself is not stapled. Details: `docs/smoke-checklist.md`.
+- Final signed verification requires explicit identity/Team/profile selectors, read-only Apple info/log rechecks, codesign/stapler/spctl, app equality in ZIP/DMG, final hashes and owned cleanup. Keep the original source app immutable; launch canonical isolated copies with the original helper, without the unsigned guard. Disposable chmod-only faults require either real structured backend/UI proof or exact PID/time-scoped signature enforcement proof; ambiguity is failure.
+- Document-only task commits may differ from the artifact product source; verify that the diff contains no product/packaging inputs and do not rewrite the manifest source. A changed product input needs a new signed run and fresh app/DMG approvals. Local Accepted/stapled artifacts are not GitHub publication, auto-update, live SSH/physical input/OS notification success, or final external-distribution approval.
 - Plain Vite browser runs lack the Electron preload bridge; screens should keep static identity/read-only empty states and explicit `backend_unavailable` errors for backend actions.
 - Use `GPUWATCHER_TEST_DATA_DIR` only for tests/smoke isolation. Production data lives under the macOS data dir as `GPUWatcher/gpuwatcher.sqlite3`.
 - Rust LSP may be unavailable because `rust-analyzer` is not installed here; use `cargo fmt`, focused Cargo tests, and crate tests for Rust verification.

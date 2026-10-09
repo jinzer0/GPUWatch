@@ -1,6 +1,6 @@
 # 스모크 체크리스트
 
-아래는 내부 인계 시 실행할 시나리오이며, 통과·실행 기록이 아닙니다. 운영 DB 대신 `GPUWATCHER_TEST_DATA_DIR`로 격리한 데이터를 사용합니다. 실제 SSH·OS 알림·물리 macOS 키보드/VoiceOver 확인은 별도 승인 후 수행하고, renderer QA와 unsigned 패키지 검증 결과를 구분해 기록합니다.
+아래는 내부 인계 시 실행할 시나리오이며, 통과·실행 기록이 아닙니다. 운영 DB 대신 `GPUWATCHER_TEST_DATA_DIR`로 격리한 데이터를 사용합니다. 실제 SSH·OS 알림·물리 macOS 키보드/VoiceOver 확인은 별도 승인 후 수행하고, renderer QA와 unsigned/signed 패키지 검증 결과를 구분해 기록합니다.
 
 ## 로컬 회귀 시나리오
 
@@ -58,7 +58,7 @@ npm run helper:build
 1. `npm run electron:pack` 후 실제 출력에서 앱 경로를 찾습니다.
 
 ```bash
-APP_PATH="$(find release/electron -name 'GPUWatcher.app' -type d -print -quit)"
+APP_PATH="$(find release/electron -path 'release/electron/signed' -prune -o -name 'GPUWatcher.app' -type d -print -quit)"
 test -n "$APP_PATH"
 open "$APP_PATH"
 ```
@@ -71,6 +71,54 @@ node smoke/electron-unsigned-dist-artifacts.mjs
 ```
 
 확인 기준: 로컬 `.app`과 내부 테스트 DMG/ZIP은 unsigned이며 signed/notarized/uploaded/auto-updated/production release-ready/external distribution-ready 산출물이 아닙니다. Gatekeeper·quarantine 차단은 unsigned 산출물 한계로 기록하며 서명 검증 통과로 보고하지 않습니다. 패키지 검증은 물리 키보드·VoiceOver·live SSH·OS 배너 검증을 대체하지 않습니다.
+
+## Signed 패키지 시나리오
+
+unsigned 명령/탐색을 signed 결과로 대체하지 않습니다. unsigned 배포 회귀에서는 빌드 직전 `GPUWATCHER_ARTIFACT_STARTED_AT_MS`를 epoch milliseconds로 설정하고 같은 값을 artifact verifier에 전달해 이전 파일을 수용하지 않도록 합니다.
+
+1. 승인 계획과 깨끗한 source commit, Developer ID 인증서의 CN/Team, `xcrun notarytool`/`stapler`, Keychain profile 인증을 확인합니다. 검증한 `CSC_NAME`, `GPUWATCHER_SIGNING_TEAM_ID`, `APPLE_KEYCHAIN_PROFILE`을 설정하고 필요한 경우에만 `APPLE_KEYCHAIN`을 지정합니다. 인증 mixing·missing identity·unsigned/ad-hoc fallback은 허용하지 않습니다. 앱 entitlement는 JIT-only, helper는 empty이며 테스트를 위해 권한을 넓히지 않습니다.
+2. 아래 build는 서명만 된 새 후보를 생성합니다. 출력 manifest의 canonical 경로를 `SIGNED_MANIFEST`에 지정합니다. run은 `release/electron/signed/` 아래이며 signed 검증은 무인자 자동 탐색을 사용하지 않습니다. 승인 계획/source가 바뀌면 새 run이 필요합니다.
+
+```bash
+npm run electron:pack:signed
+```
+
+3. 앱 strict signature·Team·timestamp·hardened runtime·arm64·v0.2.0·실제 helper envelope를 확인하고 제출 ZIP tuple을 준비합니다.
+
+```bash
+: "${SIGNED_MANIFEST:?해당 run의 canonical manifest 경로를 지정하세요}"
+node electron/signedRelease.mjs prepare-app --manifest "$SIGNED_MANIFEST"
+```
+
+4. 출력된 exact tuple을 승인받은 후에만 제출합니다. 해당 tuple의 manifest/artifact SHA256을 각각 `APPROVED_MANIFEST_SHA256`, `APPROVED_ARTIFACT_SHA256`에 지정합니다. submission timeout/Invalid/불확실 상태는 실패로 보존하며 자동 재제출하지 않습니다.
+
+```bash
+: "${APPROVED_MANIFEST_SHA256:?승인된 manifest SHA256을 지정하세요}"
+: "${APPROVED_ARTIFACT_SHA256:?승인된 앱 ZIP SHA256을 지정하세요}"
+node electron/signedRelease.mjs submit-app --manifest "$SIGNED_MANIFEST" --approved-manifest-sha256 "$APPROVED_MANIFEST_SHA256" --approved-artifact-sha256 "$APPROVED_ARTIFACT_SHA256"
+```
+
+5. Apple request ID/Accepted/log의 uploaded SHA 결박, app staple·strict codesign·spctl 통과 후 동일 stapled 앱으로 배포 ZIP과 Developer ID DMG를 만듭니다. 앱 재패킹/재서명은 하지 않습니다. ZIP 자체에는 staple하지 않습니다.
+
+```bash
+npm run electron:dist:signed -- --manifest "$SIGNED_MANIFEST"
+node electron/signedRelease.mjs prepare-dmg --manifest "$SIGNED_MANIFEST"
+```
+
+6. 새 DMG tuple을 **별도로 승인**받습니다. 위 두 SHA 변수는 DMG tuple의 최신 값으로 다시 지정합니다. 앱 제출 승인을 DMG에 전파하지 않습니다.
+
+```bash
+: "${APPROVED_MANIFEST_SHA256:?승인된 DMG manifest SHA256을 지정하세요}"
+: "${APPROVED_ARTIFACT_SHA256:?승인된 DMG SHA256을 지정하세요}"
+node electron/signedRelease.mjs submit-dmg --manifest "$SIGNED_MANIFEST" --approved-manifest-sha256 "$APPROVED_MANIFEST_SHA256" --approved-artifact-sha256 "$APPROVED_ARTIFACT_SHA256"
+node smoke/electron-signed-dist-artifacts.mjs --manifest "$SIGNED_MANIFEST"
+```
+
+최종 verifier에도 같은 승인 identity/Team/profile selectors가 필요합니다. app/DMG codesign·stapler·Gatekeeper, Apple info/log, 최종 hash와 ZIP extraction/DMG mount의 앱·helper 동등성, source 보존·owned cleanup을 모두 확인합니다. 현재 task의 문서-only 변경은 artifact source와 구별하고 제품/packaging 입력이 바뀌면 기존 Accepted 결과를 재사용하지 않습니다.
+
+signed 정상 startup은 canonical temp HOME/data/cwd·앱 copy에 원 helper를 유지하며 source/copy seal·signature/ticket을 launch 전에 확인합니다. guard/rename/chmod로 정상 앱을 변경하지 않습니다. action-specific bridge·실제 helper version·빈 registry·disabled smoke.invalid 저장/list/navigation을 확인합니다. fault는 별도 copy의 chmod-only 결과이며 structured backend error/가시 UI/탐색성 또는 exact PID·launch 시간창·동일 JSON record로 입증한 OS signature-block을 구분합니다. 모호한 SIGKILL/timeout·불완전 receipt는 성공이 아닙니다.
+
+로컬 Accepted·staple과 실제 signed smoke 성공도 GitHub 업로드·자동 업데이트·최종 외부 배포 승인, live SSH·물리 입력·VoiceOver·OS 알림 성공을 뜻하지 않습니다. 실행 기록에는 run·P/C·각 승인 tuple·request ID·최종 hash와 검증하지 않은 항목을 별도로 남깁니다.
 
 ## 별도 Live SSH 시나리오
 

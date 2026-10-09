@@ -24,6 +24,8 @@ Apple Silicon Mac에서 SSH로 Linux NVIDIA GPU 서버를 지켜보는 데스크
 
 v0.1.0은 Apple Silicon Mac 전용 unsigned, non-notarized 앱입니다. macOS Gatekeeper가 차단하면 앱을 한 번 실행해 경고를 만든 뒤 `System Settings → Privacy & Security → Open Anyway`에서 확인 창의 `Open`을 누르세요. 자동 업데이트는 없으며 새 버전은 Releases에서 직접 확인합니다. 로컬 unsigned `.app`과 내부 테스트용 DMG/ZIP은 서명·공증·업로드된 프로덕션 배포 산출물이 아닙니다.
 
+v0.2.0은 Developer ID 서명·Apple 공증·staple 및 격리 패키지 검증을 통과한 로컬 arm64 배포 후보를 준비 중입니다. 아직 GitHub Release나 다운로드 파일을 게시하지 않았으며 위 v0.1.0 링크가 v0.2.0을 제공하는 것은 아닙니다. 서명·공증은 자동 업데이트나 실제 SSH·OS 알림 검증을 뜻하지 않습니다.
+
 ### 서버 연결
 
 1. Mac Terminal에서 먼저 프롬프트 없이 키 기반 SSH로 접속되는지 확인합니다. `ssh -o BatchMode=yes USER@HOST true`의 `USER@HOST`를 실제 계정과 호스트로 바꿔 실행합니다.
@@ -57,6 +59,14 @@ npm run electron:dev
 ```
 
 일반 브라우저에는 Electron backend가 없어 읽기 전용 빈 상태와 `backend_unavailable` 안내를 표시합니다. [스모크 체크리스트](docs/smoke-checklist.md)와 [데모 순서](docs/demo/demo-script.md)는 검증 시나리오이며 실행 결과가 아닙니다.
+
+### 패키지 빌드 구분
+
+- `npm run electron:pack`: 내부 unsigned `.app` 후보. `npm run electron:dist:unsigned`: 내부 unsigned DMG/ZIP, 게시 없음.
+- `npm run electron:pack:signed`: 검증된 `CSC_NAME`, `GPUWATCHER_SIGNING_TEAM_ID`, `APPLE_KEYCHAIN_PROFILE`과 선택적 `APPLE_KEYCHAIN`으로 서명만 수행하며 Apple에 제출하지 않습니다. 승인된 계획·깨끗한 source에 결박된 새 `release/electron/signed/<run>/manifest.json`을 생성합니다.
+- 앱 ZIP의 별도 hash-bound 제출 승인 → Accepted·앱 staple → `npm run electron:dist:signed -- --manifest "$SIGNED_MANIFEST"`로 동일 앱의 배포 ZIP/DMG 준비 → DMG 별도 제출 승인·Accepted·staple → 최종 검증 순서입니다. `SIGNED_MANIFEST`는 해당 run의 실제 canonical manifest 경로를 지정합니다. ZIP 자체에는 staple하지 않습니다.
+
+인증/서명 실패에 unsigned fallback을 사용하지 않습니다. 실제 제출 명령과 최소 entitlement·검증 경계는 [signed 패키지 시나리오](docs/smoke-checklist.md#signed-패키지-시나리오)를 따릅니다. 로컬 검증 완료와 GitHub 게시·외부 배포 최종 승인은 별도입니다.
 
 ## Features
 
