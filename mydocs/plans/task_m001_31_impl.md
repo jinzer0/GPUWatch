@@ -403,3 +403,31 @@ Task #31 Stage 4: squash-safe 계획 결박과 signed source drift 검증
 - 이 Stage 4 보정 내용 승인.
 - 이 계획 파일 한 경로 단독 commit 승인. 제품/테스트/AGENTS는 아직 수정하지 않았다.
 - plan commit 후 새 exact SHA 확인 및 Stage 4 구현 진입 승인은 별도로 요청한다.
+
+## Stage 5 — Codex 승인 manifest source label 결박
+
+### 요청·발견
+
+- 작업지시자는 Codex 수정·commit·push와 이후 진행을 명시 지시했고 신규 commit에 GPG 서명을 요구했다. 앞으로 생성하는 plan/product/final commit은 GPG key `2040104BBE6459FE`로 서명하고 exact commit의 서명/fingerprint를 검증한다. unsigned fallback·기존 commit 재작성은 하지 않는다. secret key availability만 확인했으며 실제 서명 성공은 아직 주장하지 않는다.
+- 새 P1 comment `4232489857`: mutable finalized manifest와 두 approval.sourceCommit을 같은 새 문서-only HEAD로 바꾸면 source tree proof가 통과하고 기존 manifestSha256은 형식 검사만 하므로 승인 당시 source label이 보존되지 않는다.
+- 기존 P2 comment `4231004797`은 old source0ca를 설명하는 재결박된 댓글이다. Stage 4의 제품 drift/physical/index/ignore 회귀를 유지하고 그 결함을 새 미해결로 반복 수정하지 않는다.
+
+### 계약과 정확한 범위
+
+1. 앱/DMG submit 경계에서 승인된 pre-submit manifest **원문 bytes**를 run 내부의 fixed snapshot 경로에 exclusive-create로 보존한다. canonical regular/non-symlink/single-link0600, 같은 root ownership을 검증하고 hash가 원래 승인 manifestSha256과 같은지 확인한다. 기존 snapshot을 overwrite·재라벨·자동 복구하지 않는다. state mutation/upload 전에 완결해야 한다.
+2. finalized verifier에는 독립적인 원 승인 앱/DMG manifest SHA256을 explicit CLI/dependency input으로 요구한다. mutable manifest에서 이 값을 자동 채우거나 별도 파일을 read-only로 만들었다는 이유로 신뢰하지 않는다. 사람이 승인한 original tuple의 hash가 trust anchor다.
+3. fixed snapshot hash를 외부 승인 hash와 비교하고 그 snapshot의 원 source/P/identity/profile/artifact/seal/state를 현재 manifest·stored approval·실제 artifact와 비교한다. 현재 manifest 세 source label만 바꾸는 공격, snapshot/record/hash 동시 수정, unknown/missing anchor, binary/path/mode/link drift는 native/Apple/runtime 전에 거부한다. 전체 package 원본/현재 source proof도 유지한다.
+4. snapshot을 cryptographically immutable이라고 과장하지 않는다. 원문을 바꿔도 독립 승인 hash 검증을 통과할 수 없다는 결박이다. 실제 새 signed run/앱·DMG Apple 제출은 기존 각 exact tuple 승인 경계가 필요하며 이번 코드 진행 지시를 Apple 제출 승인으로 전파하지 않는다.
+
+제품 범위: `electron/signedRelease.mjs`, `electron/signedRelease.test.ts`, `smoke/electron-signed-dist-artifacts.mjs`, `smoke/electron-signed-dist-artifacts.test.ts`, `AGENTS.md`, `docs/smoke-checklist.md`. 내부 산출물: `mydocs/working/task_m001_31_stage5.md`, `mydocs/orders/20261008.md`; 이후 기존 final report/orders 별도 갱신. 신규 제품 문서 없이 이미 선택된 공식 checklist와 루트 운영 인덱스만 수정하며 내부 보고는 기존 working/report 위치를 유지한다. docs 규칙을 확인하고 같은 검사/CLI 호출 안내를 갱신한다. package/version/lockfile·entitlement·원격/IPC/DB는 변경하지 않는다.
+
+### 검증·게시
+
+- 실제 Git의 문서-only commit과 mock finalized artifact에서 세 source label 변경이 기존 verifier에 수용되는 수정 전 실패를 보존한다. 원 승인 hash 불일치·snapshot/record/source/P/credential/state/artifact drift·missing/symlink/hardlink·중복 submit 경계와 정상 flow를 테스트한다.
+- Stage 4 source gate·unsigned discovery/guard/fault/UI 수용은 그대로 유지한다. focused·전체 Vitest, renderer/Electron/helper builds, core/helper tests·fmt check·fresh unsigned dist/artifact/실제 UI·diff check를 실행한다. 실제 signed 성공/Apple 제출을 mock으로 대신 주장하지 않는다.
+- 기존 역사적 source225 산출물과 승인/게시 이력을 보존한다. 새 P/source로 old manifest를 수정하지 않는다. 최신 PR #32 exact head0d·base/title/body를 fresh 조회하고 승인된 exact source만 FF/exact-old lease로 갱신한다.
+- GPG signed plan-only commit → exact SHA/단계 진입 → 구현/단계 결과·signed product commit → final 갱신·signed final commit/evidence 수용 → exact 게시 승인 경계를 유지한다. 매뉴얼/skill을 일괄 사전 승인으로 변경하지 않으며 merge/issue close/Release 승인은 별도다.
+
+### 승인 요청
+
+이 Stage 5 보정 내용과 계획 파일 한 경로의 GPG signed commit 승인. plan commit 뒤 exact SHA 확인/구현 진입은 해당 단계 승인으로 처리한다. 아직 제품 source를 수정하지 않았다.
