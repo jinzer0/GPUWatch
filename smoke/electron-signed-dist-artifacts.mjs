@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { APPROVED_PLAN_OID, REPOSITORY, verifyArtifactSource, verifyGatekeeper, executeCommand, loadManifest, safePath, sealApp, sha256File, validateApp, validateCredentials } from '../electron/signedRelease.mjs';
+import { APPROVED_PLAN_OID, REPOSITORY, verifyArtifactSource, verifySubmissionSnapshots, verifyGatekeeper, executeCommand, loadManifest, safePath, sealApp, sha256File, validateApp, validateCredentials } from '../electron/signedRelease.mjs';
 import { runPackagedAppSmoke } from './scenarios/packaged-app.mjs';
 import { commandSucceeded } from './scenarios/packaged-app/startup.mjs';
 import { classifyPackagedFault } from './scenarios/packaged-app/helper-error.mjs';
@@ -13,8 +13,12 @@ const fail = (message) => { throw new Error(message); };
 const equal = (actual, expected, label) => { if (actual !== expected) fail(`${label} mismatch`); };
 
 export function parseCli(argv) {
-  if (argv.length !== 2 || argv[0] !== '--manifest' || !path.isAbsolute(argv[1])) fail('Expected --manifest <canonical absolute manifest path>');
-  return { manifest: argv[1] };
+  if (argv.length !== 6 || argv[0] !== '--manifest' || !path.isAbsolute(argv[1]) ||
+      argv[2] !== '--approved-app-manifest-sha256' || !hash.test(argv[3]) ||
+      argv[4] !== '--approved-dmg-manifest-sha256' || !hash.test(argv[5])) {
+    fail('Expected canonical --manifest, --approved-app-manifest-sha256 and --approved-dmg-manifest-sha256');
+  }
+  return { manifest: argv[1], approvedAppManifestSha256: argv[3], approvedDmgManifestSha256: argv[5] };
 }
 
 function finalizedBindings(manifest, manifestPath) {
@@ -77,6 +81,7 @@ export async function runSignedArtifactSmoke(options = {}, dependencies = {}) {
   if (typeof options.manifest !== 'string' || !path.isAbsolute(options.manifest) || path.resolve(options.manifest) !== options.manifest) fail('Canonical explicit manifest required');
   const { manifest, manifestPath } = await loadManifest(options.manifest, ctx);
   finalizedBindings(manifest, manifestPath);
+  const approvalProof = await verifySubmissionSnapshots(manifest, manifestPath, options, ctx);
   const credentials = validateCredentials(env, dependencies.platform ?? process.platform, dependencies.arch ?? process.arch);
   for (const [key, value] of Object.entries(credentials)) equal(manifest[key], value, `Credential ${key}`);
 
@@ -214,7 +219,9 @@ export async function runSignedArtifactSmoke(options = {}, dependencies = {}) {
     await artifacts();
     const finalSourceProof = await verifyArtifactSource(manifest, ctx);
     equal(JSON.stringify(finalSourceProof), JSON.stringify(sourceProof), 'Product source proof during verification');
-    return { manifestPath, appPath: manifest.appPath, state: 'verified', evidencePrefix: 'task-31-signed-dist', sourceProof, runtime };
+    const finalApprovalProof = await verifySubmissionSnapshots(manifest, manifestPath, options, ctx);
+    equal(JSON.stringify(finalApprovalProof), JSON.stringify(approvalProof), 'Original submission approval proof during verification');
+    return { manifestPath, appPath: manifest.appPath, state: 'verified', evidencePrefix: 'task-31-signed-dist', sourceProof, approvalProof, runtime };
   } finally { await preserveApp(); }
 }
 

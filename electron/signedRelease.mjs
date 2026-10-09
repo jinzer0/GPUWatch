@@ -3,9 +3,10 @@ import { createHash, randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isDeepStrictEqual } from 'node:util';
 
-export const APPROVED_PLAN_OID = '0fa0f34526fc56160448e1d796b19c54ba7cca6d';
-export const APPROVED_PLAN_BLOB_OID = '9fdfe6ed37f77fb7c9b8740d18cd111377cf3377';
+export const APPROVED_PLAN_OID = '4792cf42a8fac74540b3547349018e854b44f74e';
+export const APPROVED_PLAN_BLOB_OID = '6aaa38b6321e3e2aa7407f672a16917e9d1f6a24';
 export const REPOSITORY = Object.freeze({ host: 'github.com', repository: 'jinzer0/GPUWatch', repository_id: 1256824919, issue_number: 31 });
 export const ACTIONS = Object.freeze(['build', 'prepare-app', 'submit-app', 'package', 'prepare-dmg', 'submit-dmg']);
 const DEFAULT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -349,6 +350,12 @@ export async function loadManifest(manifestPath, dependencies = {}) {
   const file = await safePath(ctx.root, path.resolve(manifestPath));
   if (!inside(signedRoot, file) || path.basename(file) !== 'manifest.json') fail('Manifest outside signed run');
   const manifest = JSON.parse(await fs.readFile(file, 'utf8'));
+  await validateManifestPaths(manifest, file, ctx);
+  return { manifest, manifestPath: file };
+}
+
+async function validateManifestPaths(manifest, file, ctx) {
+  const signedRoot = path.join(ctx.root, 'release/electron/signed');
   if (manifest.schemaVersion !== 1 || manifest.approvedPlanOid !== APPROVED_PLAN_OID || manifest.version !== '0.2.0' || manifest.arch !== 'arm64' || manifest.runDirectory !== path.dirname(file) || path.dirname(manifest.runDirectory) !== signedRoot) fail('Invalid manifest provenance');
   for (const [key, value] of Object.entries(REPOSITORY)) if (manifest[key] !== value) fail('Manifest repository binding mismatch');
   await safePath(ctx.root, manifest.runDirectory, 'directory');
@@ -356,7 +363,6 @@ export async function loadManifest(manifestPath, dependencies = {}) {
   for (const artifact of Object.values(manifest.artifacts ?? {})) {
     if (await safePath(manifest.runDirectory, artifact.path) !== artifact.path) fail('Artifact path is not canonical');
   }
-  return { manifest, manifestPath: file };
 }
 
 async function saveManifest(file, manifest, ctx) {
@@ -393,10 +399,59 @@ export async function approvalInputs(action, manifestPath, dependencies = {}) {
   await assertSeal(manifest);
   for (const name of Object.keys(manifest.artifacts)) await assertArtifact(manifest, name);
   const name = action === 'submit-app' ? 'appZip' : 'dmg';
-  const artifact = await assertArtifact(manifest, name);
+  await assertArtifact(manifest, name);
   const expected = action === 'submit-app' ? 'app-prepared' : 'dmg-prepared';
   if (manifest.state !== expected || manifest.notarization[action === 'submit-app' ? 'app' : 'dmg']) fail('Submission state is not fresh');
-  return { ...REPOSITORY, action: action === 'submit-app' ? 'submit-app-zip-and-staple-app' : 'submit-dmg-and-staple-dmg', target: 'Apple notarization service', approvedPlanOid: APPROVED_PLAN_OID, sourceCommit: manifest.sourceCommit, version: manifest.version, arch: manifest.arch, identity: manifest.identity, teamId: manifest.teamId, keychain: manifest.keychain, keychainProfile: manifest.keychainProfile, manifestPath: file, manifestSha256: await sha256File(file), artifactPath: artifact.path, artifactSha256: artifact.sha256, appSealSha256: manifest.appSealSha256 };
+  return approvalProjection(action, manifest, file, await sha256File(file));
+}
+
+function approvalProjection(action, manifest, file, manifestSha256) {
+  const artifact = manifest.artifacts[action === 'submit-app' ? 'appZip' : 'dmg'];
+  return { ...REPOSITORY, action: action === 'submit-app' ? 'submit-app-zip-and-staple-app' : 'submit-dmg-and-staple-dmg', target: 'Apple notarization service', approvedPlanOid: APPROVED_PLAN_OID, sourceCommit: manifest.sourceCommit, version: manifest.version, arch: manifest.arch, identity: manifest.identity, teamId: manifest.teamId, keychain: manifest.keychain, keychainProfile: manifest.keychainProfile, manifestPath: file, manifestSha256, artifactPath: artifact.path, artifactSha256: artifact.sha256, appSealSha256: manifest.appSealSha256 };
+}
+
+async function snapshotBytes(run, target) {
+  const file = await safePath(run, path.join(run, `approval-${target}-manifest.json`));
+  if (((await fs.lstat(file)).mode & 0o7777) !== 0o600) fail('Approval snapshot must have mode 0600');
+  return fs.readFile(file);
+}
+
+// The operator's independent hashes, not file permissions or mutable records,
+// establish which original submission manifests were approved.
+export async function verifySubmissionSnapshots(manifest, manifestPath, options, dependencies = {}) {
+  const anchors = { app: options?.approvedAppManifestSha256, dmg: options?.approvedDmgManifestSha256 };
+  for (const anchor of Object.values(anchors)) if (typeof anchor !== 'string' || !HASH.test(anchor)) fail('Independent approved app/DMG manifest SHA-256 inputs required');
+  const ctx = context(dependencies);
+  const loaded = await loadManifest(manifestPath, ctx);
+  if (!isDeepStrictEqual(loaded.manifest, manifest) || manifest.state !== 'finalized') fail('Current finalized manifest binding mismatch');
+  const originals = {};
+  for (const target of ['app', 'dmg']) {
+    const bytes = await snapshotBytes(manifest.runDirectory, target);
+    if (digest(bytes) !== anchors[target]) fail('Approval snapshot hash mismatch');
+    const original = JSON.parse(bytes.toString('utf8'));
+    await validateManifestPaths(original, loaded.manifestPath, ctx);
+    if (original.state !== `${target}-prepared` || original.notarization?.[target]) fail('Approval snapshot is not an original prepared manifest');
+    for (const key of ['schemaVersion', ...Object.keys(REPOSITORY), 'approvedPlanOid', 'sourceCommit', 'version', 'arch', 'identity', 'teamId', 'keychainProfile', 'keychain', 'runDirectory', 'appPath', 'signedAppSealSha256']) {
+      if (!isDeepStrictEqual(original[key], manifest[key])) fail(`Approval snapshot binding mismatch: ${key}`);
+    }
+    if (!/^[a-f0-9]{40}$/.test(original.sourceCommit ?? '') || !HASH.test(original.appSealSha256 ?? '') || digest(JSON.stringify(original.appFiles)) !== original.appSealSha256) fail('Invalid original source or app seal');
+    validateCredentials({ CSC_NAME: original.identity, GPUWATCHER_SIGNING_TEAM_ID: original.teamId, APPLE_KEYCHAIN_PROFILE: original.keychainProfile, ...(original.keychain === null ? {} : { APPLE_KEYCHAIN: original.keychain }) }, 'darwin', 'arm64');
+    const artifactName = target === 'app' ? 'appZip' : 'dmg';
+    if (original.artifacts[artifactName]?.status !== 'frozen-for-submission' || !HASH.test(original.artifacts[artifactName]?.sha256 ?? '')) fail('Invalid original submission artifact');
+    const expected = approvalProjection(`submit-${target}`, original, loaded.manifestPath, anchors[target]);
+    if (!isDeepStrictEqual(manifest.notarization?.[target]?.approval, expected)) fail('Stored approval does not match independently anchored snapshot');
+    originals[target] = original;
+  }
+  const app = originals.app;
+  const dmg = originals.dmg;
+  if (Object.keys(app.notarization).length !== 0 || Object.keys(app.artifacts).length !== 1 || app.appStaple || app.dmgStaple || app.appSealSha256 !== app.signedAppSealSha256) fail('Invalid original app preparation');
+  if (dmg.dmgStaple || dmg.notarization.app?.status !== 'Accepted-and-stapled' || Object.keys(dmg.notarization).length !== 1 || !isDeepStrictEqual(dmg.notarization.app, manifest.notarization.app)) fail('Original DMG app notarization binding mismatch');
+  if (!isDeepStrictEqual(app.artifacts.appZip, manifest.artifacts.appZip) || !isDeepStrictEqual(dmg.artifacts.appZip, app.artifacts.appZip) || !isDeepStrictEqual(dmg.artifacts.zip, manifest.artifacts.zip)) fail('Original artifact binding mismatch');
+  if (Object.keys(dmg.artifacts).length !== 3 || dmg.artifacts.zip?.status !== 'from-stapled-app' || !isDeepStrictEqual(dmg.appStaple, manifest.appStaple) || dmg.appStaple?.beforeSha256 !== app.appSealSha256 || dmg.appStaple?.afterSha256 !== dmg.appSealSha256 || !isDeepStrictEqual(dmg.appFiles, manifest.appFiles) || dmg.appSealSha256 !== manifest.appSealSha256) fail('Original staple seal binding mismatch');
+  if (dmg.artifacts.dmg.path !== manifest.artifacts.dmg?.path || dmg.artifacts.dmg.sha256 !== manifest.artifacts.dmg?.submissionSha256 || dmg.artifacts.dmg.sha256 !== manifest.dmgStaple?.beforeSha256 || manifest.artifacts.dmg?.sha256 !== manifest.dmgStaple?.afterSha256 || manifest.artifacts.dmg?.status !== 'stapled') fail('Original DMG submission binding mismatch');
+  await assertSeal(manifest);
+  for (const name of ['appZip', 'zip', 'dmg']) await assertArtifact(manifest, name);
+  return { appManifestSha256: anchors.app, dmgManifestSha256: anchors.dmg, sourceCommit: app.sourceCommit };
 }
 
 function notaryArgs(manifest) {
@@ -417,6 +472,11 @@ async function submit(action, file, manifest, options, ctx) {
   const target = action === 'submit-app' ? 'app' : 'dmg';
   const artifactName = target === 'app' ? 'appZip' : 'dmg';
   const artifact = manifest.artifacts[artifactName];
+  const bytes = await fs.readFile(await safePath(ctx.root, file));
+  if (digest(bytes) !== options.approvedManifestSha256 || digest(bytes) !== approval.manifestSha256 || !isDeepStrictEqual(JSON.parse(bytes.toString('utf8')), manifest)) fail('Original approval manifest drift');
+  await safePath(ctx.root, manifest.runDirectory, 'directory');
+  await fs.writeFile(path.join(manifest.runDirectory, `approval-${target}-manifest.json`), bytes, { flag: 'wx', mode: 0o600 });
+  if (digest(await snapshotBytes(manifest.runDirectory, target)) !== approval.manifestSha256) fail('Approval snapshot hash mismatch');
   manifest.notarization[target] = { status: 'Submitting', approval, attemptedAt: ctx.now() };
   manifest.state = `${target}-submitting`;
   await saveManifest(file, manifest, ctx);

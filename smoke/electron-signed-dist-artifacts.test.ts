@@ -19,6 +19,35 @@ let manifestPath: string;
 let manifest: any;
 let deps: any;
 let override: ((executable: string, args: string[]) => any) | undefined;
+let approvalAnchors: any;
+let signedFiles: any;
+
+async function freezeApprovals() {
+  const app = structuredClone(manifest);
+  app.state = 'app-prepared';
+  app.appFiles = signedFiles;
+  app.appSealSha256 = manifest.signedAppSealSha256;
+  app.artifacts = { appZip: structuredClone(manifest.artifacts.appZip) };
+  app.notarization = {};
+  delete app.appStaple;
+  delete app.dmgStaple;
+  const appFile = path.join(run, 'approval-app-manifest.json');
+  await fs.writeFile(appFile, JSON.stringify(app), { mode: 0o600 });
+  const approvedAppManifestSha256 = await sha256File(appFile);
+  manifest.notarization.app.approval.manifestSha256 = approvedAppManifestSha256;
+  const dmg = structuredClone(manifest);
+  dmg.state = 'dmg-prepared';
+  dmg.artifacts.dmg.sha256 = manifest.artifacts.dmg.submissionSha256;
+  dmg.artifacts.dmg.status = 'frozen-for-submission';
+  delete dmg.artifacts.dmg.submissionSha256;
+  delete dmg.dmgStaple;
+  delete dmg.notarization.dmg;
+  const dmgFile = path.join(run, 'approval-dmg-manifest.json');
+  await fs.writeFile(dmgFile, JSON.stringify(dmg), { mode: 0o600 });
+  const approvedDmgManifestSha256 = await sha256File(dmgFile);
+  manifest.notarization.dmg.approval.manifestSha256 = approvedDmgManifestSha256;
+  approvalAnchors = { approvedAppManifestSha256, approvedDmgManifestSha256 };
+}
 
 function git(...args: string[]) {
   return execFileSync('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgSign=false', ...args], {
@@ -48,7 +77,7 @@ async function copyApp(directory: string, name = 'GPUWatcher.app') {
   await fs.cp(manifest.appPath, path.join(directory, name), { recursive: true, verbatimSymlinks: true });
 }
 const calls = (exe: string) => deps.command.mock.calls.filter(([executable]: any[]) => executable === exe);
-const verify = () => runSignedArtifactSmoke({ manifest: manifestPath }, deps);
+const verify = () => runSignedArtifactSmoke({ manifest: manifestPath, ...approvalAnchors }, deps);
 
 function runtimeReceipt(): any {
   const signature = () => ({ sourceSealSha256: manifest.appSealSha256, copySealSha256: manifest.appSealSha256, codesign: ok(), stapler: ok() });
@@ -69,6 +98,8 @@ beforeEach(async () => {
   await fs.writeFile(path.join(appPath, 'Contents/Info.plist'), 'mock plist');
   await fs.writeFile(path.join(appPath, 'Contents/MacOS/GPUWatcher'), 'mock executable', { mode: 0o755 });
   await fs.writeFile(path.join(appPath, 'Contents/Resources/gpuwatcher-helper/gpuwatcher-helper'), 'mock helper', { mode: 0o755 });
+  const signedSeal = await sealApp(appPath);
+  signedFiles = signedSeal.files;
   await fs.writeFile(path.join(appPath, 'Contents/ticket'), 'mock app ticket');
   const seal = await sealApp(appPath);
   const artifacts: any = {};
@@ -77,14 +108,17 @@ beforeEach(async () => {
     await fs.writeFile(file, `mock ${name} artifact`);
     artifacts[name] = { path: file, sha256: await sha256File(file) };
   }
+  artifacts.appZip.status = 'frozen-for-submission';
+  artifacts.zip.status = 'from-stapled-app';
+  artifacts.dmg.status = 'stapled';
   artifacts.dmg.submissionSha256 = 'b'.repeat(64);
   manifestPath = path.join(run, 'manifest.json');
   manifest = {
     ...REPOSITORY, schemaVersion: 1, approvedPlanOid: APPROVED_PLAN_OID, sourceCommit,
     version: '0.2.0', arch: 'arm64', runDirectory: run, appPath, identity, teamId: team,
     keychainProfile: 'gpuwatcher-notary', keychain: '/mock/login.keychain-db', state: 'finalized',
-    appFiles: seal.files, appSealSha256: seal.sha256, signedAppSealSha256: 'c'.repeat(64), artifacts,
-    appStaple: { beforeSha256: 'c'.repeat(64), afterSha256: seal.sha256 },
+    appFiles: seal.files, appSealSha256: seal.sha256, signedAppSealSha256: signedSeal.sha256, artifacts,
+    appStaple: { beforeSha256: signedSeal.sha256, afterSha256: seal.sha256 },
     dmgStaple: { beforeSha256: artifacts.dmg.submissionSha256, afterSha256: artifacts.dmg.sha256 }, notarization: {},
   };
   for (const target of ['app', 'dmg'] as const) {
@@ -101,6 +135,7 @@ beforeEach(async () => {
         action: target === 'app' ? 'submit-app-zip-and-staple-app' : 'submit-dmg-and-staple-dmg' },
     };
   }
+  await freezeApprovals();
   await save();
   override = undefined;
   deps = {
@@ -138,6 +173,46 @@ beforeEach(async () => {
 afterEach(async () => { await fs.rm(root, { recursive: true, force: true }); });
 
 describe('signed artifact smoke', () => {
+  it('rejects source relabel after a documentation-only commit against the original approval', async () => {
+    await writeInput('README.md', 'documentation-only update\n');
+    git('add', '--', 'README.md');
+    git('commit', '--quiet', '-m', 'documentation-only successor');
+    manifest.sourceCommit = git('rev-parse', 'HEAD');
+    for (const target of ['app', 'dmg']) manifest.notarization[target].approval.sourceCommit = manifest.sourceCommit;
+    await save();
+    await expect(verify()).rejects.toThrow(/source|snapshot|approval/i);
+    expect(calls('codesign')).toHaveLength(0);
+    expect(calls('xcrun')).toHaveLength(0);
+  });
+
+  it.each(['app', 'dmg'])('rejects %s snapshot rewriting even when mutable record hashes are updated', async target => {
+    const file = path.join(run, `approval-${target}-manifest.json`);
+    const snapshot = JSON.parse(await fs.readFile(file, 'utf8'));
+    snapshot.sourceCommit = 'f'.repeat(40);
+    await fs.writeFile(file, JSON.stringify(snapshot));
+    manifest.notarization[target].approval.manifestSha256 = await sha256File(file);
+    await save();
+    await expect(verify()).rejects.toThrow(/hash|approval|snapshot/i);
+    expect(calls('codesign')).toHaveLength(0);
+  });
+
+  it.each(['app', 'dmg'])('requires independently supplied %s approval hash without mutable fallback', async target => {
+    const key = target === 'app' ? 'approvedAppManifestSha256' : 'approvedDmgManifestSha256';
+    delete approvalAnchors[key];
+    await expect(verify()).rejects.toThrow('Independent approved app/DMG manifest SHA-256 inputs required');
+    expect(deps.command).not.toHaveBeenCalled();
+  });
+
+  it.each(['missing', 'symlink', 'hardlink', 'mode'])('rejects %s original approval snapshot before native work', async kind => {
+    const file = path.join(run, 'approval-app-manifest.json');
+    if (kind === 'missing') await fs.unlink(file);
+    if (kind === 'symlink') { await fs.rename(file, `${file}.real`); await fs.symlink(`${file}.real`, file); }
+    if (kind === 'hardlink') await fs.link(file, `${file}.alias`);
+    if (kind === 'mode') await fs.chmod(file, 0o644);
+    await expect(verify()).rejects.toThrow();
+    expect(calls('codesign')).toHaveLength(0);
+  });
+
   it.each(['src/main.tsx', 'package.json', 'build/entitlements.mac.plist', 'electron/signedRelease.mjs', 'smoke/proof.md'])('rejects committed product source drift in %s before native work', async name => {
     await writeInput(name, 'changed input\n');
     git('add', '--', name);
@@ -180,6 +255,7 @@ describe('signed artifact smoke', () => {
     git('commit', '--quiet', '-m', 'source with clean filter');
     manifest.sourceCommit = git('rev-parse', 'HEAD');
     for (const target of ['app', 'dmg']) manifest.notarization[target].approval.sourceCommit = manifest.sourceCommit;
+    await freezeApprovals();
     await save();
     await writeInput('src/main.tsx', 'export const value = 999;\n');
     await expect(verify()).rejects.toThrow(/source|product|bytes/i);
@@ -262,7 +338,8 @@ describe('signed artifact smoke', () => {
 
   it('requires exactly one canonical explicit CLI input without executing on import', () => {
     expect(deps.command).not.toHaveBeenCalled();
-    expect(parseCli(['--manifest', manifestPath])).toEqual({ manifest: manifestPath });
+    expect(parseCli(['--manifest', manifestPath, '--approved-app-manifest-sha256', approvalAnchors.approvedAppManifestSha256, '--approved-dmg-manifest-sha256', approvalAnchors.approvedDmgManifestSha256])).toEqual({ manifest: manifestPath, ...approvalAnchors });
+    expect(() => parseCli(['--manifest', manifestPath])).toThrow();
     for (const args of [[], ['--manifest', 'relative.json'], ['--manifest', manifestPath, '--submit'], ['--manifest', manifestPath, '--manifest', manifestPath]]) expect(() => parseCli(args)).toThrow();
   });
 
@@ -329,7 +406,7 @@ describe('signed artifact smoke', () => {
 
   it.each(['appZip', 'zip', 'dmg'])('rejects actual %s final hash drift', async name => {
     await fs.appendFile(manifest.artifacts[name].path, 'drift');
-    await expect(verify()).rejects.toThrow('final hash');
+    await expect(verify()).rejects.toThrow('Artifact hash drift');
     expect(deps.command).not.toHaveBeenCalled();
   });
 

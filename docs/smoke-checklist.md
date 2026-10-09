@@ -95,6 +95,7 @@ node electron/signedRelease.mjs prepare-app --manifest "$SIGNED_MANIFEST"
 ```bash
 : "${APPROVED_MANIFEST_SHA256:?승인된 manifest SHA256을 지정하세요}"
 : "${APPROVED_ARTIFACT_SHA256:?승인된 앱 ZIP SHA256을 지정하세요}"
+APPROVED_APP_MANIFEST_SHA256="$APPROVED_MANIFEST_SHA256"
 node electron/signedRelease.mjs submit-app --manifest "$SIGNED_MANIFEST" --approved-manifest-sha256 "$APPROVED_MANIFEST_SHA256" --approved-artifact-sha256 "$APPROVED_ARTIFACT_SHA256"
 ```
 
@@ -110,11 +111,15 @@ node electron/signedRelease.mjs prepare-dmg --manifest "$SIGNED_MANIFEST"
 ```bash
 : "${APPROVED_MANIFEST_SHA256:?승인된 DMG manifest SHA256을 지정하세요}"
 : "${APPROVED_ARTIFACT_SHA256:?승인된 DMG SHA256을 지정하세요}"
+APPROVED_DMG_MANIFEST_SHA256="$APPROVED_MANIFEST_SHA256"
 node electron/signedRelease.mjs submit-dmg --manifest "$SIGNED_MANIFEST" --approved-manifest-sha256 "$APPROVED_MANIFEST_SHA256" --approved-artifact-sha256 "$APPROVED_ARTIFACT_SHA256"
-node smoke/electron-signed-dist-artifacts.mjs --manifest "$SIGNED_MANIFEST"
+: "${APPROVED_APP_MANIFEST_SHA256:?원 앱 tuple에서 승인한 manifest SHA256을 보존하세요}"
+node smoke/electron-signed-dist-artifacts.mjs --manifest "$SIGNED_MANIFEST" --approved-app-manifest-sha256 "$APPROVED_APP_MANIFEST_SHA256" --approved-dmg-manifest-sha256 "$APPROVED_DMG_MANIFEST_SHA256"
 ```
 
 최종 verifier에도 같은 승인 identity/Team/profile selectors가 필요합니다. app/DMG codesign·stapler·Gatekeeper, Apple info/log, 최종 hash와 ZIP extraction/DMG mount의 앱·helper 동등성, source 보존·owned cleanup을 모두 확인합니다. 현재 task의 문서-only 변경은 artifact source와 구별하고 제품/packaging 입력이 바뀌면 기존 Accepted 결과를 재사용하지 않습니다.
+
+submit은 state 변경/Apple upload 전에 승인된 pre-submit manifest의 원문을 해당 run의 `approval-app-manifest.json`, `approval-dmg-manifest.json`에 exclusive-create로 보존합니다. 최종 검증은 **원 승인 tuple의 두 hash를 독립 입력**으로 요구하며 snapshots·현재 manifest·approval/source/artifact/seal을 비교합니다. mutable finalized manifest에서 hash를 자동 추출하거나 source label을 문서-only HEAD로 재라벨하지 않습니다. snapshot이 없거나 hash/mode/link/내용이 다르면 실패이며 overwrite·자동 복구하지 않습니다. read-only 파일 자체가 승인 증거는 아니고 외부 승인 hash가 trust anchor입니다. 기존 snapshot 없는 산출물을 새 provenance로 수선하거나 최신 run 성공으로 표현하지 않습니다.
 
 signed 정상 startup은 canonical temp HOME/data/cwd·앱 copy에 원 helper를 유지하며 source/copy seal·signature/ticket을 launch 전에 확인합니다. guard/rename/chmod로 정상 앱을 변경하지 않습니다. action-specific bridge·실제 helper version·빈 registry·disabled smoke.invalid 저장/list/navigation을 확인합니다. fault는 별도 copy의 chmod-only 결과이며 structured backend error/가시 UI/탐색성 또는 exact PID·launch 시간창·동일 JSON record로 입증한 OS signature-block을 구분합니다. 모호한 SIGKILL/timeout·불완전 receipt는 성공이 아닙니다.
 

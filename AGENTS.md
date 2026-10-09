@@ -80,7 +80,7 @@ npm run electron:pack               # build + helper build + unsigned electron-b
 npm run electron:dist:unsigned      # internal/test unsigned DMG+ZIP artifacts, no publish
 npm run electron:pack:signed        # explicit identity/Team/profile; signing-only candidate, no Apple submit
 npm run electron:dist:signed -- --manifest "$SIGNED_MANIFEST" # formats the same Accepted/stapled app, no app resign
-node smoke/electron-signed-dist-artifacts.mjs --manifest "$SIGNED_MANIFEST" # same selectors; finalized explicit manifest required
+node smoke/electron-signed-dist-artifacts.mjs --manifest "$SIGNED_MANIFEST" --approved-app-manifest-sha256 "$APPROVED_APP_MANIFEST_SHA256" --approved-dmg-manifest-sha256 "$APPROVED_DMG_MANIFEST_SHA256" # original approval hashes; same selectors
 npm run smoke:electron:first-run    # Electron dev-surface UI smoke; requires built helper
 node smoke/electron-packaged-app-smoke.mjs  # packaged .app smoke after electron:pack
 cargo test --manifest-path crates/gpuwatcher-core/Cargo.toml
@@ -98,6 +98,7 @@ GPUWATCHER_LIVE_SSH_TARGET=tml-server cargo test --manifest-path crates/gpuwatch
 - Final signed verification requires explicit identity/Team/profile selectors, read-only Apple info/log rechecks, codesign/stapler/spctl, app equality in ZIP/DMG, final hashes and owned cleanup. Keep the original source app immutable; launch canonical isolated copies with the original helper, without the unsigned guard. Disposable chmod-only faults require either real structured backend/UI proof or exact PID/time-scoped signature enforcement proof; ambiguity is failure.
 - The final verifier requires the manifest source commit object and checks its tree against HEAD plus index/working/untracked inputs before Apple/native/runtime work and again before success. Only regular nonexecutable nonbinary README.md/AGENTS.md or .md files under docs/mydocs may differ; the approved plan blob stays fixed. Product/packaging drift, document-shaped symlinks/binaries or unknown source require a fresh run and approvals, not an old Accepted artifact or automatic fetch. The receipt records the source/head/documentation proof; never relabel the manifest source after squash or document-only commits.
 - Source proof rejects assume-unchanged/skip-worktree/unresolved index flags and compares physical bytes/modes against indexed blobs so clean filters or core.fileMode=false cannot hide product edits. Only the unchanged committed root .gitignore may exclude generated/local files; local/global/nested ignore rules cannot authorize untracked product inputs. This is a versioned-source proof, not a filesystem lock or a hermetic build/environment claim.
+- Submit must exclusive-create the original pre-submit approval-app-manifest.json/approval-dmg-manifest.json before state mutation/upload. Final verification requires independently supplied original app/DMG approval manifest SHA256 anchors and validates snapshot/source/tuple bindings before native work and before success. Never derive anchors from mutable finalized records, overwrite missing/tampered snapshots, or relabel artifact source after a document-only commit. A read-only file alone is not immutable approval evidence.
 - Local Accepted/stapled artifacts are not GitHub publication, auto-update, live SSH/physical input/OS notification success, or final external-distribution approval. Historical artifacts retain their own source/plan even when a new correction changes product inputs.
 - Plain Vite browser runs lack the Electron preload bridge; screens should keep static identity/read-only empty states and explicit `backend_unavailable` errors for backend actions.
 - Use `GPUWATCHER_TEST_DATA_DIR` only for tests/smoke isolation. Production data lives under the macOS data dir as `GPUWatcher/gpuwatcher.sqlite3`.
@@ -124,6 +125,7 @@ GPUWATCHER_LIVE_SSH_TARGET=tml-server cargo test --manifest-path crates/gpuwatch
 #### Commit Convention
 
 - Do not commit unless explicitly requested.
+- New repository commits must use the configured GPG signing key and verify the exact commit signature/fingerprint before publication. Do not override commit.gpgsign to false or use unsigned fallback; do not rewrite existing history just to retrofit signatures.
 - Existing history uses English conventional commits such as `feat(electron): ...`, `refactor(core): ...`, `docs(electron): ...`.
 - Every future commit attribution must include exactly:
   `Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)`

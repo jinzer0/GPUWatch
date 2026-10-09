@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ACTIONS, APPROVED_PLAN_OID, APPROVED_PLAN_BLOB_OID, approvalInputs, executeCommand, loadManifest, parseCli, runAction, safePath, sealApp, sha256File, validateCredentials, verifyArtifactSource, verifyGatekeeper } from './signedRelease.mjs';
+import { ACTIONS, APPROVED_PLAN_OID, APPROVED_PLAN_BLOB_OID, approvalInputs, executeCommand, loadManifest, parseCli, runAction, safePath, sealApp, sha256File, validateCredentials, verifyArtifactSource, verifyGatekeeper, verifySubmissionSnapshots } from './signedRelease.mjs';
 
 const TEAM = 'ABCDEFGHIJ';
 const IDENTITY = `Developer ID Application: GPUWatcher (${TEAM})`;
@@ -234,6 +234,55 @@ describe('owned paths and signed build', () => {
 });
 
 describe('exact approval and immutable submission', () => {
+  it('preserves exact original app approval bytes before state mutation and upload', async () => {
+    const prepared = await preparedApp();
+    await fs.appendFile(prepared.manifestPath, '\n \t');
+    prepared.approval = await approvalInputs('submit-app', prepared.manifestPath, deps);
+    const bytes = await fs.readFile(prepared.manifestPath);
+    const snapshot = path.join(prepared.manifest.runDirectory, 'approval-app-manifest.json');
+    commandOverride = async (exe, args) => {
+      if (exe === 'xcrun' && args[0] === 'notarytool' && args[1] === 'submit') {
+        expect(await fs.readFile(snapshot)).toEqual(bytes);
+        expect((await fs.lstat(snapshot)).mode & 0o7777).toBe(0o600);
+        expect(await sha256File(snapshot)).toBe(prepared.approval.manifestSha256);
+        expect(JSON.parse(await fs.readFile(prepared.manifestPath, 'utf8')).state).toBe('app-submitting');
+      }
+    };
+    await submitPrepared(prepared);
+    expect(await fs.readFile(snapshot)).toEqual(bytes);
+  });
+  it.each(['existing', 'symlink', 'hardlink', 'directory', 'parent-symlink', 'hash-drift'])('rejects snapshot %s before mutation or upload', async (kind) => {
+    const prepared = await preparedApp();
+    const before = await fs.readFile(prepared.manifestPath);
+    const snapshot = path.join(prepared.manifest.runDirectory, 'approval-app-manifest.json');
+    if (kind === 'existing') await fs.writeFile(snapshot, before, { mode: 0o600 });
+    if (kind === 'symlink') await fs.symlink(prepared.manifestPath, snapshot);
+    if (kind === 'hardlink') await fs.link(prepared.manifestPath, snapshot);
+    if (kind === 'directory') await fs.mkdir(snapshot);
+    if (kind === 'hash-drift') await fs.appendFile(prepared.manifestPath, ' ');
+    if (kind === 'parent-symlink') {
+      const run = prepared.manifest.runDirectory;
+      await fs.rename(run, `${run}-moved`);
+      await fs.symlink(`${run}-moved`, run);
+    }
+    const original = kind === 'hash-drift' ? Buffer.concat([before, Buffer.from(' ')]) : before;
+    await expect(submitPrepared(prepared)).rejects.toThrow();
+    expect(await fs.readFile(prepared.manifestPath)).toEqual(original);
+    expect(uploads()).toHaveLength(0);
+  });
+  it.each(['existing', 'symlink', 'hardlink', 'hash-drift'])('rejects DMG snapshot %s before a second upload', async (kind) => {
+    const prepared = await preparedDmg();
+    const before = await fs.readFile(prepared.manifestPath);
+    const snapshot = path.join(prepared.manifest.runDirectory, 'approval-dmg-manifest.json');
+    if (kind === 'existing') await fs.writeFile(snapshot, before, { mode: 0o600 });
+    if (kind === 'symlink') await fs.symlink(prepared.manifestPath, snapshot);
+    if (kind === 'hardlink') await fs.link(prepared.manifestPath, snapshot);
+    if (kind === 'hash-drift') await fs.appendFile(prepared.manifestPath, ' ');
+    const original = kind === 'hash-drift' ? Buffer.concat([before, Buffer.from(' ')]) : before;
+    await expect(submitPrepared(prepared, 'submit-dmg')).rejects.toThrow();
+    expect(await fs.readFile(prepared.manifestPath)).toEqual(original);
+    expect(uploads()).toHaveLength(1);
+  });
   it('freezes app ZIP and returns the complete approval tuple; repeated prepare never rebuilds it', async () => {
     const prepared = await preparedApp();
     expect(prepared.approval).toMatchObject({ host: 'github.com', repository: 'jinzer0/GPUWatch', repository_id: 1256824919, issue_number: 31, approvedPlanOid: APPROVED_PLAN_OID, sourceCommit: SOURCE, action: 'submit-app-zip-and-staple-app', target: 'Apple notarization service', version: '0.2.0', arch: 'arm64', identity: IDENTITY, teamId: TEAM, keychainProfile: PROFILE, keychain: null });
@@ -270,6 +319,120 @@ describe('exact approval and immutable submission', () => {
     await expect(loadManifest(prepared.manifestPath, deps)).rejects.toThrow('provenance');
     expect(await fs.readFile(prepared.manifestPath, 'utf8')).toBe(original);
     expect(uploads()).toHaveLength(0);
+  });
+});
+
+describe('independently anchored original submission snapshots', () => {
+  async function finalizedRun() {
+    const app = await preparedApp();
+    const appBytes = await fs.readFile(app.manifestPath);
+    await submitPrepared(app);
+    await runAction('package', { manifest: app.manifestPath }, deps);
+    const dmg = await runAction('prepare-dmg', { manifest: app.manifestPath }, deps);
+    const dmgBytes = await fs.readFile(dmg.manifestPath);
+    const finalized = await submitPrepared(dmg, 'submit-dmg');
+    return { ...finalized, appBytes, dmgBytes, options: { approvedAppManifestSha256: app.approval.manifestSha256, approvedDmgManifestSha256: dmg.approval.manifestSha256 } };
+  }
+  it('verifies app/DMG originals with distinct pre-staple seals without native or Apple commands', async () => {
+    const run = await finalizedRun();
+    expect(await fs.readFile(path.join(run.manifest.runDirectory, 'approval-app-manifest.json'))).toEqual(run.appBytes);
+    expect(await fs.readFile(path.join(run.manifest.runDirectory, 'approval-dmg-manifest.json'))).toEqual(run.dmgBytes);
+    expect(JSON.parse(run.appBytes.toString()).appSealSha256).toBe(run.manifest.appStaple.beforeSha256);
+    expect(JSON.parse(run.dmgBytes.toString()).appSealSha256).toBe(run.manifest.appStaple.afterSha256);
+    deps.command.mockClear();
+    deps.build.mockClear();
+    await expect(verifySubmissionSnapshots(run.manifest, run.manifestPath, run.options, deps)).resolves.toEqual({ appManifestSha256: run.options.approvedAppManifestSha256, dmgManifestSha256: run.options.approvedDmgManifestSha256, sourceCommit: SOURCE });
+    expect(deps.command).not.toHaveBeenCalled();
+    expect(deps.build).not.toHaveBeenCalled();
+  });
+  it.each(['missing-app', 'missing-dmg', 'invalid-app', 'invalid-dmg', 'wrong-app', 'wrong-dmg'])('rejects %s independent anchor without deriving it from approval', async (kind) => {
+    const run = await finalizedRun();
+    const options: any = { ...run.options };
+    const key = kind.endsWith('app') ? 'approvedAppManifestSha256' : 'approvedDmgManifestSha256';
+    if (kind.startsWith('missing')) delete options[key];
+    else options[key] = kind.startsWith('invalid') ? 'not-a-sha256' : '0'.repeat(64);
+    deps.command.mockClear();
+    await expect(verifySubmissionSnapshots(run.manifest, run.manifestPath, options, deps)).rejects.toThrow();
+    expect(deps.command).not.toHaveBeenCalled();
+  });
+  it.each(['app', 'dmg'])('rejects %s snapshot file/link/mode/hash drift', async (target) => {
+    const run = await finalizedRun();
+    const file = path.join(run.manifest.runDirectory, `approval-${target}-manifest.json`);
+    const bytes = await fs.readFile(file);
+    await fs.appendFile(file, ' ');
+    await expect(verifySubmissionSnapshots(run.manifest, run.manifestPath, run.options, deps)).rejects.toThrow('hash');
+    await fs.writeFile(file, bytes);
+    await fs.chmod(file, 0o644);
+    await expect(verifySubmissionSnapshots(run.manifest, run.manifestPath, run.options, deps)).rejects.toThrow('0600');
+    await fs.chmod(file, 0o600);
+    await fs.link(file, `${file}.link`);
+    await expect(verifySubmissionSnapshots(run.manifest, run.manifestPath, run.options, deps)).rejects.toThrow('single-link');
+    await fs.unlink(`${file}.link`);
+    await fs.unlink(file);
+    await expect(verifySubmissionSnapshots(run.manifest, run.manifestPath, run.options, deps)).rejects.toThrow();
+    await fs.writeFile(`${file}.original`, bytes, { mode: 0o600 });
+    await fs.symlink(`${file}.original`, file);
+    await expect(verifySubmissionSnapshots(run.manifest, run.manifestPath, run.options, deps)).rejects.toThrow('Symlink');
+  });
+  it.each(['source-labels', 'approval-hash', 'approval-record', 'pre-seal', 'app-record', 'dmg-path', 'artifact', 'credentials', 'run', 'plan'])('rejects mutable %s tampering', async (kind) => {
+    const run = await finalizedRun();
+    const manifest = run.manifest;
+    if (kind === 'source-labels') {
+      manifest.sourceCommit = 'b'.repeat(40);
+      manifest.notarization.app.approval.sourceCommit = manifest.sourceCommit;
+      manifest.notarization.dmg.approval.sourceCommit = manifest.sourceCommit;
+    }
+    if (kind === 'approval-hash') manifest.notarization.app.approval.manifestSha256 = '0'.repeat(64);
+    if (kind === 'approval-record') manifest.notarization.dmg.approval.keychainProfile = 'other-profile';
+    if (kind === 'pre-seal') manifest.appStaple.beforeSha256 = '0'.repeat(64);
+    if (kind === 'app-record') manifest.notarization.app.infoId = 'other-id';
+    if (kind === 'dmg-path') {
+      const old = manifest.artifacts.dmg.path;
+      manifest.artifacts.dmg.path = path.join(path.dirname(old), 'other.dmg');
+      await fs.copyFile(old, manifest.artifacts.dmg.path);
+    }
+    if (kind === 'artifact') await fs.appendFile(manifest.artifacts.appZip.path, 'changed');
+    if (kind === 'credentials') manifest.keychain = '/other-keychain';
+    if (kind === 'run') manifest.runDirectory = `${manifest.runDirectory}-other`;
+    if (kind === 'plan') manifest.approvedPlanOid = '0'.repeat(40);
+    await fs.writeFile(run.manifestPath, JSON.stringify(manifest));
+    deps.command.mockClear();
+    await expect(verifySubmissionSnapshots(manifest, run.manifestPath, run.options, deps)).rejects.toThrow();
+    expect(deps.command).not.toHaveBeenCalled();
+  });
+  it.each(['source', 'state', 'seal', 'credentials', 'path', 'plan', 'repository', 'artifact'])('rejects %s snapshot plus approval rewrite under original independent hashes', async (kind) => {
+    const run = await finalizedRun();
+    const file = path.join(run.manifest.runDirectory, 'approval-app-manifest.json');
+    const original = JSON.parse(run.appBytes.toString());
+    if (kind === 'source') original.sourceCommit = 'b'.repeat(40);
+    if (kind === 'state') original.state = 'app-stapled';
+    if (kind === 'seal') original.appSealSha256 = '0'.repeat(64);
+    if (kind === 'credentials') original.identity = `Developer ID Application: Other (${TEAM})`;
+    if (kind === 'path') original.appPath = `${original.appPath}-other`;
+    if (kind === 'plan') original.approvedPlanOid = '0'.repeat(40);
+    if (kind === 'repository') original.repository_id = 1;
+    if (kind === 'artifact') original.artifacts.appZip.sha256 = '0'.repeat(64);
+    await fs.writeFile(file, JSON.stringify(original));
+    run.manifest.notarization.app.approval.manifestSha256 = await sha256File(file);
+    await fs.writeFile(run.manifestPath, JSON.stringify(run.manifest));
+    await expect(verifySubmissionSnapshots(run.manifest, run.manifestPath, run.options, deps)).rejects.toThrow('hash');
+  });
+  it.each(['state', 'repository', 'plan', 'path', 'credentials', 'seal', 'artifact', 'malformed'])('validates anchored original %s rather than hashes alone', async (kind) => {
+    const run = await finalizedRun();
+    const file = path.join(run.manifest.runDirectory, 'approval-app-manifest.json');
+    const original = JSON.parse(run.appBytes.toString());
+    if (kind === 'state') original.state = 'app-stapled';
+    if (kind === 'repository') original.repository_id = 1;
+    if (kind === 'plan') original.approvedPlanOid = '0'.repeat(40);
+    if (kind === 'path') original.appPath = path.join(original.runDirectory, 'missing.app');
+    if (kind === 'credentials') original.teamId = 'WRONGTEAM1';
+    if (kind === 'seal') original.appFiles = [];
+    if (kind === 'artifact') original.artifacts.appZip.status = 'signed';
+    await fs.writeFile(file, kind === 'malformed' ? 'not JSON' : JSON.stringify(original));
+    run.options.approvedAppManifestSha256 = await sha256File(file);
+    run.manifest.notarization.app.approval.manifestSha256 = run.options.approvedAppManifestSha256;
+    await fs.writeFile(run.manifestPath, JSON.stringify(run.manifest));
+    await expect(verifySubmissionSnapshots(run.manifest, run.manifestPath, run.options, deps)).rejects.toThrow();
   });
 });
 
@@ -325,10 +488,15 @@ describe('notarization state machine', () => {
   });
   it('records ID recovered from non-JSON timeout output and queries info read-only', async () => {
     const prepared = await preparedApp();
+    const original = await fs.readFile(prepared.manifestPath);
     commandOverride = (exe, args) => exe === 'xcrun' && args[0] === 'notarytool' && args[1] === 'submit' ? { ...success(`id: ${ID}`), code: 1, timedOut: true } : undefined;
     await expect(submitPrepared(prepared)).rejects.toThrow('Malformed');
     const { manifest } = await loadManifest(prepared.manifestPath, deps);
     expect(manifest.notarization.app).toMatchObject({ id: ID, recoveredStatus: 'Accepted', status: 'Failed-or-uncertain' });
+    const snapshot = path.join(manifest.runDirectory, 'approval-app-manifest.json');
+    expect(await fs.readFile(snapshot)).toEqual(original);
+    await expect(submitPrepared(prepared)).rejects.toThrow();
+    expect(await fs.readFile(snapshot)).toEqual(original);
     expect(uploads()).toHaveLength(1);
   });
   it.each(['staple', 'validate', 'spctl'])('does not claim success after %s failure', async (kind) => {
