@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { APPROVED_PLAN_OID, REPOSITORY, verifyGatekeeper, executeCommand, loadManifest, safePath, sealApp, sha256File, validateApp, validateCredentials } from '../electron/signedRelease.mjs';
+import { APPROVED_PLAN_OID, REPOSITORY, verifyArtifactSource, verifyGatekeeper, executeCommand, loadManifest, safePath, sealApp, sha256File, validateApp, validateCredentials } from '../electron/signedRelease.mjs';
 import { runPackagedAppSmoke } from './scenarios/packaged-app.mjs';
 import { commandSucceeded } from './scenarios/packaged-app/startup.mjs';
 import { classifyPackagedFault } from './scenarios/packaged-app/helper-error.mjs';
@@ -120,6 +120,7 @@ export async function runSignedArtifactSmoke(options = {}, dependencies = {}) {
   await preserveApp();
   try {
     await artifacts();
+    const sourceProof = await verifyArtifactSource(manifest, ctx);
     await appProof(manifest.appPath);
     for (const target of ['app', 'dmg']) {
       const record = manifest.notarization[target];
@@ -211,7 +212,9 @@ export async function runSignedArtifactSmoke(options = {}, dependencies = {}) {
       fail('Unresolved signed fault is not backend or confirmed OS-policy evidence');
     }
     await artifacts();
-    return { manifestPath, appPath: manifest.appPath, state: 'verified', evidencePrefix: 'task-31-signed-dist', runtime };
+    const finalSourceProof = await verifyArtifactSource(manifest, ctx);
+    equal(JSON.stringify(finalSourceProof), JSON.stringify(sourceProof), 'Product source proof during verification');
+    return { manifestPath, appPath: manifest.appPath, state: 'verified', evidencePrefix: 'task-31-signed-dist', sourceProof, runtime };
   } finally { await preserveApp(); }
 }
 

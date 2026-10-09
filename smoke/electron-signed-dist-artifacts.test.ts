@@ -3,7 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { APPROVED_PLAN_OID, REPOSITORY, sealApp, sha256File } from '../electron/signedRelease.mjs';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { APPROVED_PLAN_OID, REPOSITORY, executeCommand, sealApp, sha256File } from '../electron/signedRelease.mjs';
 import { parseCli, runSignedArtifactSmoke } from './electron-signed-dist-artifacts.mjs';
 import { discoverAppPath } from './shared/paths.mjs';
 
@@ -17,6 +19,28 @@ let manifestPath: string;
 let manifest: any;
 let deps: any;
 let override: ((executable: string, args: string[]) => any) | undefined;
+
+function git(...args: string[]) {
+  return execFileSync('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgSign=false', ...args], {
+    cwd: root, encoding: 'utf8', env: { ...process.env, GIT_NO_REPLACE_OBJECTS: '1', GIT_CONFIG_NOSYSTEM: '1', GIT_AUTHOR_NAME: 'Fixture', GIT_COMMITTER_NAME: 'Fixture', GIT_AUTHOR_EMAIL: 'fixture@example.invalid', GIT_COMMITTER_EMAIL: 'fixture@example.invalid' },
+  }).trim();
+}
+
+async function writeInput(name: string, bytes: string) {
+  await fs.mkdir(path.dirname(path.join(root, name)), { recursive: true });
+  await fs.writeFile(path.join(root, name), bytes);
+}
+
+async function makeSource() {
+  await writeInput('.gitignore', 'release/\n');
+  await writeInput('mydocs/plans/task_m001_31_impl.md', await fs.readFile(fileURLToPath(new URL('../mydocs/plans/task_m001_31_impl.md', import.meta.url)), 'utf8'));
+  await writeInput('package.json', '{"version":"0.2.0"}\n');
+  await writeInput('src/main.tsx', 'export const value = 1;\n');
+  git('init', '--quiet');
+  git('add', '--', '.gitignore', 'mydocs/plans/task_m001_31_impl.md', 'package.json', 'src/main.tsx');
+  git('commit', '--quiet', '-m', 'fixture source');
+  return git('rev-parse', 'HEAD');
+}
 
 async function save() { await fs.writeFile(manifestPath, JSON.stringify(manifest)); }
 async function temporaryDirectories() { return (await fs.readdir(run)).filter(name => name.startsWith('.signed-smoke-')); }
@@ -37,6 +61,7 @@ function runtimeReceipt(): any {
 
 beforeEach(async () => {
   root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'gpuwatcher-signed-smoke-test-')));
+  const sourceCommit = await makeSource();
   run = path.join(root, 'release/electron/signed/run');
   const appPath = path.join(run, 'GPUWatcher.app');
   await fs.mkdir(path.join(appPath, 'Contents/MacOS'), { recursive: true });
@@ -55,7 +80,7 @@ beforeEach(async () => {
   artifacts.dmg.submissionSha256 = 'b'.repeat(64);
   manifestPath = path.join(run, 'manifest.json');
   manifest = {
-    ...REPOSITORY, schemaVersion: 1, approvedPlanOid: APPROVED_PLAN_OID, sourceCommit: 'a'.repeat(40),
+    ...REPOSITORY, schemaVersion: 1, approvedPlanOid: APPROVED_PLAN_OID, sourceCommit,
     version: '0.2.0', arch: 'arm64', runDirectory: run, appPath, identity, teamId: team,
     keychainProfile: 'gpuwatcher-notary', keychain: '/mock/login.keychain-db', state: 'finalized',
     appFiles: seal.files, appSealSha256: seal.sha256, signedAppSealSha256: 'c'.repeat(64), artifacts,
@@ -81,9 +106,10 @@ beforeEach(async () => {
   deps = {
     root, env: { CSC_NAME: identity, GPUWATCHER_SIGNING_TEAM_ID: team, APPLE_KEYCHAIN_PROFILE: manifest.keychainProfile, APPLE_KEYCHAIN: manifest.keychain }, platform: 'darwin', arch: 'arm64',
     runtimeSmoke: vi.fn(async () => runtimeReceipt()),
-    command: vi.fn(async (exe: string, args: string[]) => {
+    command: vi.fn(async (exe: string, args: string[], options: any) => {
       const overridden = await override?.(exe, args);
       if (overridden !== undefined) return overridden;
+      if (exe === 'git') return executeCommand(exe, args, options);
       if (exe === '/usr/libexec/PlistBuddy') return ok(args[1].includes('Executable') ? 'GPUWatcher' : '0.2.0');
       if (exe === 'lipo') return ok('arm64');
       if (exe === 'codesign' && args.includes('--entitlements')) return ok(`<plist><dict>${args.at(-1)?.endsWith('gpuwatcher-helper') ? '' : '<key>com.apple.security.cs.allow-jit</key><true/>'}</dict></plist>`);
@@ -112,6 +138,128 @@ beforeEach(async () => {
 afterEach(async () => { await fs.rm(root, { recursive: true, force: true }); });
 
 describe('signed artifact smoke', () => {
+  it.each(['src/main.tsx', 'package.json', 'build/entitlements.mac.plist', 'electron/signedRelease.mjs', 'smoke/proof.md'])('rejects committed product source drift in %s before native work', async name => {
+    await writeInput(name, 'changed input\n');
+    git('add', '--', name);
+    git('commit', '--quiet', '-m', 'product drift');
+    await expect(verify()).rejects.toThrow(/source|product|documentation/i);
+    expect(deps.runtimeSmoke).not.toHaveBeenCalled();
+    expect(calls('xcrun')).toHaveLength(0);
+    expect(calls('codesign')).toHaveLength(0);
+  });
+
+  it('rejects unknown source objects before native work', async () => {
+    manifest.sourceCommit = 'f'.repeat(40);
+    for (const target of ['app', 'dmg']) manifest.notarization[target].approval.sourceCommit = manifest.sourceCommit;
+    await save();
+    await expect(verify()).rejects.toThrow(/source|commit|git/i);
+    expect(calls('xcrun')).toHaveLength(0);
+  });
+
+  it.each(['staged', 'working', 'untracked'])('rejects %s product edits before native work', async state => {
+    const name = state === 'untracked' ? 'electron/new-input.mjs' : 'package.json';
+    await writeInput(name, 'changed product\n');
+    if (state === 'staged') git('add', '--', name);
+    await expect(verify()).rejects.toThrow(/source|product|documentation/i);
+    expect(calls('codesign')).toHaveLength(0);
+    expect(calls('xcrun')).toHaveLength(0);
+    expect(deps.runtimeSmoke).not.toHaveBeenCalled();
+  });
+
+  it.each(['--assume-unchanged', '--skip-worktree'])('rejects hidden index flags %s instead of trusting a clean diff', async flag => {
+    git('update-index', flag, '--', 'package.json');
+    await writeInput('package.json', 'hidden product modification\n');
+    await expect(verify()).rejects.toThrow(/source|index|product/i);
+    expect(calls('codesign')).toHaveLength(0);
+  });
+
+  it('rejects physical product bytes hidden by a Git clean filter', async () => {
+    await writeInput('.gitattributes', 'src/main.tsx filter=fixture-normalize\n');
+    git('config', 'filter.fixture-normalize.clean', 'printf "export const value = 1;\\n"');
+    git('add', '--', '.gitattributes', 'src/main.tsx');
+    git('commit', '--quiet', '-m', 'source with clean filter');
+    manifest.sourceCommit = git('rev-parse', 'HEAD');
+    for (const target of ['app', 'dmg']) manifest.notarization[target].approval.sourceCommit = manifest.sourceCommit;
+    await save();
+    await writeInput('src/main.tsx', 'export const value = 999;\n');
+    await expect(verify()).rejects.toThrow(/source|product|bytes/i);
+    expect(calls('codesign')).toHaveLength(0);
+  });
+
+  it('rejects physical product mode drift when core.fileMode is disabled', async () => {
+    git('config', 'core.fileMode', 'false');
+    await fs.chmod(path.join(root, 'src/main.tsx'), 0o755);
+    await expect(verify()).rejects.toThrow(/source|product|mode/i);
+    expect(calls('codesign')).toHaveLength(0);
+  });
+
+  it.each(['local', 'global', 'nested'])('rejects untracked products hidden by %s ignores', async kind => {
+    if (kind === 'local') await fs.writeFile(path.join(root, '.git/info/exclude'), 'electron/new-input.mjs\n');
+    if (kind === 'global') {
+      await fs.writeFile(path.join(root, '.git/global-ignore'), 'electron/new-input.mjs\n');
+      git('config', 'core.excludesFile', path.join(root, '.git/global-ignore'));
+    }
+    if (kind === 'nested') await writeInput('electron/.gitignore', '*\n');
+    await writeInput('electron/new-input.mjs', 'untracked product\n');
+    await expect(verify()).rejects.toThrow(/source|product|documentation/i);
+    expect(calls('codesign')).toHaveLength(0);
+  });
+
+  it.each(['delete', 'rename'])('rejects committed product %s despite a document destination', async action => {
+    if (action === 'delete') await fs.unlink(path.join(root, 'src/main.tsx'));
+    else {
+      await fs.mkdir(path.join(root, 'docs'), { recursive: true });
+      git('mv', '--', 'src/main.tsx', 'docs/moved.md');
+    }
+    git('add', '-u');
+    git('commit', '--quiet', '-m', action);
+    await expect(verify()).rejects.toThrow(/source|product|documentation/i);
+    expect(calls('codesign')).toHaveLength(0);
+  });
+
+  it('accepts committed, staged, working and untracked regular documents with a bound source proof', async () => {
+    await writeInput('README.md', 'committed document\n');
+    git('add', '--', 'README.md');
+    git('commit', '--quiet', '-m', 'document change');
+    const head = git('rev-parse', 'HEAD');
+    await writeInput('README.md', 'working document\n');
+    await writeInput('AGENTS.md', 'staged document\n');
+    git('add', '--', 'AGENTS.md');
+    await writeInput('docs/review\nproof.md', 'untracked document with unusual path\n');
+    const result = await verify();
+    expect(result.sourceProof).toEqual({ sourceCommit: manifest.sourceCommit, headCommit: head, documentationChanges: ['AGENTS.md', 'README.md', 'docs/review\nproof.md'] });
+  });
+
+  it.each(['binary', 'executable', 'symlink', 'symlink-parent', 'hardlink'])('rejects %s document-shaped changes before native work', async kind => {
+    const file = path.join(root, 'docs/proof.md');
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    if (kind === 'binary') await fs.writeFile(file, Buffer.from([0, 1, 2]));
+    else if (kind === 'symlink') await fs.symlink(path.join(root, 'package.json'), file);
+    else if (kind === 'symlink-parent') {
+      await fs.rmdir(path.join(root, 'docs'));
+      await fs.mkdir(path.join(root, 'elsewhere'));
+      await fs.symlink(path.join(root, 'elsewhere'), path.join(root, 'docs'));
+      await fs.writeFile(file, 'linked parent document\n');
+    } else {
+      await fs.writeFile(file, 'document\n');
+      if (kind === 'executable') await fs.chmod(file, 0o755);
+      else await fs.link(file, path.join(root, 'docs/second.md'));
+    }
+    await expect(verify()).rejects.toThrow();
+    expect(calls('codesign')).toHaveLength(0);
+    expect(deps.runtimeSmoke).not.toHaveBeenCalled();
+  });
+
+  it('rejects product changes introduced during runtime instead of returning a stale source proof', async () => {
+    deps.runtimeSmoke.mockImplementationOnce(async () => {
+      await writeInput('package.json', 'changed while verifying\n');
+      return runtimeReceipt();
+    });
+    await expect(verify()).rejects.toThrow(/source|product|documentation/i);
+    expect(await temporaryDirectories()).toEqual([]);
+    expect((await sealApp(manifest.appPath)).sha256).toBe(manifest.appSealSha256);
+  });
+
   it('requires exactly one canonical explicit CLI input without executing on import', () => {
     expect(deps.command).not.toHaveBeenCalled();
     expect(parseCli(['--manifest', manifestPath])).toEqual({ manifest: manifestPath });

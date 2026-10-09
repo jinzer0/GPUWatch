@@ -1,10 +1,11 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
+import { createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ACTIONS, APPROVED_PLAN_OID, approvalInputs, loadManifest, parseCli, runAction, safePath, sealApp, sha256File, validateCredentials, verifyGatekeeper } from './signedRelease.mjs';
+import { ACTIONS, APPROVED_PLAN_OID, APPROVED_PLAN_BLOB_OID, approvalInputs, executeCommand, loadManifest, parseCli, runAction, safePath, sealApp, sha256File, validateCredentials, verifyArtifactSource, verifyGatekeeper } from './signedRelease.mjs';
 
 const TEAM = 'ABCDEFGHIJ';
 const IDENTITY = `Developer ID Application: GPUWatcher (${TEAM})`;
@@ -12,7 +13,7 @@ const PROFILE = 'gpuwatcher-notary';
 const SOURCE = 'a'.repeat(40);
 const ID = '12345678-1234-1234-1234-123456789abc';
 const PLAN = 'mydocs/plans/task_m001_31_impl.md';
-const PLAN_TEXT = 'approved plan fixture\n';
+const PLAN_TEXT = await fs.readFile(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', PLAN), 'utf8');
 const ENV = { CSC_NAME: IDENTITY, GPUWATCHER_SIGNING_TEAM_ID: TEAM, APPLE_KEYCHAIN_PROFILE: PROFILE };
 const success = (stdout = '', stderr = '') => ({ code: 0, signal: null, timedOut: false, stdout, stderr });
 let root: string;
@@ -36,6 +37,7 @@ beforeEach(async () => {
   await fs.mkdir(path.join(root, 'mydocs/plans'), { recursive: true });
   await fs.writeFile(path.join(root, PLAN), PLAN_TEXT, { mode: 0o644 });
   await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({ version: '0.2.0' }));
+  await fs.writeFile(path.join(root, '.gitignore'), '', { mode: 0o644 });
   archives = new Map();
   commandOverride = undefined;
   buildHook = undefined;
@@ -52,10 +54,13 @@ beforeEach(async () => {
       if (executable === 'git') {
         if (args[0] === 'rev-parse' && args[1] === '--show-toplevel') return success(root);
         if (args[0] === 'rev-parse') return success(SOURCE);
-        if (args[0] === 'diff-tree') return success(PLAN);
-        if (args[0] === 'show') return success(PLAN_TEXT);
-        if (args[0] === 'ls-tree') return success(`100644 blob ${'b'.repeat(40)}\t${PLAN}`);
-        if (args[0] === 'ls-files') return success(`100644 ${'b'.repeat(40)} 0\t${PLAN}`);
+        if (args.includes(':(literal).gitignore')) {
+          const bytes = await fs.readFile(path.join(root, '.gitignore'));
+          const blob = createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
+          return success(args[0] === 'ls-tree' ? `100644 blob ${blob}\t.gitignore\0` : `100644 ${blob} 0\t.gitignore\0`);
+        }
+        if (args[0] === 'ls-tree') return success(`100644 blob ${APPROVED_PLAN_BLOB_OID}\t${PLAN}\0`);
+        if (args[0] === 'ls-files' && args.includes('--stage')) return success(`100644 ${APPROVED_PLAN_BLOB_OID} 0\t${PLAN}\0`);
         return success();
       }
       if (executable === 'security') return success(`  1) ${'D'.repeat(40)} "${IDENTITY}"\n     1 valid identities found`);
@@ -144,7 +149,7 @@ describe('owned paths and signed build', () => {
       if (exe !== 'git') return;
       if (kind === 'root' && args[0] === 'rev-parse' && args[1] === '--show-toplevel') return success('/another/repository');
       if (kind === 'replace' && args[0] === 'for-each-ref') return success('refs/replace/deadbeef');
-      if (kind === 'head-plan' && args[0] === 'ls-tree' && args[1] === 'HEAD') return success(`100644 blob ${'c'.repeat(40)}\t${PLAN}`);
+      if (kind === 'head-plan' && args[0] === 'ls-tree' && args.includes('HEAD')) return success(`100644 blob ${'c'.repeat(40)}\t${PLAN}\0`);
       if (kind === 'index-plan' && args[0] === 'ls-files') return success(`100755 ${'b'.repeat(40)} 0\t${PLAN}`);
     };
     await expect(runAction('build', {}, deps)).rejects.toThrow();
@@ -240,7 +245,7 @@ describe('exact approval and immutable submission', () => {
   });
   it.each(['source', 'dirty', 'manifest', 'artifact', 'app', 'profile', 'plan', 'approval'])('blocks %s drift without upload', async (kind) => {
     const prepared = await preparedApp();
-    if (kind === 'source') commandOverride = (exe, args) => exe === 'git' && args[0] === 'rev-parse' && args[1] === 'HEAD' ? success('c'.repeat(40)) : undefined;
+    if (kind === 'source') commandOverride = (exe, args) => exe === 'git' && args[0] === 'rev-parse' && args.includes('HEAD^{commit}') ? success('c'.repeat(40)) : undefined;
     if (kind === 'dirty') commandOverride = (exe, args) => exe === 'git' && args[0] === 'status' ? success(' M electron/main.ts') : undefined;
     if (kind === 'manifest') await fs.appendFile(prepared.manifestPath, ' ');
     if (kind === 'artifact') await fs.appendFile(prepared.approval.artifactPath, 'changed');
@@ -255,6 +260,15 @@ describe('exact approval and immutable submission', () => {
     const prepared = await preparedApp();
     await expect(runAction('submit-app', { manifest: prepared.manifestPath }, deps)).rejects.toThrow('approval');
     await expect(runAction('package', {}, deps)).rejects.toThrow('manifest');
+    expect(uploads()).toHaveLength(0);
+  });
+  it('rejects historical plan manifests rather than rewriting their provenance', async () => {
+    const prepared = await preparedApp();
+    const historical = { ...prepared.manifest, approvedPlanOid: '810089769e8a1ea1dcbd8476bf250ab8b3eb94d9' };
+    const original = JSON.stringify(historical);
+    await fs.writeFile(prepared.manifestPath, original);
+    await expect(loadManifest(prepared.manifestPath, deps)).rejects.toThrow('provenance');
+    expect(await fs.readFile(prepared.manifestPath, 'utf8')).toBe(original);
     expect(uploads()).toHaveLength(0);
   });
 });
@@ -392,6 +406,92 @@ describe('prepackaged distribution and separate DMG approval', () => {
     await fs.appendFile(prepared.approval.artifactPath, 'changed');
     await expect(submitPrepared(prepared, 'submit-dmg')).rejects.toThrow('hash drift');
     expect(uploads()).toHaveLength(1);
+  });
+});
+
+describe('real Git source provenance', () => {
+  let source: string;
+  const git = async (...args: string[]) => {
+    const result = await executeCommand('git', args, { cwd: root, env: { PATH: process.env.PATH, HOME: root, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' } });
+    if (result.code !== 0) throw new Error(result.stderr);
+    return result.stdout.trim();
+  };
+  const proof = () => verifyArtifactSource({ sourceCommit: source }, { root, env: {}, command: executeCommand });
+  beforeEach(async () => {
+    await git('init');
+    await git('config', 'user.name', 'Fixture');
+    await git('config', 'user.email', 'fixture@example.invalid');
+    await git('config', 'core.filemode', 'true');
+    await fs.writeFile(path.join(root, '.gitignore'), 'release/\n.archive-*\n');
+    await fs.mkdir(path.join(root, 'docs'));
+    await fs.writeFile(path.join(root, 'docs/guide.md'), 'original documentation\n');
+    await git('add', '.');
+    await git('commit', '-m', 'squashed source with approved plan bytes');
+    source = await git('rev-parse', 'HEAD');
+  });
+  it('accepts squash-safe pinned plan bytes without the historical approved commit and permits signing', async () => {
+    const unavailable = await executeCommand('git', ['cat-file', '-e', `${APPROVED_PLAN_OID}^{commit}`], { cwd: root });
+    expect(unavailable.code).not.toBe(0);
+    expect(await proof()).toEqual({ sourceCommit: source, headCommit: source, documentationChanges: [] });
+    const mockCommand = deps.command;
+    deps.command = (exe: string, args: string[], options: any) => exe === 'git' ? executeCommand(exe, args, options) : mockCommand(exe, args, options);
+    expect((await runAction('build', {}, deps)).manifest.sourceCommit).toBe(source);
+  });
+  it('allows committed, staged, working and untracked regular text documents', async () => {
+    await fs.appendFile(path.join(root, 'docs/guide.md'), 'committed\n');
+    await git('add', '.');
+    await git('commit', '-m', 'docs only');
+    await fs.writeFile(path.join(root, 'README.md'), 'staged\n');
+    await git('add', 'README.md');
+    await fs.appendFile(path.join(root, 'docs/guide.md'), 'working\n');
+    await fs.writeFile(path.join(root, 'docs/untracked\n[guide].md'), 'new\n');
+    expect((await proof()).documentationChanges).toEqual(['README.md', 'docs/guide.md', 'docs/untracked\n[guide].md']);
+  });
+  it.each(['committed', 'staged', 'working', 'untracked', 'deleted', 'renamed'])('rejects %s product/packaging drift', async (kind) => {
+    if (kind === 'untracked') await fs.writeFile(path.join(root, 'input.json'), '{}');
+    else if (kind === 'deleted') await fs.unlink(path.join(root, 'package.json'));
+    else if (kind === 'renamed') await fs.rename(path.join(root, 'package.json'), path.join(root, 'docs/package.md'));
+    else await fs.appendFile(path.join(root, 'package.json'), '\n');
+    if (kind === 'staged' || kind === 'committed') await git('add', '.');
+    if (kind === 'committed') await git('commit', '-m', 'product drift');
+    await expect(proof()).rejects.toThrow();
+  });
+  it.each(['bytes', 'mode', 'index', 'head', 'symlink', 'hardlink'])('rejects plan %s corruption', async (kind) => {
+    const plan = path.join(root, PLAN);
+    if (kind === 'bytes' || kind === 'index' || kind === 'head') await fs.appendFile(plan, 'changed');
+    if (kind === 'mode') await fs.chmod(plan, 0o755);
+    if (kind === 'index') { await git('add', PLAN); await fs.writeFile(plan, PLAN_TEXT); }
+    if (kind === 'head') { await git('add', PLAN); await git('commit', '-m', 'changed plan'); await fs.writeFile(plan, PLAN_TEXT); await git('add', PLAN); }
+    if (kind === 'symlink') { await fs.rename(plan, `${plan}.original`); await fs.symlink(`${plan}.original`, plan); }
+    if (kind === 'hardlink') await fs.link(plan, `${plan}.link`);
+    await expect(proof()).rejects.toThrow();
+  });
+  it.each(['binary', 'executable', 'symlink', 'parent-symlink', 'committed-binary', 'committed-executable'])('rejects %s documents', async (kind) => {
+    const doc = path.join(root, 'docs/guide.md');
+    if (kind.endsWith('binary')) await fs.writeFile(doc, Buffer.from([0, 1, 2]));
+    if (kind.endsWith('executable')) await fs.chmod(doc, 0o755);
+    if (kind === 'symlink') { await fs.unlink(doc); await fs.symlink('../package.json', doc); }
+    if (kind === 'parent-symlink') { await fs.rename(path.join(root, 'docs'), path.join(root, 'saved-docs')); await fs.symlink('saved-docs', path.join(root, 'docs')); }
+    if (kind.startsWith('committed-')) { await git('add', '.'); await git('commit', '-m', 'unsafe docs'); }
+    await expect(proof()).rejects.toThrow();
+  });
+  it('rejects unknown and non-commit source objects without fetching', async () => {
+    source = 'f'.repeat(40);
+    await expect(proof()).rejects.toThrow();
+    source = await git('rev-parse', `HEAD:${PLAN}`);
+    await expect(proof()).rejects.toThrow();
+  });
+  it('compares source trees without requiring source ancestry', async () => {
+    await git('checkout', '--orphan', 'unrelated');
+    await git('commit', '-m', 'same product tree');
+    expect((await proof()).documentationChanges).toEqual([]);
+  });
+  it('keeps signing strict even for documentation-only dirt', async () => {
+    await fs.appendFile(path.join(root, 'docs/guide.md'), 'dirty docs\n');
+    const mockCommand = deps.command;
+    deps.command = (exe: string, args: string[], options: any) => exe === 'git' ? executeCommand(exe, args, options) : mockCommand(exe, args, options);
+    await expect(runAction('build', {}, deps)).rejects.toThrow('Source tree is edited');
+    expect(deps.build).not.toHaveBeenCalled();
   });
 });
 

@@ -4,7 +4,8 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const APPROVED_PLAN_OID = '810089769e8a1ea1dcbd8476bf250ab8b3eb94d9';
+export const APPROVED_PLAN_OID = '0fa0f34526fc56160448e1d796b19c54ba7cca6d';
+export const APPROVED_PLAN_BLOB_OID = '9fdfe6ed37f77fb7c9b8740d18cd111377cf3377';
 export const REPOSITORY = Object.freeze({ host: 'github.com', repository: 'jinzer0/GPUWatch', repository_id: 1256824919, issue_number: 31 });
 export const ACTIONS = Object.freeze(['build', 'prepare-app', 'submit-app', 'package', 'prepare-dmg', 'submit-dmg']);
 const DEFAULT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -103,30 +104,164 @@ function context(dependencies = {}) {
   return { root: path.resolve(dependencies.root ?? DEFAULT_ROOT), env: dependencies.env ?? process.env, platform: dependencies.platform ?? process.platform, arch: dependencies.arch ?? process.arch, command: dependencies.command ?? executeCommand, build: dependencies.build ?? (async (options) => (await import('electron-builder')).build(options)), now: dependencies.now ?? (() => new Date().toISOString()) };
 }
 
-async function sourceCommit(ctx) {
+async function sourceSnapshot(ctx) {
   for (const name of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR', 'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_NAMESPACE']) {
     if (ctx.env[name] !== undefined) fail(`Git repository override forbidden: ${name}`);
   }
   if (await fs.realpath(ctx.root) !== ctx.root || (await command(ctx, 'git', ['rev-parse', '--show-toplevel'])).trim() !== ctx.root) fail('Git repository root mismatch');
   if ((await command(ctx, 'git', ['for-each-ref', '--format=%(refname)', 'refs/replace'])).trim()) fail('Git replacement refs forbidden');
-  const oid = (await command(ctx, 'git', ['rev-parse', 'HEAD'])).trim();
+  const indexEntries = nulRecords(await command(ctx, 'git', ['ls-files', '-v', '-z']));
+  if (indexEntries.some((entry) => !entry.startsWith('H '))) fail('Hidden or unresolved source index flags forbidden');
+  const oid = (await command(ctx, 'git', ['rev-parse', '--verify', 'HEAD^{commit}'])).trim();
   if (!/^[a-f0-9]{40}$/.test(oid)) fail('Invalid source commit');
-  if ((await command(ctx, 'git', ['status', '--porcelain', '--untracked-files=normal'])).trim()) fail('Source tree is edited; commit approved product inputs before signing');
-  await command(ctx, 'git', ['merge-base', '--is-ancestor', APPROVED_PLAN_OID, 'HEAD']);
-  const planFiles = (await command(ctx, 'git', ['diff-tree', '--no-commit-id', '--name-only', '-r', APPROVED_PLAN_OID])).trim();
-  if (planFiles !== PLAN) fail('Approved plan commit changed unexpected files');
   const plan = await safePath(ctx.root, path.join(ctx.root, PLAN));
   const stat = await fs.lstat(plan);
-  if ((stat.mode & 0o777) !== 0o644) fail('Approved plan mode changed');
-  const approved = await command(ctx, 'git', ['show', `${APPROVED_PLAN_OID}:${PLAN}`]);
-  if (digest(await fs.readFile(plan)) !== digest(approved)) fail('Approved plan content changed');
-  const approvedTree = (await command(ctx, 'git', ['ls-tree', APPROVED_PLAN_OID, '--', PLAN])).trim();
-  const headTree = (await command(ctx, 'git', ['ls-tree', 'HEAD', '--', PLAN])).trim();
-  const treeMatch = /^100644 blob ([a-f0-9]{40})\t/.exec(approvedTree);
-  if (!treeMatch || approvedTree !== `100644 blob ${treeMatch[1]}\t${PLAN}` || headTree !== approvedTree) fail('Approved plan HEAD mode/blob changed');
-  const metadata = (await command(ctx, 'git', ['ls-files', '--stage', '--', PLAN])).trim();
-  if (metadata !== `100644 ${treeMatch[1]} 0\t${PLAN}`) fail('Approved plan index mode/blob changed');
+  if ((stat.mode & 0o7777) !== 0o644) fail('Approved plan mode changed');
+  const bytes = await fs.readFile(plan);
+  const blob = createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
+  if (blob !== APPROVED_PLAN_BLOB_OID) fail('Approved plan content changed');
+  const headTree = await command(ctx, 'git', ['ls-tree', '-z', 'HEAD', '--', `:(literal)${PLAN}`]);
+  if (headTree !== `100644 blob ${APPROVED_PLAN_BLOB_OID}\t${PLAN}\0`) fail('Approved plan HEAD mode/blob changed');
+  const metadata = await command(ctx, 'git', ['ls-files', '--stage', '-z', '--', `:(literal)${PLAN}`]);
+  if (metadata !== `100644 ${APPROVED_PLAN_BLOB_OID} 0\t${PLAN}\0`) fail('Approved plan index mode/blob changed');
+  return { oid, physicalDocuments: await physicalSourceChanges(ctx), untracked: await untrackedSourceFiles(ctx) };
+}
+
+async function sourceCommit(ctx) {
+  const { oid, physicalDocuments, untracked } = await sourceSnapshot(ctx);
+  if (physicalDocuments.length || untracked.length || await command(ctx, 'git', ['status', '--porcelain', '-z', '--untracked-files=all'])) fail('Source tree is edited; commit approved product inputs before signing');
   return oid;
+}
+
+function nulRecords(output) {
+  if (!output) return [];
+  if (!output.endsWith('\0')) fail('Malformed Git path output');
+  return output.slice(0, -1).split('\0');
+}
+
+async function untrackedSourceFiles(ctx) {
+  // Only the committed root policy may exclude generated/local data. Local
+  // info/exclude, global excludes and untracked nested .gitignore are not proof.
+  const file = await safePath(ctx.root, path.join(ctx.root, '.gitignore'));
+  const stat = await fs.lstat(file);
+  if ((stat.mode & 0o7777) !== 0o644) fail('Unsafe source ignore policy mode');
+  const tree = await command(ctx, 'git', ['ls-tree', '-z', 'HEAD', '--', ':(literal).gitignore']);
+  const match = /^100644 blob ([a-f0-9]{40})\t\.gitignore\0$/.exec(tree);
+  if (!match) fail('Committed root source ignore policy required');
+  const index = await command(ctx, 'git', ['ls-files', '--stage', '-z', '--', ':(literal).gitignore']);
+  const bytes = await fs.readFile(file);
+  const blob = createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
+  if (index !== `100644 ${match[1]} 0\t.gitignore\0` || blob !== match[1]) fail('Source ignore policy drift');
+  return nulRecords(await command(ctx, 'git', ['ls-files', '--others', `--exclude-from=${file}`, '-z']));
+}
+
+function isDocumentation(file) {
+  return file === 'README.md' || file === 'AGENTS.md' || ((file.startsWith('docs/') || file.startsWith('mydocs/')) && file.endsWith('.md'));
+}
+
+function documentationPath(file) {
+  if (!file || file.split('/').some((part) => !part || part === '.' || part === '..') || file.includes('\\')) fail('Unsafe source path');
+  if (!isDocumentation(file)) fail(`Product source drift requires a new signed run: ${file}`);
+}
+
+// Git clean filters, fileMode=false and cached stat data must not conceal the
+// actual bytes/modes consumed by the compiler or packager.
+async function physicalSourceChanges(ctx) {
+  const documents = [];
+  for (const entry of nulRecords(await command(ctx, 'git', ['ls-files', '--stage', '-z']))) {
+    const match = /^(100644|100755|120000) ([a-f0-9]{40}) 0\t([\s\S]+)$/.exec(entry);
+    if (!match) fail('Unsupported source index metadata');
+    const [, mode, blob, file] = match;
+    if (file.split('/').some((part) => !part || part === '.' || part === '..') || file.includes('\\')) fail('Unsafe source index path');
+    const absolute = path.join(ctx.root, file);
+    let current = ctx.root;
+    for (const part of file.split('/').slice(0, -1)) {
+      current = path.join(current, part);
+      try {
+        const parent = await fs.lstat(current);
+        if (!parent.isDirectory() || parent.isSymbolicLink()) fail('Unsafe source ownership parent');
+      } catch (error) { if (error.code !== 'ENOENT') throw error; break; }
+    }
+    let stat;
+    try { stat = await fs.lstat(absolute); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    let changed = !stat;
+    if (stat) {
+      const actualMode = stat.isSymbolicLink() ? '120000' : stat.isFile() ? ((stat.mode & 0o111) ? '100755' : '100644') : '';
+      changed = actualMode !== mode || Boolean(stat.mode & 0o7000) || stat.nlink !== 1;
+      if (!changed) {
+        const bytes = stat.isSymbolicLink() ? Buffer.from(await fs.readlink(absolute)) : await fs.readFile(absolute);
+        const actualBlob = createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
+        changed = actualBlob !== blob;
+      }
+    }
+    if (changed) {
+      documentationPath(file);
+      if (mode !== '100644') fail('Unsafe source document mode');
+      await documentOwnership(ctx, file);
+      if ((await command(ctx, 'git', ['cat-file', 'blob', blob])).includes('\0')) fail('Binary documentation is forbidden');
+      documents.push(file);
+    }
+  }
+  return documents;
+}
+
+async function documentOwnership(ctx, file) {
+  documentationPath(file);
+  let current = ctx.root;
+  const parts = file.split('/');
+  for (let index = 0; index < parts.length; index += 1) {
+    current = path.join(current, parts[index]);
+    let stat;
+    try { stat = await fs.lstat(current); } catch (error) { if (error.code === 'ENOENT') return; throw error; }
+    if (stat.isSymbolicLink()) fail('Symlink in documentation ownership path');
+    if (index < parts.length - 1) {
+      if (!stat.isDirectory()) fail('Invalid documentation parent');
+    } else {
+      if (!stat.isFile() || stat.nlink !== 1 || (stat.mode & 0o7111)) fail('Expected nonexecutable single-link document');
+      if ((await fs.readFile(current)).includes(0)) fail('Binary documentation is forbidden');
+    }
+  }
+}
+
+// This proof deliberately does not require source ancestry: squash/rebase trees
+// are comparable, but an unavailable source object is never fetched or guessed.
+export async function verifyArtifactSource(manifest, dependencies = {}) {
+  const ctx = context(dependencies);
+  const { oid: headCommit, physicalDocuments, untracked } = await sourceSnapshot(ctx);
+  const source = manifest.sourceCommit;
+  if (typeof source !== 'string' || !/^[a-f0-9]{40}$/.test(source)) fail('Invalid manifest source commit');
+  if ((await command(ctx, 'git', ['cat-file', '-t', source])).trim() !== 'commit') fail('Manifest source object is not a commit');
+  const documents = new Set(physicalDocuments);
+  const checkedBlobs = new Set();
+  const flags = ['--no-ext-diff', '--no-textconv', '--ignore-submodules=none', '--no-renames', '--no-relative'];
+  for (const revisions of [[source, headCommit], ['--cached', headCommit], []]) {
+    const entries = nulRecords(await command(ctx, 'git', ['diff', ...flags, '--raw', '--no-abbrev', '-z', ...revisions, '--']));
+    if (entries.length % 2) fail('Malformed Git raw diff');
+    for (let index = 0; index < entries.length; index += 2) {
+      const match = /^:(\d{6}) (\d{6}) ([a-f0-9]{40}) ([a-f0-9]{40}) ([AMDTU])$/.exec(entries[index]);
+      if (!match || match[5] === 'U') fail('Unsupported source diff');
+      const file = entries[index + 1];
+      await documentOwnership(ctx, file);
+      for (const mode of [match[1], match[2]]) if (mode !== '000000' && mode !== '100644') fail('Nonregular or executable document in source tree');
+      for (const blob of [match[3], match[4]]) {
+        if (/^0+$/.test(blob) || checkedBlobs.has(blob)) continue;
+        if ((await command(ctx, 'git', ['cat-file', 'blob', blob])).includes('\0')) fail('Binary documentation is forbidden');
+        checkedBlobs.add(blob);
+      }
+      documents.add(file);
+    }
+    const counts = nulRecords(await command(ctx, 'git', ['diff', ...flags, '--numstat', '-z', ...revisions, '--']));
+    for (const entry of counts) {
+      const match = /^(\d+|-)\t(\d+|-)\t([\s\S]+)$/.exec(entry);
+      if (!match || match[1] === '-' || match[2] === '-') fail('Binary or malformed documentation diff');
+      if (!documents.has(match[3])) fail('Inconsistent source diff');
+    }
+  }
+  for (const file of untracked) {
+    await documentOwnership(ctx, file);
+    documents.add(file);
+  }
+  return { sourceCommit: source, headCommit, documentationChanges: [...documents].sort() };
 }
 
 async function assertSource(ctx, manifest) {
