@@ -1,6 +1,6 @@
 # 최종 보고서 템플릿
 
-이 파일은 `mydocs/report/task_{milestone_slug}_{issue}_report.md` 작성용 중앙 템플릿이다. 최종 보고서는 모든 Stage의 결과, 수용 기준 검증, 남은 위험을 장기 보관용으로 정리하고, 보고서와 오늘할일 갱신 커밋 뒤 같은 스레드의 final report/evidence 승인을 받기 위한 문서다. 이 첫 승인은 private publication input 준비만 허용하며 원격 게시를 허용하지 않는다.
+이 파일은 `mydocs/report/task_{milestone_slug}_{issue}_report.md` 작성용 중앙 템플릿이다. 최종 보고서는 Stage 결과, 수용 기준 검증, 남은 위험과 handoff 컨텍스트를 장기 보관용으로 정리하는 non-blocking Evidence Checkpoint다. 공통 정책은 [`agent_code_hyperfall_rule_conflict.md`](../manual/agent_code_hyperfall_rule_conflict.md)를 따른다. 별도 final report/evidence Human 승인 없이 안전한 private publication input 준비와 read-only 원격 분류를 진행하며 원격 게시는 exact publication tuple에 대한 Human 승인 뒤에만 수행한다.
 
 GitHub Issue: [#{issue}](https://github.com/jinzer0/GPUWatch/issues/{issue})
 마일스톤: {milestone_name}
@@ -42,9 +42,7 @@ GitHub Issue: [#{issue}](https://github.com/jinzer0/GPUWatch/issues/{issue})
 
 ### 단계별 검증 결과
 
-- Stage 1: {보고서 링크 또는 검증 요약}
-- Stage 2: {보고서 링크 또는 검증 요약}
-- Stage 3: {보고서 링크 또는 검증 요약}
+- Stage {N}: {실제 실행 단위의 보고서 링크 또는 검증 요약. 단계 수는 동적이며 최소 수 없음}
 
 ## 잔여 위험과 후속 작업
 
@@ -56,8 +54,8 @@ GitHub Issue: [#{issue}](https://github.com/jinzer0/GPUWatch/issues/{issue})
 
 - {후속 이슈 후보. 없으면 `없음`으로 적는다.}
 
-## 커밋 후 승인 요청
+## Evidence Checkpoint와 publication 승인 경계
 
-- 이 보고서와 오늘할일 갱신은 regular, non-symlink, single-link, working-tree mode `0644`, index/commit mode `100644` 산출물로 검증한 뒤 정확히 두 파일만 커밋한다.
-- 커밋 뒤 즉시 멈추고, final commit OID, 두 artifact blob OID, acceptance evidence SHA-256을 묶은 새 같은 스레드 final report/evidence 승인을 요청한다.
-- 첫 승인 뒤 private title/body를 준비하고 read-only 원격 상태를 분류한 다음 다시 멈춘다. exact publication tuple에 대한 별도 두 번째 승인만 원격 mutation을 허용한다.
+- Commit은 명시 요청된 경우에만 수행한다. 해당 경로에서는 이 보고서와 오늘할일 갱신을 regular, non-symlink, single-link, working-tree mode `0644`, index/commit mode `100644` 산출물로 검증한 뒤 정확히 두 파일만 커밋한다. commit 요청이 없으면 안전한 검증·기록·handoff를 계속하고 publication에 필요한 commit은 미실행으로 남긴다.
+- final commit OID, exact artifact paths와 두 blob OID, acceptance evidence source/path와 SHA-256을 내부 Evidence Checkpoint로 캡처·재검증한다. 별도 Human 응답을 기다리지 않는다.
+- 검증된 commit 컨텍스트에서 private title/body와 read-only 원격 상태 분류를 자동 준비한다. 원격 mutation 직전에 exact publication tuple의 같은 스레드 Human 승인을 요청한다. tuple의 identity/ref/OID/blob/path/hash 검증과 merge/release/현재 OPEN 이슈 close 보호는 그대로 유지한다.

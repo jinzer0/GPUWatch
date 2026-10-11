@@ -2,7 +2,7 @@
 name: task-final-report
 description: |
   하이퍼-워터폴 타스크의 최종 보고와 승인된 exact OID PR 게시 절차를 적용한다.
-  최종 보고 증거 승인과 exact publication tuple 승인을 분리하고, 승인된 상태에서만 publish/task{N} Open PR을 생성 또는 재개한다.
+  최종 보고 증거를 비차단 checkpoint로 검증하고, Human이 승인한 exact publication tuple 상태에서만 publish/task{N} Open PR을 생성 또는 재개한다.
 ---
 
 # 하이퍼-워터폴 최종 보고와 PR 게시
@@ -12,25 +12,36 @@ description: |
 - 작업지시자가 "최종 보고서 작성", "PR 준비"를 명시 지시한 경우
 - 본 SKILL을 직접 호출한 경우
 
-## 사전 조건
+## 경로 선택: lean/local 보고 먼저
 
-- 최초 승인된 구현 계획서 commit은 Stage 1보다 먼저 존재하고, 모든 Stage 보고서와 승인이 완료됨
-- 최신 승인 구현 계획서 OID와 통합 검증 명령을 작업지시자가 같은 스레드에서 지정함
+- LOW/MEDIUM 범위의 최종 보고서 작성, evidence 갱신, 로컬 PR 초안 준비는 lean/local 경로로 수행한다. 계획서 commit, clean working tree, Stage 파일을 사전 조건으로 요구하지 않는다.
+- 요청한 범위의 기존 보고서와 evidence를 읽고 필요한 내용만 갱신한다. 실제 수행 결과와 검증 한계를 기록하고, 사용한 문서 경로/내용 상태와 evidence 원문을 캡처해 handoff 시 재확인한다. 비차단 checkpoint 통과 뒤 별도 Human 응답 없이 계속한다.
+- 기존 BMAD 계획서 등 현재 계획 산출물을 그대로 로컬 참조할 수 있다. 보고/evidence를 위해 중복 계획서나 추가 Stage 파일을 강제로 만들지 않는다. 다른 작업자의 미커밋/미추적 파일은 보존한다.
+- 보고 요청 또는 Skill 호출만으로 commit/publication 경로를 선택하지 않는다. 아래 committed exact publication 흐름은 publication이 명시적으로 요청된 경우에만 적용하며, commit과 원격 mutation은 각각의 명시적 권한이 있을 때만 실행한다. 로컬 보고만 요청된 경우 아래 shell의 plan OID/clean tree 계약을 적용하지 않는다.
+
+## committed exact publication 전용 사전 조건
+
+- publication 요청 범위의 기존 Stage 보고서와 checkpoint 검증이 완료됨. 계획서 commit의 Stage 1 이전 생성 여부는 요구하지 않는다.
+- 최신 검증 구현 계획서 OID와 통합 검증 명령을 현재 task context에서 확인함
 - `local/task{N}`에 최종 보고서/오늘할일에 포함할 변경 외 미커밋 변경이 없음
-- 작업지시자가 `ISSUE_NUMBER`, `APPROVED_IMPL_PLAN_COMMIT`, `IMPL_PLAN`, `ORDER_FILE`, 실행한 수용 기준의 원문 증거 `ACCEPTANCE_EVIDENCE`를 제공함. `IMPL_PLAN`은 `mydocs/plans/task_{milestone_slug}_{N}_impl.md`이고 `ORDER_FILE`은 `mydocs/orders/{yyyymmdd}.md`이다.
+- 현재 task context에서 `ISSUE_NUMBER`, `APPROVED_IMPL_PLAN_COMMIT`, `IMPL_PLAN`, `ORDER_FILE`, 실행한 수용 기준의 원문 증거 `ACCEPTANCE_EVIDENCE`를 확보함. `IMPL_PLAN`은 `mydocs/plans/task_{milestone_slug}_{N}_impl.md`이고 `ORDER_FILE`은 `mydocs/orders/{yyyymmdd}.md`이다.
+
+이 사전 조건과 아래 shell의 exact plan/blob/commit, index/working-tree, 경로 검증은 committed publication 전용 계약이다. 로컬 보고를 막거나 이 계약을 충족하려고 추가 산출물/commit을 임의 생성하지 않는다. publication 계약에 필요한 상태가 없으면 해당 경계만 보류하고 lean/local 작업은 계속한다.
 
 ## 승인 경계
 
-이 절차에는 같은 스레드의 서로 다른 두 승인만 있다.
+공유 위험 정책은 [`agent_code_hyperfall_rule_conflict.md`](../../manual/agent_code_hyperfall_rule_conflict.md)를 따른다. final report/evidence는 비차단 checkpoint이며 publication에만 같은 스레드의 exact Human gate가 있다. 내부 `APPROVED_*` 변수는 검증한 checkpoint context 이름이지 Human 승인 증거가 아니다. 단, 7단계 publication 변수는 명시적 Human 승인 응답에서만 설정한다. 도구 권한은 바꾸지 않는다.
 
-1. final report/evidence 승인: 최종 보고서와 오늘할일 commit, 정확한 두 blob, 수용 기준 증거 hash를 결박한다. 이 승인이 있기 전에는 publication input directory, PR 제목, PR 본문을 만들지 않는다.
-2. publication 승인: 원격 `devel`/publish ref와 Open PR의 분류, title/body hash를 결박한다. 이 tuple을 만들기 위한 canonical identity, issue, ref, Open PR 상태의 read-only 조회(`gh api --method GET`, GraphQL query, `ls-remote`, 검증용 `fetch`)는 이 승인 전에 허용한다. 이 승인 전에는 원격 mutation(`push`, `gh api --method POST`, PR 생성 또는 재개)을 하지 않는다.
+1. final report/evidence checkpoint: lean/local 경로에서는 사용한 로컬 보고/계획/evidence 상태를 캡처하고 재확인한다. committed publication 경로에서는 최종 보고서와 오늘할일 commit, 정확한 두 blob, 계획서 OID, 수용 기준 증거 hash를 캡처하고 재검증한다. 검증에 성공하면 승인 대기 없이 요청 범위의 다음 안전한 작업으로 계속 진행한다.
+2. publication Human 승인: 원격 `devel`/publish ref와 Open PR의 분류, title/body hash를 결박한다. canonical identity, issue, ref, Open PR 상태의 read-only 조회(`gh api --method GET`, GraphQL query, `ls-remote`, 검증용 `fetch`)와 로컬 PR input 준비는 이 승인 전에 허용한다. 이 승인 전에는 원격 mutation(`push`, REST POST, GraphQL mutation, PR 생성 또는 재개)을 하지 않는다. read-only GraphQL query의 HTTP POST transport는 mutation이 아니다.
 
-이전 Stage 승인, 최종 보고서 작성 지시, 첫 번째 승인, 이 Skill 호출은 두 번째 publication 승인이 아니다.
+이전 Stage/계획서/evidence checkpoint, 최종 보고서 작성 지시, 이 Skill 호출은 publication 승인이 아니다. commit도 별도의 명시적 commit 권한 없이 실행하지 않는다. 권한이 없으면 commit 경계만 보류하고 독립적인 안전한 작업은 계속한다. merge/issue close/release 권한은 publication 승인에 포함되지 않는다.
 
-## 절차
+## committed exact publication 절차
 
-1. 이슈와 구현 계획서 승인 상태를 검증하고 수용 기준을 실행한다.
+이하 shell은 명시적으로 요청된 publication을 준비/실행할 때만 사용한다. preparation은 read-only 원격 조회와 로컬 input 작성까지 허용하며, commit은 3단계의 명시적 commit 권한, push/PR mutation은 6–7단계의 exact publication Human 승인을 별도로 요구한다.
+
+1. 이슈와 구현 계획서 checkpoint 상태를 검증하고 수용 기준을 실행한다.
    ```bash
    set -euo pipefail
      LC_ALL=C
@@ -76,11 +87,11 @@ description: |
    ACCEPTANCE_EVIDENCE_SHA256="$(sha256_text "$ACCEPTANCE_EVIDENCE")"
    printf '%s\n' "acceptance_evidence_sha256=$ACCEPTANCE_EVIDENCE_SHA256"
    ```
-   - 위 검증 뒤 승인된 구현 계획서의 수용 기준 또는 마지막 Stage 검증 명령을 실제로 실행한다. `ACCEPTANCE_EVIDENCE`에는 실행한 명령, exit status, 필요한 출력 요약을 순서와 줄바꿈까지 보존해 넣는다. 다음 승인 fence에서도 동일한 원문을 다시 제공할 수 있어야 한다.
+   - 위 검증 뒤 검증된 구현 계획서의 수용 기준 또는 마지막 Stage 검증 명령을 실제로 실행한다. `ACCEPTANCE_EVIDENCE`에는 실행한 명령, exit status, 필요한 출력 요약을 순서와 줄바꿈까지 보존해 넣는다. 다음 checkpoint와 publication fence에서도 동일한 원문을 다시 제공할 수 있어야 한다.
 2. 최종 보고서와 오늘할일을 작성한다.
    - 최종 보고서는 `$FINAL_REPORT`에 `mydocs/_templates/final_report.md`를 기준으로 작성한다.
    - `$ORDER_FILE`의 `#{N}` 행을 `완료`와 완료 시각으로 갱신한다.
-3. 최종 보고서와 오늘할일만 하나의 commit으로 만들고, hook을 비활성화한 저장소 전체 index와 commit 경로를 검증한다.
+3. 작업지시자가 최종 보고서와 오늘할일 두 경로의 commit을 명시적으로 허용한 경우에만 `COMMIT_AUTHORIZATION=commit-final-report-and-orders`를 설정하고 아래 블록을 실행한다. 일반 작업 요청이나 checkpoint 통과로 이 권한을 추정하지 않는다. 두 파일만 하나의 commit으로 만들고, hook을 비활성화한 저장소 전체 index와 commit 경로를 검증한다.
    ```bash
    set -euo pipefail
      LC_ALL=C
@@ -118,6 +129,7 @@ description: |
    validate_regular_0644_file "$FINAL_REPORT"
    validate_regular_0644_file "$ORDER_FILE"
 
+   test "${COMMIT_AUTHORIZATION:-}" = "commit-final-report-and-orders"
    test -z "$(git diff --cached --name-only)"
    git add -- "$FINAL_REPORT" "$ORDER_FILE"
    REPORT_STAGE_RECORD="$(git ls-files -s -- "$FINAL_REPORT")"
@@ -160,7 +172,7 @@ description: |
    test -z "$(git status --porcelain)"
    ```
    - `INDEX_BEFORE_COMMIT`와 `INDEX_AFTER_COMMIT`는 hooks를 비활성화한 commit 경계의 repository-wide index이다. 일치하지 않거나 final commit 경로가 정확히 두 경로가 아니면 publication으로 진행하지 않는다.
-4. 첫 번째 final report/evidence 승인 tuple을 만들고 즉시 중단한다.
+4. final report/evidence checkpoint tuple을 캡처하고 검증에 성공하면 자동으로 계속한다.
    ```bash
    set -euo pipefail
      LC_ALL=C
@@ -222,8 +234,18 @@ description: |
    validate_artifact_binding "$ORDER_FILE" "$ORDERS_BLOB_OID"
    ACCEPTANCE_EVIDENCE_SHA256="$(sha256_text "$ACCEPTANCE_EVIDENCE")"
 
+   APPROVED_FINAL_REPORT_ACTION="capture-final-report-and-evidence"
+   APPROVED_FINAL_REPORT_ISSUE_NUMBER="$ISSUE_NUMBER"
+   APPROVED_FINAL_REPORT_PLAN_OID="$APPROVED_IMPL_PLAN_COMMIT"
+   APPROVED_FINAL_REPORT_FINAL_COMMIT_OID="$FINAL_COMMIT_OID"
+   APPROVED_FINAL_REPORT_REPORT_PATH="$FINAL_REPORT"
+   APPROVED_FINAL_REPORT_REPORT_BLOB_OID="$REPORT_BLOB_OID"
+   APPROVED_FINAL_REPORT_ORDERS_PATH="$ORDER_FILE"
+   APPROVED_FINAL_REPORT_ORDERS_BLOB_OID="$ORDERS_BLOB_OID"
+   APPROVED_FINAL_REPORT_ACCEPTANCE_EVIDENCE_SHA256="$ACCEPTANCE_EVIDENCE_SHA256"
+
    printf '%s\n' \
-     "action=approve-final-report-and-evidence" \
+     "action=$APPROVED_FINAL_REPORT_ACTION" \
      "issue_number=$ISSUE_NUMBER" \
      "approved_plan_oid=$APPROVED_IMPL_PLAN_COMMIT" \
      "final_commit_oid=$FINAL_COMMIT_OID" \
@@ -233,8 +255,8 @@ description: |
      "orders_blob_oid=$ORDERS_BLOB_OID" \
      "acceptance_evidence_sha256=$ACCEPTANCE_EVIDENCE_SHA256"
    ```
-   - 여기서 즉시 중단한다. 작업지시자는 같은 스레드에서 `action=approve-final-report-and-evidence`와 출력된 모든 tuple 값을 정확히 명시해 승인해야 한다. 승인 응답 전에는 `$PUBLICATION_DIR`을 만들거나 title/body 파일을 만들지 않는다.
-5. 첫 번째 승인을 정확히 다시 검증한 뒤에만 private publication input directory와 검증된 내부 PR 제목을 준비한다.
+   - 위 `APPROVED_FINAL_REPORT_*` 값과 evidence 원문을 checkpoint context로 보존한다. 별도 shell에서는 캡처한 값을 그대로 복원하고 아래에서 재검증하며, 현재 상태로 덮어써 drift를 숨기지 않는다. 불일치하면 해당 상태를 바로잡고 checkpoint를 다시 캡처한다. Human 응답은 요구하지 않는다.
+5. 캡처한 checkpoint를 정확히 다시 검증한 뒤 private publication input directory와 검증된 내부 PR 제목을 준비한다.
    ```bash
    set -euo pipefail
      LC_ALL=C
@@ -315,7 +337,7 @@ description: |
    test -n "${IMPL_PLAN:-}"
    test -n "${ORDER_FILE:-}"
    test -n "${ACCEPTANCE_EVIDENCE:-}"
-   test "${APPROVED_FINAL_REPORT_ACTION:-}" = "approve-final-report-and-evidence"
+   test "${APPROVED_FINAL_REPORT_ACTION:-}" = "capture-final-report-and-evidence"
    test "${APPROVED_FINAL_REPORT_ISSUE_NUMBER:-}" = "$ISSUE_NUMBER"
    test "${APPROVED_FINAL_REPORT_PLAN_OID:-}" = "$APPROVED_IMPL_PLAN_COMMIT"
    validate_oid "${APPROVED_FINAL_REPORT_FINAL_COMMIT_OID:-}"
@@ -368,7 +390,7 @@ description: |
    ```
    - 파일 쓰기 도구만 `$PUBLICATION_DIR/title`에 `EXPECTED_PR_TITLE` 한 줄과 끝 newline을, `$PUBLICATION_DIR/body`에 완성 PR 본문을 쓴다. writer는 즉시 `chmod 600 "$PUBLICATION_DIR/title" "$PUBLICATION_DIR/body"`를 실행하고, 두 파일이 regular, single-link, owner-only mode `0600`인지 확인한다. 두 파일은 directory 안에만 두며 `/tmp` 고정 이름, persistent manifest, `--body-file` handoff를 사용하지 않는다.
    - PR 본문에는 target issue를 닫는 독립된 정확한 한 줄 `Closes #${ISSUE_NUMBER}`를 포함한다. 이후 fence가 title, body, 소유자, mode, hard-link count, UTF-8, NUL, CR, hash를 다시 검증하므로 다른 제목 또는 본문은 승인 tuple에 도달하지 못한다.
-6. publication input과 원격 상태를 분류해 두 번째 approval tuple을 출력하고 즉시 중단한다.
+6. publication input과 원격 상태를 분류해 publication Human approval tuple을 출력하고 원격 mutation 경계에서 중단한다. 독립적인 안전한 작업은 계속할 수 있다.
    ```bash
    set -euo pipefail
      LC_ALL=C
@@ -602,7 +624,7 @@ description: |
    test -n "${IMPL_PLAN:-}"
    test -n "${ORDER_FILE:-}"
    test -n "${ACCEPTANCE_EVIDENCE:-}"
-   test "${APPROVED_FINAL_REPORT_ACTION:-}" = "approve-final-report-and-evidence"
+   test "${APPROVED_FINAL_REPORT_ACTION:-}" = "capture-final-report-and-evidence"
    test "${APPROVED_FINAL_REPORT_ISSUE_NUMBER:-}" = "$ISSUE_NUMBER"
    test "${APPROVED_FINAL_REPORT_PLAN_OID:-}" = "$APPROVED_IMPL_PLAN_COMMIT"
    validate_oid "${APPROVED_FINAL_REPORT_FINAL_COMMIT_OID:-}"
@@ -669,8 +691,8 @@ description: |
      "publication_pr_node_id=$PUBLICATION_PR_NODE_ID"
    ```
    - 이 fence는 `branch-absent-pr-absent`, `branch-exact-pr-absent`, `branch-exact-pr-draft`, `branch-exact-pr-ready`만 수용한다. 모든 state의 matching PR을 조회하므로 닫힌 PR, 둘 이상의 matching PR, branch 없이 PR이 있는 경우, base/head/repository/title/body/draft가 다른 PR은 모두 실패한다.
-   - 여기서 즉시 중단한다. 작업지시자는 같은 스레드에서 위의 모든 tuple 값과 `action=push-exact-oid-and-create-or-resume-open-pr`를 정확히 명시해 승인해야 한다.
-7. 두 번째 승인을 정확히 재검증하고, 승인된 exact 상태에서만 draft 생성과 ready 전환을 한 번에 수행한다.
+   - 여기서 원격 mutation만 보류한다. 작업지시자는 같은 스레드에서 위의 모든 tuple 값과 `action=push-exact-oid-and-create-or-resume-open-pr`를 정확히 명시해 승인해야 한다. 승인 대기 중에도 독립적인 안전한 작업은 계속한다.
+7. publication Human 승인을 정확히 재검증하고, 승인된 exact 상태에서만 draft 생성과 ready 전환을 한 번에 수행한다.
    - 승인 응답의 `APPROVED_ACTION`, `APPROVED_HOST`, `APPROVED_REPOSITORY`, `APPROVED_REPOSITORY_ID`, `APPROVED_ISSUE_NUMBER`, `APPROVED_PLAN_OID`, `APPROVED_FINAL_COMMIT_OID`, `APPROVED_FINAL_REPORT_PATH`, `APPROVED_FINAL_REPORT_BLOB_OID`, `APPROVED_ORDERS_PATH`, `APPROVED_ORDERS_BLOB_OID`, `APPROVED_ACCEPTANCE_EVIDENCE_SHA256`, `APPROVED_DEVEL_OID`, `APPROVED_PUBLISH_BRANCH`, `APPROVED_BASE`, `APPROVED_TITLE_SHA256`, `APPROVED_BODY_SHA256`, `APPROVED_PUBLICATION_STATE`, `APPROVED_PUBLICATION_PR_NUMBER`, `APPROVED_PUBLICATION_PR_NODE_ID`를 그대로 설정한다. 이어 ambient `ISSUE_NUMBER`, `APPROVED_IMPL_PLAN_COMMIT`, `IMPL_PLAN`, `ORDER_FILE`, `ACCEPTANCE_EVIDENCE`, `PUBLICATION_DIR`도 설정하고 한 번에 실행한다.
    ```bash
     set -euo pipefail
@@ -1142,10 +1164,10 @@ description: |
 
 ## 검증
 
-- 승인 구현 계획서 OID의 plan blob이 HEAD, index, working tree와 일치한 뒤 수용 기준을 실제 실행하고, acceptance evidence SHA-256을 첫 승인에 결박함
+- 검증 구현 계획서 OID의 plan blob이 HEAD, index, working tree와 일치한 뒤 수용 기준을 실제 실행하고, acceptance evidence SHA-256을 checkpoint에 결박함
 - final report/orders commit 전 staged/untracked 변경을 거부하고, hook을 비활성화한 repository-wide index와 final commit 경로가 정확히 report/orders 두 파일임을 검증함
-- 첫 승인 tuple이 issue, plan OID, final commit OID, report/orders paths와 blob OIDs, acceptance evidence SHA-256을 정확히 결박하고 publication input 생성 전에 멈춤
-- 두 번째 승인 tuple이 canonical repository identity, approved issue/plan scalar, exact devel/final OIDs, first-approval artifacts, private title/body hashes, publish branch/base, 네 publication states와 PR number/node ID 또는 none을 결박함
+- checkpoint tuple이 issue, plan OID, final commit OID, report/orders paths와 blob OIDs, acceptance evidence SHA-256을 정확히 캡처하고 재검증 뒤 publication input 준비로 자동 진행함
+- publication Human 승인 tuple이 canonical repository identity, 검증한 issue/plan scalar, exact devel/final OIDs, checkpoint artifacts, private title/body hashes, publish branch/base, 네 publication states와 PR number/node ID 또는 none을 결박함
 - canonical `github.com`, `jinzer0/GPUWatch`, repository ID `1256824919`, 모든 origin fetch/push URL을 `ls-remote`, `fetch`, `push`, `gh api` 전에 확인함
 - 실행 시 승인 state와 exact하게 같은 원격 상태만 수용하고, branch가 없을 때만 absent-ref lease와 approved final OID refspec으로 push하며, 생성 직전 all-state PR absence를 다시 확인함
 - own POST 반환 number/node ID의 exact draft REST GET 뒤 같은 node만 ready로 전환하고, 명시적 REST GET이 정확히 하나의 canonical non-draft Open PR의 `.base.sha == APPROVED_DEVEL_OID`, `.head.sha == APPROVED_FINAL_COMMIT_OID`, base/head refs와 repositories, title/body를 검증함
@@ -1154,13 +1176,15 @@ description: |
 
 ## 절대 하지 말 것
 
-- 통합 검증 실패, 마지막 Stage 승인 전, 첫 final report/evidence 승인 전, 또는 두 번째 publication tuple 명시 승인 없이 publication input 생성이나 원격 mutation(`push`, `gh api --method POST`, PR 생성 또는 재개)
+- 통합 검증 실패 또는 Stage/plan/final evidence checkpoint 불일치를 무시하고 publication input 생성
+- publication tuple 명시 Human 승인 없이 원격 mutation(`push`, REST POST, GraphQL mutation, PR 생성 또는 재개). read-only preflight와 검증된 로컬 input 준비는 허용함
+- 명시적 commit 권한 없이 자동 commit 실행
 - moving `HEAD` 또는 `local/task{N}` ref를 refspec source로 사용하거나 approved final OID 이외의 commit 게시
 - `local/task{N}` 직접 원격 push, absent-ref lease 없는 publish ref 생성, 기존 publish ref overwrite
 - 네 valid publication state 밖의 branch/PR 상태를 추정하거나 resume 처리
 - canonical identity/origin 검증 전 `ls-remote`, `fetch`, `push`, `gh api` 원격 작업
 - PR 생성 직전 base/head 재검증 또는 생성/재개 뒤 explicit REST GET exact 검증을 생략
-- create/ready ambiguity 뒤 publication input 또는 기존 두 번째 승인을 재사용하거나 persistent manifest로 PR을 adopt
+- create/ready ambiguity 뒤 publication input 또는 기존 publication 승인을 재사용하거나 persistent manifest로 PR을 adopt
 - 반환 identity와 exact draft GET 검증 없이 PR을 ready로 전환하거나, self-merge, `gh pr review`/`gh pr merge`를 무승인 실행
 
 ## 호출 방법

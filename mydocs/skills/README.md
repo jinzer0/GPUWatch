@@ -20,6 +20,8 @@ task 시작, 단계 종료, 최종 보고, PR merge cleanup, 외부 PR 검토 �
 
 Skill 본문은 도구별 Skill 형식을 따른다. 산출물 문서를 만들 때는 `mydocs/_templates/`의 해당 템플릿을 참조한다.
 
+승인 정책은 [`agent_code_hyperfall_rule_conflict.md`](../manual/agent_code_hyperfall_rule_conflict.md)를 공통으로 따른다. BMAD는 요구사항·설계·계획, Hyper-Waterfall은 실행·상태·Evidence·handoff를 담당하며 같은 계획이나 위험 결정 승인을 중복 생성하지 않는다. Checkpoint는 응답 대기가 아니고 도구 권한은 별개다.
+
 ## 반드시 포함할 내용
 
 - 트리거
