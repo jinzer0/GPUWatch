@@ -14,6 +14,216 @@ expect_failure() { if "$@"; then fail "$1 unexpectedly succeeded"; fi; }
 assert_contains() { grep -F -- "$2" "$1" >/dev/null || fail "missing $2 in $1"; }
 assert_absent() { if grep -F -- "$2" "$1" >/dev/null; then fail "forbidden $2 in $1"; fi; }
 
+assert_risk_checkpoint_scenarios() {
+  local policy="$REPO_ROOT/mydocs/manual/agent_code_hyperfall_rule_conflict.md"
+  local bmad_plan="$REPO_ROOT/mydocs/skills/bmad-build/step-02-plan.md"
+
+  # These inspect the actual policy and executable workflow instructions, not a
+  # test-side risk classifier that could agree with itself while sources regress.
+  assert_contains "$policy" '사전/계획 승인 없이 바로 실행'
+  assert_contains "$START_SKILL" 'LOW는 즉시'
+  assert_absent "$WORKFLOW_MANUAL" '수행계획서 작성 → 승인 요청'
+  pass 'risk scenario 1: typo correction executes without a plan approval wait'
+
+  assert_contains "$policy" '단순 버그·테스트'
+  assert_contains "$policy" 'LOW라는 이름이어도 위험 영향이 발견되면 HIGH 경계를 적용한다'
+  assert_contains "$STAGE_SKILL" '명확히 요청된 MEDIUM 범위는 계획·구현·검증·보고·다음 단계까지 자동 진행한다'
+  pass 'risk scenario 2: ordinary bugs and tests are autonomous, not a HIGH bypass'
+
+  assert_contains "$policy" '명확한 사용자 요청 자체가 Scope 승인'
+  assert_contains "$bmad_plan" 'automatically set `status: '\''ready-for-dev'\''`'
+  assert_contains "$bmad_plan" 'Do not ask for another plan approval'
+  assert_contains "$bmad_plan" 'Explicit plan-only or stop-after-planning request'
+  assert_contains "$bmad_plan" 'stop at this boundary without implementation'
+  pass 'risk scenario 3: clear feature requests authorize scope, plan-only requests do not'
+
+  assert_contains "$policy" 'Stage 시작/종료/전환'
+  assert_contains "$WORKFLOW_MANUAL" '고정 최소/최대 수는 없다'
+  assert_contains "$STAGE_SKILL" '일반 단계 확인을 기다리지 않는다'
+  assert_contains "$STAGE_SKILL" 'Human approval을 뜻하지 않는다'
+  assert_contains "$STAGE_SKILL" 'committed context 기반 절차를 명시 요청한 경우에만 아래 블록을 실행한다'
+  assert_contains "$STAGE_SKILL" '안전한 구현·검증·보고를 위해 계획서 커밋을 요구하지 않는다'
+  assert_contains "$STAGE_SKILL" 'test "$APPROVED_IMPL_PLAN_BLOB" = "$WORKTREE_IMPL_PLAN_BLOB" || exit 1'
+  pass 'risk scenario 4: Stage transitions do not wait, committed-context blob integrity remains'
+
+  assert_contains "$policy" 'Scope 내에서 원인 분석→수정→재검증'
+  assert_contains "$policy" '실패를 완료로 표시하지 않는다'
+  assert_contains "$WORKFLOW_MANUAL" 'Scope 안에서 원인 분석→수정→재검증을 자동 수행한다'
+  assert_contains "$STAGE_SKILL" '실패/실행 불가도 명령, 출력 또는 불가 사유'
+  pass 'risk scenario 5: failed tests trigger repair and retain failure evidence'
+
+  assert_contains "$policy" '중대한 아키텍처/보안/인증·권한 변경'
+  assert_contains "$bmad_plan" 'explicit approval for the specific risky decision/action'
+  assert_contains "$bmad_plan" 'hold that dependent action, while safe independent work may continue'
+  assert_contains "$policy" '기존 승인이 동일 결정과 현재 대상/범위를 정확히 포함'
+  pass 'risk scenario 6: major architecture changes hold only the exact risky decision'
+
+  assert_contains "$policy" '데이터 삭제/파괴적 마이그레이션'
+  assert_contains "$policy" '해당 위험 결정 또는 행동 직전에 명시 Human 승인'
+  assert_contains "$policy" 'HIGH 요청에는 결정, 대상, 영향, 대안, 실행 범위를 적고'
+  assert_contains "$policy" '응답 부재나 headless 모드는 승인으로 간주하지 않는다'
+  pass 'risk scenario 7: destructive data actions need explicit authorization, never headless consent'
+
+  assert_contains "$policy" '| Scope 밖 기능 추가 | Scope 변경 승인 전 구현하지 않음 |'
+  assert_contains "$policy" '대상이나 Scope가 달라지면 새 결정'
+  assert_contains "$bmad_plan" 'only the human may authorize changes to that intent'
+  pass 'risk scenario 8: scope expansion cannot inherit an earlier approval'
+
+  assert_contains "$policy" '| 검증 문서화 | 승인 없이 기록 |'
+  assert_contains "$FINAL_SKILL" 'final report/evidence checkpoint'
+  assert_contains "$FINAL_SKILL" '검증에 성공하면 승인 대기 없이 요청 범위의 다음 안전한 작업으로 계속 진행한다'
+  assert_contains "$FINAL_SKILL" 'lean/local'
+  assert_contains "$FINAL_SKILL" 'capture-final-report-and-evidence'
+  assert_absent "$FINAL_SKILL" 'approve-final-report-and-evidence'
+  assert_contains "$FINAL_SKILL" '현재 상태로 덮어써 drift를 숨기지 않는다'
+  assert_contains "$FINAL_SKILL" 'APPROVED_FINAL_REPORT_REPORT_BLOB_OID="$REPORT_BLOB_OID"'
+  assert_contains "$FINAL_SKILL" 'APPROVED_FINAL_REPORT_ORDERS_BLOB_OID="$ORDERS_BLOB_OID"'
+  assert_contains "$FINAL_SKILL" 'APPROVED_FINAL_REPORT_ACCEPTANCE_EVIDENCE_SHA256="$ACCEPTANCE_EVIDENCE_SHA256"'
+  test "$(grep -Fc 'test "${APPROVED_FINAL_REPORT_ACTION:-}" = "capture-final-report-and-evidence"' "$FINAL_SKILL")" = 2 || fail 'captured evidence must be replayed before preparation and publication approval'
+  test "$(grep -Fc 'test "$(sha256_text "$ACCEPTANCE_EVIDENCE")" = "$APPROVED_FINAL_REPORT_ACCEPTANCE_EVIDENCE_SHA256"' "$FINAL_SKILL")" = 2 || fail 'acceptance evidence hash must be replayed at both checkpoint boundaries'
+  test "$(grep -Fc 'validate_artifact_binding "$FINAL_REPORT" "$APPROVED_FINAL_REPORT_REPORT_BLOB_OID"' "$FINAL_SKILL")" = 2 || fail 'report blob binding must be replayed at both checkpoint boundaries'
+  test "$(grep -Fc 'validate_artifact_binding "$ORDER_FILE" "$APPROVED_FINAL_REPORT_ORDERS_BLOB_OID"' "$FINAL_SKILL")" = 2 || fail 'orders blob binding must be replayed at both checkpoint boundaries'
+  assert_absent "$WORKFLOW_MANUAL" '최종 보고서와 오늘할일 커밋 뒤에는 반드시 멈춘다'
+  pass 'risk scenario 9: verification and final evidence are nonblocking integrity checkpoints'
+
+  assert_contains "$FINAL_SKILL" 'publication Human 승인'
+  assert_contains "$FINAL_SKILL" '이 승인 전에는 원격 mutation'
+  assert_contains "$FINAL_SKILL" 'merge/issue close/release 권한은 publication 승인에 포함되지 않는다'
+  assert_contains "$FINAL_SKILL" '7단계 publication 변수는 명시적 Human 승인 응답에서만 설정한다'
+  assert_contains "$CLEANUP_SKILL" 'APPROVED_ISSUE_UPDATED_AT'
+  assert_contains "$CLEANUP_SKILL" 'LIVE_ISSUE_UPDATED_AT'
+  assert_contains "$AGENTS_FILE" '플랫폼 Tool Permission은 별도 기존 권한을 준수한다'
+  assert_contains "$policy" 'Tool Permission·Hook·보안 설정을 임의 완화하지 않는다'
+  assert_contains "$policy" 'Commit은 명시 요청된 경우에만 수행한다'
+  pass 'risk scenario 10: publication, merge, release, exact OPEN issue close, and tool permissions remain separate'
+}
+
+assert_rendered_bmad_risk_branches() {
+  # Render current source skills in an isolated project. Do not import the
+  # upstream test suite: its install layout is not the consumer layout.
+  # Missing Jinja is a failure, not a skip.
+  PYTHONDONTWRITEBYTECODE=1 python3 - "$REPO_ROOT" "$TMP_ROOT" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+sys.dont_write_bytecode = True
+repo, temporary = map(Path, sys.argv[1:])
+scripts = repo / "_bmad/scripts"
+sys.path.insert(0, str(scripts))
+import render_skill
+
+project = temporary / "risk-render-project"
+(project / "_bmad/custom").mkdir(parents=True)
+config = (repo / "mydocs/skills/bmad/assets/config.template.toml").read_text(encoding="utf-8")
+(project / "_bmad/config.toml").write_text(
+    config.replace("{directory_name}", project.name), encoding="utf-8"
+)
+
+
+def require(text, phrase, label):
+    if phrase not in text:
+        raise AssertionError(f"{label}: missing {phrase!r}")
+
+
+def forbid(text, phrase, label):
+    if phrase in text:
+        raise AssertionError(f"{label}: obsolete gate {phrase!r}")
+
+
+for skill in ("bmad-build", "bmad-build-auto"):
+    for route in ("auto", "full", "oneshot"):
+        for review in ("auto", "none", "quick", "thorough"):
+            label = f"{skill}/{route}/{review}"
+            entry = render_skill.render(
+                project,
+                repo / "mydocs/skills" / skill,
+                assignments=[f"workflow.route={route}", f"workflow.review={review}"],
+            )
+            files = {
+                path.relative_to(entry.parent).as_posix(): path.read_text(encoding="utf-8")
+                for path in entry.parent.rglob("*.md")
+            }
+            for name, text in files.items():
+                if re.search(r"\{%|\{\{\s*(?:workflow\.|config\.|rendered\()", text):
+                    raise AssertionError(f"{label}/{name}: unrendered workflow branch")
+            plan = files["step-02-plan.md"]
+            if skill == "bmad-build":
+                require(plan, "Do not ask for another plan approval", label)
+                require(plan, "stop at this boundary without implementation", label)
+                require(plan, "specific risky decision/action", label)
+                require(plan, "safe independent work may continue", label)
+                if route != "oneshot":
+                    require(files["step-03-implement.md"], "specific HIGH-risk decision before its dependent action", label)
+                    require(files["step-03-implement.md"], "No commit without explicit user authorization", label)
+                    review_text = files["step-04-review.md"]
+                    require(review_text, "without routine human waits", label)
+                    require(review_text, "exact explicit human decision", label)
+                    require(review_text, "Never reset/discard user or other workers' changes", label)
+                if route != "full":
+                    oneshot = files["step-oneshot.md"]
+                    require(oneshot, "specific HIGH-risk decision/action", label)
+                    require(oneshot, "stop-after-planning requests without implementation", label)
+                    require(oneshot, "No commit without explicit user authorization", label)
+                    require(oneshot, "only when required implementation, verification, and review are complete", label)
+                    require(oneshot, "Otherwise retain the incomplete state", label)
+                    require(oneshot, "It cannot authorize commits, remote mutation, a new ticket", label)
+                    forbid(oneshot, "Stop and wait for the user.", label)
+                if route == "oneshot" and "step-03-implement.md" in files:
+                    raise AssertionError(f"{label}: full implementation leaked into pinned oneshot")
+                if route == "full" and "step-oneshot.md" in files:
+                    raise AssertionError(f"{label}: oneshot leaked into pinned full")
+            else:
+                for name in ("step-02-plan.md", "step-03-implement.md", "step-04-review.md"):
+                    text = files[name]
+                    require(text, "HIGH actions require an exact explicit human decision", label)
+                    require(text.lower(), "safe independent work may continue", label)
+                    require(text, "HALT with status `blocked` when required progress depends on", label)
+                    prohibitions = (
+                        "must never supply that decision itself",
+                        "must not auto-authorize them",
+                        "must never auto-authorize them",
+                    )
+                    if not any(phrase in text for phrase in prohibitions):
+                        raise AssertionError(f"{label}/{name}: headless HIGH self-approval is not prohibited")
+                require(plan, "halt after planning", label)
+                require(files["step-03-implement.md"], "Never reset/discard unrelated files", label)
+                require(files["step-03-implement.md"], "explicit authorization", label)
+                require(files["step-03-implement.md"], "Do not mark the whole implementation complete", label)
+                if route != "full":
+                    require(files["step-03-implement.md"], "Block only dependent actions; continue independently authorized safe work", label)
+                    require(files["step-03-implement.md"], "only when no safe independent progress remains", label)
+                    forbid(files["step-03-implement.md"], "Stop if the intent left out", label)
+            for text in files.values():
+                forbid(text, "Wait for the human to approve the plan", label)
+                forbid(text, "Do not proceed without plan approval", label)
+
+for review in ("quick", "thorough"):
+    label = f"bmad-code-review/{review}"
+    entry = render_skill.render(
+        project,
+        repo / "mydocs/skills/bmad-code-review",
+        assignments=[f"workflow.review={review}"],
+    )
+    workflow = entry.read_text(encoding="utf-8")
+    require(workflow, "Review-only requests are read-only", label)
+    require(workflow, "safe LOW/MEDIUM fixes, verification, and re-review without renewed approval", label)
+    require(workflow, "unapproved HIGH action blocks only dependent work", label)
+    require(workflow, "separate publication/merge/release/issue-close gates", label)
+    require(workflow, "Completion needs no menu response", label)
+    present = (entry.parent / "step-04-present.md").read_text(encoding="utf-8")
+    require(present, "Skip all repository writes in this section", label)
+    require(present, "automatically apply safe LOW/MEDIUM patches", label)
+    require(present, "unapproved HIGH action blocks only dependent patches", label)
+    require(present, "No menu response is required", label)
+    require(present, "cannot implicitly authorize another ticket", label)
+    for path in entry.parent.rglob("*.md"):
+        text = path.read_text(encoding="utf-8")
+        if re.search(r"\{%|\{\{\s*(?:workflow\.|config\.|rendered\()", text):
+            raise AssertionError(f"{label}/{path.name}: unrendered workflow branch")
+PY
+}
+
 suppressed_git() (
   GIT_CONFIG_COUNT=1
   GIT_CONFIG_KEY_0=core.hooksPath
@@ -3861,7 +4071,8 @@ assert_contains "$FINAL_SKILL" 'closingIssuesReferences(first: 100, after: $endC
 assert_contains "$FINAL_SKILL" 'chmod 600 "$PUBLICATION_DIR/title" "$PUBLICATION_DIR/body"'
 assert_contains "$FINAL_SKILL" '0[0-8b-f]'
 assert_contains "$AGENTS_FILE" 'PR merge만으로 close를 승인하지 않으며'
-assert_contains "$AGENTS_FILE" '타스크 진행 16단계'
+assert_contains "$AGENTS_FILE" '규모에 맞는 타스크 진행'
+assert_absent "$AGENTS_FILE" '타스크 진행 16단계'
 assert_contains "$TASK_REGISTER_SKILL" 'IFS= read -r SEARCH_QUERY < "$SEARCH_QUERY_FILE"'
 assert_contains "$TASK_REGISTER_SKILL" '--search "$SEARCH_QUERY"'
 assert_absent "$TASK_REGISTER_SKILL" 'eval '
@@ -3969,7 +4180,10 @@ for canonical_commit_fence in "$STAGE_SKILL" "$WORKFLOW_MANUAL"; do
 done
 test "$(grep -Fc 'stage_validate_document_identity || return 1' "$STAGE_SKILL")" = 2 || fail 'stage post-ref document identity replay changed'
 test "$(grep -Fc 'plan_validate_document_identity || return 1' "$WORKFLOW_MANUAL")" = 2 || fail 'plan post-ref document identity replay changed'
-test "$(grep -Ec '이 절차에는 같은 스레드의 서로 다른 두 승인만 있다\.|1\. final report/evidence 승인:|2\. publication 승인:' "$FINAL_SKILL")" = 3 || fail 'approval contract changed'
+assert_absent "$FINAL_SKILL" '이 절차에는 같은 스레드의 서로 다른 두 승인만 있다.'
+assert_absent "$FINAL_SKILL" '1. final report/evidence 승인:'
+assert_contains "$FINAL_SKILL" '1. final report/evidence checkpoint:'
+assert_contains "$FINAL_SKILL" '2. publication Human 승인:'
 assert_absent "$EXTERNAL_SKILL" 'graphql mutation'
 assert_absent "$EXTERNAL_SKILL" '--method POST'
 assert_absent "$EXTERNAL_SKILL" 'gh issue '
@@ -3977,7 +4191,10 @@ assert_absent "$EXTERNAL_SKILL" 'gh pr '
   assert_contains "$EXTERNAL_SKILL" 'gh api --method GET'
   assert_contains "$EXTERNAL_SKILL" 'reviewThreads(first:100,after:$endCursor){nodes{id,isResolved,isOutdated,comments(first:1){nodes{databaseId}}} pageInfo{hasNextPage,endCursor}}'
   assert_absent "$EXTERNAL_SKILL" 'comments(first:1){nodes{databaseId}} pageInfo{hasNextPage,endCursor}}'
-pass 'workflow source retains two approvals, read-only external calls, and fail-closed contracts'
+pass 'workflow source retains a nonblocking evidence checkpoint, publication approval, read-only external calls, and fail-closed contracts'
+assert_risk_checkpoint_scenarios
+assert_rendered_bmad_risk_branches || fail 'rendered BMAD risk branches'
+pass 'real BMAD Jinja snapshots preserve risk boundaries across route and review branches'
 
 PATH=$REAL_PATH
 export PATH
@@ -4866,10 +5083,10 @@ terminal_tuple_may_succeed() {
 }
 
 assert_terminal_cross_product_case() {
-  local kind=$1 transcript_mode=$2 wait_status=$3 stderr_mode=$4 exact_new=$5 check_transaction_directories=${6:-0} repo before new_oid runner_status=0 transaction_parent transaction_dirs_before
+  local kind=$1 transcript_mode=$2 wait_status=$3 stderr_mode=$4 exact_new=$5 check_transaction_directories=${6:-0} fixture_suffix=${7:-} repo before new_oid runner_status=0 transaction_parent transaction_dirs_before
   case "$kind" in
     stage|plan)
-      repo="$(new_commit_fence_canary_repo "terminal-$kind-$transcript_mode-$wait_status-$stderr_mode-$exact_new")"
+      repo="$(new_commit_fence_canary_repo "terminal-$kind-$transcript_mode-$wait_status-$stderr_mode-$exact_new$fixture_suffix")"
       if test "$kind" = stage; then setup_stage_fence_inputs "$repo"; else setup_impl_plan_fence_input "$repo"; fi
       transaction_parent="$(commit_fence_tmpdir "$repo")"
       transaction_dirs_before="$(transaction_directory_identity_set "$transaction_parent")"
@@ -5174,7 +5391,7 @@ assert_archive_outer_signal_rolls_back_exact_new() {
 
 assert_outer_exit_transaction_directory_cleanup() {
   install_commit_fence_outer_signal_git_shim || fail 'could not install outer-EXIT commit fence shim'
-  assert_terminal_cross_product_case plan exact 0 nonempty 1 0
+  assert_terminal_cross_product_case plan exact 0 nonempty 1 0 -outer-exit
   pass 'outer-EXIT rejected-terminal rollback preserves parent refs'
 }
 

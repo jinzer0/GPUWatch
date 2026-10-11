@@ -2,7 +2,7 @@
 name: task-stage-report
 description: |
   하이퍼-워터폴 타스크의 단계 종료 절차를 적용한다.
-  단계별 완료 보고서(`_stage{N}.md`) 작성, 단계 소스와 보고서 묶음 커밋,
+  단계별 보고서(`_stage{N}.md`) 작성, 명시 허가 시 단계 소스와 보고서 묶음 커밋,
   단계 검증 명령 실행을 수행한다. 한 단계가 끝나고 다음 단계 진입 직전에 호출.
 ---
 
@@ -15,16 +15,20 @@ description: |
 
 ## 사전 조건
 
-- 구현 계획서(`task_{milestone_slug}_{N}_impl.md`)가 존재하고 작업지시자 내용 승인 후 `local/task{N}`에 독립 커밋되며 exact SHA까지 같은 스레드에서 확인됨
-- Stage 1 시작 시 구현계획서에 미커밋 변경이 없었음
-- 현재 단계의 작업 항목이 모두 코드/문서에 반영됨
+- 구현 계획서 또는 작은 작업의 기존 이슈/맥락 기록에 요청 범위, 단계와 검증 방법이 존재
+- 아래 committed context 절차를 명시 요청한 경우에만 구현계획서가 `local/task{N}`에 독립 커밋되어 exact SHA가 기록되고 Stage 1 시작 시 미커밋 계획 변경이 없어야 함
+- 현재 단계의 완료/미완료 항목과 검증 결과를 기록할 수 있음 (실패도 보고 대상)
 - 작업 브랜치는 `local/task{N}`
 
 ## 절차
 
-1. 승인 계획서 무결성 확인 후 단계별 검증 명령 실행
-   - 작업지시자가 같은 스레드에서 확인한 최신 구현계획서 commit의 exact SHA를 `APPROVED_IMPL_PLAN_COMMIT_FILE`에 파일 쓰기 도구로 기록한다. commit message 검색으로 승인 SHA를 다시 추론하지 않는다.
-   - 승인 commit의 내용, 현재 계획서 blob, 현재 단계와의 선행 관계를 먼저 확인한다.
+위험 분류와 승인 범위는 [공유 위험 정책](../../manual/agent_code_hyperfall_rule_conflict.md)을 따른다. LOW는 즉시, 명확히 요청된 MEDIUM 범위는 계획·구현·검증·보고·다음 단계까지 자동 진행한다. HIGH는 해당 위험 결정만 승인받고 정확한 결정, 대상, 범위와 승인 근거를 기록한다. 독립적인 안전 작업은 계속하며 일반 단계 확인을 기다리지 않는다. 커밋 등 도구 권한은 별개로 유지한다.
+
+1. 계획/맥락 무결성 확인 후 단계별 검증 명령 실행
+   - 일반 보고에서는 요청 범위와 계획/기존 맥락, 실제 변경과 단계의 일치를 확인하고 해당 검증을 실행한다. 안전한 구현·검증·보고를 위해 계획서 커밋을 요구하지 않는다.
+   - committed context 기반 절차를 명시 요청한 경우에만 아래 블록을 실행한다. 최신 구현계획서 commit의 exact SHA를 직접 검증해 `APPROVED_IMPL_PLAN_COMMIT_FILE`에 파일 쓰기 도구로 기록한다. commit message 검색으로 SHA를 추론하지 않는다.
+   - 이 블록의 `APPROVED_*` 입력과 승인 표현은 고정된 실행 맥락의 무결성 근거이며 Human approval을 뜻하지 않는다. 아래 주석의 같은 스레드 확인도 실행 맥락 확인으로 해석한다. HIGH 결정의 인간 승인은 별도 정확한 결정 기록으로 확인하며 SHA만으로 대체하지 않는다. identity/path/ref/index/blob 및 선행 관계 검사는 그대로 유지한다.
+   - committed context를 사용하는 경우 commit의 내용, 현재 계획서 blob, 현재 단계와의 선행 관계를 먼저 확인한다.
       ```bash
        IMPL_PLAN="mydocs/plans/task_{milestone_slug}_{N}_impl.md"
        GIT_CONFIG_COUNT=1
@@ -73,9 +77,10 @@ description: |
         git merge-base --is-ancestor "$APPROVED_IMPL_PLAN_COMMIT" HEAD || exit 1
       fi
       ```
-   - 위 무결성 검증이 모두 통과한 뒤 구현 계획서의 해당 단계 "검증" 섹션 명령을 실행한다.
-   - 결과를 보고서에 인용할 수 있도록 출력 보존
+   - 해당 경로의 무결성 확인이 통과한 뒤 계획/맥락의 해당 단계 검증 명령을 실행한다. 무결성 실패 시 그 맥락의 명령 실행은 중단하지만 실패 보고는 작성한다.
+   - 결과를 보고서에 인용할 수 있도록 출력 보존. 실패/실행 불가도 명령, 출력 또는 불가 사유, 미완료 항목과 영향을 기록한다.
 2. 단계 보고서 작성: `mydocs/working/task_{milestone_slug}_{N}_stage{S}.md`
+   - 작은 작업의 일반 보고는 기존 이슈/맥락 기록에 아래 필수 내용을 남길 수 있다. 명시 요청된 단계 묶음 커밋에는 지정 보고서 파일이 필요하다.
    - 중앙 템플릿 `mydocs/_templates/stage_report.md`를 기준으로 작성한다.
    - 템플릿을 읽을 수 없는 경우에만 다음 최소 섹션을 fallback으로 사용한다:
      - 단계 목적
@@ -84,7 +89,7 @@ description: |
      - 검증 결과 (위 1번 출력 인용)
      - 잔여 위험
      - 다음 단계 영향
-     - 승인 요청 (다음 단계 진입 또는 PR 단계)
+     - 위험 결정 기록 (HIGH만 정확한 승인 결정과 근거, 없으면 해당 없음)
 3. 변경 점검
     ```bash
     GIT_CONFIG_COUNT=1
@@ -95,7 +100,9 @@ description: |
     git status --short
    git diff --check
    ```
-4. 단계 소스 + 보고서 묶음 커밋
+4. 명시적으로 요청·허가된 경우에만 단계 소스 + 보고서 묶음 커밋
+   - 실패 보고는 작성하되 완료로 표시하지 않는다. 실패한 단계의 완료 커밋으로 아래 블록을 실행하지 않는다. 커밋하지 않는 보고와 독립적인 안전 작업은 계속한다.
+   - 아래 fence 설명의 승인 경로는 명시 허가된 커밋의 요청 범위에서 고정한 exact 경로 allowlist다. 단계 산출물에 대한 별도 Human approval 대기를 의미하지 않는다.
     ```bash
     EXPECTED_BRANCH="local/task{N}"
     STAGE_OUTPUT_PATHS=(
@@ -668,33 +675,39 @@ EOF
     - 보고서는 regular/non-symlink/single-link working-tree mode `0644`, stage-0 mode `100644`이고 staged blob이 working-tree hash와 같아야 한다. 삭제, symlink, executable, hardlink 보고서는 commit 전에 거절한다.
     - fence는 승인 경로만 exact `git update-index --add` 또는 `--force-remove`로 stage한 verified index tree에서 `git commit-tree`로 commit object를 만든다. forward와 postcondition rollback은 모두 직전 direct-ref precheck 뒤 `start`, `option no-deref`, exact old OID를 포함한 `update`, `prepare`, `commit`을 stdin으로 전달하는 checked `git update-ref --stdin` transaction으로 수행한다. `prepare`가 ref lock을 만든 뒤 direct ref/OID를 다시 확인하고, 일치할 때만 `commit`, symref 또는 drift면 `abort`한다. 정확한 transcript, wait `0`, 빈 stderr, reaping과 cleanup 성공만 정상 성공으로 인정한다. response-loss reconciliation은 terminal transcript가 exact `start: ok\nprepare: ok\n` prefix이고 final `commit: ok` response만 missing이며, wait의 십진수 값이 `1`부터 `127`이고 stderr가 비어 있지 않으며 reaping과 cleanup이 성공하고 새 direct exact-new ref를 다시 확인한 경우에만 성공한다. empty, truncated, malformed, extra transcript는 모두 reject하며, 그 밖의 모든 terminal 결과는 fail closed한다. terminal transport 결과가 nonzero이고 ref가 exact-new이면 caller는 exact new->parent `--no-deref` CAS rollback만 시도하고, exact-old, competing direct ref, symbolic ref, missing, unreadable 상태는 그대로 보존하고 실패한다. write-tree 뒤 drift는 ref 전 재검증으로 branch 전진 전에 실패하며, ref 전진 뒤 postcondition이 실패하면 exact commit OID를 expected-old 값으로 하는 transaction CAS rollback만 시도한다. rollback CAS conflict 또는 symref drift는 competing ref를 그대로 보존하고 실패한다.
     - 하위 단계: `Task #{N} [Stage {S.M}]: 내용`
-5. 작업지시자에게 단계 보고서 검토와 다음 단계 진입 승인 요청
-   - 마지막 Stage도 예외 없이 본 단계 보고서 commit을 먼저 승인받는다. 승인 후 별도 `task-final-report` 절차로 진입하며 마지막 Stage와 최종 보고서를 한 commit으로 합치지 않는다.
+5. 보고서와 증거를 남긴 뒤 요청 범위 내 다음 단계로 자동 진행
+   - HIGH가 있으면 해당 위험 결정만 승인 요청하고 정확한 결정과 근거를 기록한다. 단계 전체나 마지막 Stage 보고서의 통상 확인을 기다리지 않는다.
+   - 마지막 Stage 이후 별도 `task-final-report` 절차로 진입한다. 명시 허가된 커밋에서는 마지막 Stage와 최종 보고서를 한 commit으로 합치지 않는다.
 
 ## 검증
+
+다음 committed context 및 커밋 검사는 해당 작업을 명시 요청·허가한 경우에만 적용하며 일반 구현·보고·다음 단계의 Human approval 요건이 아니다.
 
 - `git ls-files --error-unmatch mydocs/plans/task_{milestone_slug}_{N}_impl.md` 통과
 - `git diff --quiet HEAD -- mydocs/plans/task_{milestone_slug}_{N}_impl.md` 통과
 - `git log -1 --format='%H' -- mydocs/plans/task_{milestone_slug}_{N}_impl.md`가 commit SHA를 출력
-- 작업지시자가 같은 스레드에서 확인한 exact SHA를 사용하며 commit message 검색으로 대체하지 않음
-- 최신 구현계획서 승인 commit의 변경 파일이 해당 `_impl.md` 하나뿐임
-- 승인 commit, HEAD, index의 구현계획서 mode가 모두 `100644`이고 working tree가 symlink가 아니며 HEAD, index, working tree의 blob이 모두 승인 commit의 구현계획서 blob과 동일함
-- Stage 1이면 최초 구현계획서 승인 commit이 현재 HEAD임
-- 이후 Stage면 최신 구현계획서 승인 commit이 현재 HEAD의 ancestor이며, 완료된 Stage 1 보고서가 최초 승인 SHA 검증 결과를 포함함
+- 같은 스레드에 실행 맥락 근거로 기록한 exact SHA를 사용하며 commit message 검색으로 대체하지 않음
+- 최신 고정 구현계획서 commit의 변경 파일이 해당 `_impl.md` 하나뿐임
+- 고정 commit, HEAD, index의 구현계획서 mode가 모두 `100644`이고 working tree가 symlink가 아니며 HEAD, index, working tree의 blob이 모두 고정 commit의 구현계획서 blob과 동일함
+- Stage 1이면 최초 고정 구현계획서 commit이 현재 HEAD임
+- 이후 Stage면 최신 고정 구현계획서 commit이 현재 HEAD의 ancestor이며, 완료된 Stage 1 보고서가 최초 고정 SHA 검증 결과를 포함함
 - `git log --oneline -1`이 단계 커밋 메시지 표준 형식 충족
-- `mydocs/working/task_{milestone_slug}_{N}_stage{S}.md` 존재
-- 단계 보고서가 `mydocs/_templates/stage_report.md`의 필수 섹션을 채움
-- 단계별 검증 명령이 실패 없이 통과 (실패 시 단계 미완료로 처리하고 보고서 작성 보류)
+- 명시 요청된 단계 묶음 커밋에는 `mydocs/working/task_{milestone_slug}_{N}_stage{S}.md` 존재
+
+모든 보고 경로의 필수 확인:
+
+- 단계 보고서 또는 작은 작업의 기존 맥락 기록이 `mydocs/_templates/stage_report.md`의 필수 내용을 채움
+- 모든 보고 경로에서 단계별 검증 결과와 증거를 보존 (실패/실행 불가 시 단계 미완료로 기록하고 보고서는 작성)
 
 ## 절대 하지 말 것
 
-- 검증 실패 상태로 보고서 작성·커밋
-- 단계 산출물과 보고서를 분리해 별도 커밋 (한 단계는 한 커밋 원칙)
-- 작업지시자 승인 없이 다음 단계 진입
-- 마지막 Stage 보고서 승인 없이 `task-final-report` 진입 또는 마지막 Stage와 최종 보고서 결합
-- 승인된 구현계획서를 독립 커밋하기 전에 Stage 1 진입
-- 작업지시자의 재승인과 새 독립 commit 없이 승인된 구현계획서 변경. Stage 1 이후 재승인했다면 새 exact SHA를 이후 단계 검증에 사용
-- 구현계획서의 working-tree hash와 승인 blob을 비교하기 전에 계획서의 검증 명령 실행
+- 검증 실패를 성공으로 보고하거나 실패한 단계를 완료 커밋으로 기록
+- 명시적 커밋 허가 없이 커밋 블록 실행
+- 명시 허가된 단계 커밋에서 산출물과 보고서를 분리해 별도 커밋 또는 마지막 Stage와 최종 보고서 결합
+- HIGH 위험 결정의 정확한 승인 없이 해당 결정 실행
+- 계획서 커밋이나 일반 단계 확인을 안전한 구현·보고·다음 단계의 선행 조건으로 사용
+- committed context 기반 작업을 명시 요청한 경우 고정된 계획서를 변경하고 새 독립 commit과 exact SHA 기록 없이 기존 맥락으로 계속 진행
+- committed context 기반 검증에서 구현계획서의 working-tree hash와 고정 blob을 비교하기 전에 계획서의 검증 명령 실행
 
 ## 호출 방법
 

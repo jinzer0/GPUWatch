@@ -6,10 +6,10 @@
 
 ## 내부 task publication 경계
 
-`task-final-report`는 두 번 멈춘다.
+`task-final-report`는 non-blocking 무결성 Checkpoint 후 단일 exact publication Human Approval Gate를 적용한다. 승인 판단은 [`agent_code_hyperfall_rule_conflict.md`](agent_code_hyperfall_rule_conflict.md)를 따른다.
 
-- final report/evidence 승인: regular/non-symlink/single-link working-tree mode `0644`, index/commit mode `100644`인 최종 보고서와 오늘할일 commit, report/orders blob OID, acceptance evidence SHA-256을 묶는다. 이 승인 전에는 publication input을 만들지 않으며, 이 승인은 private publication input 준비만 허용한다.
-- publication 승인: canonical repository, approved issue number/plan OID, `devel` OID, final commit OID, `publish/task{번호}`, PR title/body hash, exact publication state와 기존 PR number/node ID를 묶는다. 이 별도 승인이 있기 전에는 원격 mutation을 하지 않는다.
+- final report/evidence 무결성 Checkpoint: regular/non-symlink/single-link working-tree mode `0644`, index/commit mode `100644`인 최종 보고서와 오늘할일 commit, report/orders blob OID, acceptance evidence SHA-256을 검증·기록한다. Human 응답을 기다리지 않고 private publication input을 준비하며, 커밋은 명시 요청된 경우에만 수행한다.
+- publication Human 승인: 검증된 final evidence와 canonical repository, approved issue number/plan OID, `devel` OID, final commit OID, `publish/task{번호}`, PR title/body hash, exact publication state와 기존 PR number/node ID를 묶는다. 이 단일 exact tuple 승인이 있기 전에는 원격 mutation을 하지 않는다. 무결성 Checkpoint를 publication 승인으로 간주하지 않는다.
 
 publication state는 `branch-absent-pr-absent`, `branch-exact-pr-absent`, `branch-exact-pr-draft`, `branch-exact-pr-ready`만 허용한다. 모든 state의 matching PR을 조회하므로 duplicate, closed, branch 없는 PR, 다른 OID의 branch, base/head/repository/title/body/draft 불일치는 모두 실패한다. 승인 state와 실행 시작 state는 exact하게 같아야 하며 no-PR 승인은 동시에 나타난 PR을 adopt하지 않는다.
 
@@ -49,6 +49,6 @@ Stage별 요약은 Stage 제목을 단계 보고서로, 짧은 commit SHA를 com
 - ambient repository/host, `/tmp` 또는 `--body-file` handoff
 - 상대 링크, `blob/publish/task{번호}/...`, raw URL
 - `--fill`을 기본 PR 본문 방식으로 사용
-- first final report/evidence 승인만으로 publication을 시작하는 행위
+- final report/evidence 무결성 Checkpoint만으로 exact publication Human 승인 없이 원격 mutation을 시작하는 행위
 - 네 publication state 밖의 branch/PR 상태를 추정해 재개하는 행위
 - absent 승인으로 실행 중 나타난 PR을 adopt하거나, create/ready ambiguity 뒤 이전 승인을 재사용하는 행위

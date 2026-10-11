@@ -85,7 +85,7 @@ Hyper-Waterfall은 적용 대상 프로젝트의 공식 문서 루트 이름을 
 강제 규칙:
 
 - 신규 Hyper-Waterfall 적용 중에는 공식 문서 루트를 선택하거나 생성하지 않는다. manifest 외 제품 문서가 필요해 보이면 적용 판단 결과의 보류 항목 또는 별도 task 후보로만 기록한다.
-- 제품/사용자/기여자/외부 통합/API/아키텍처/로드맵 문서를 만들거나 옮기는 task는 수행계획서에 문서 위치 판단을 기록하고 작업지시자 승인을 받는다.
+- 제품/사용자/기여자/외부 통합/API/아키텍처/로드맵 문서의 위치 판단은 기존 계획/작업 기록에 남긴다. Scope 내 변경은 자율 수행하며 HIGH 결정/Scope 확장에만 [`공통 승인 정책`](agent_code_hyperfall_rule_conflict.md)을 적용한다.
 - 문서 위치 판단에는 대상 독자, 공식화 수준, 선택한 경로, 대안 경로, 선택 이유를 포함한다.
 - `mydocs/manual/`은 대상 프로젝트 제품 문서 위치가 아니다. 반복 적용되는 Hyper-Waterfall 운영 절차와 기준만 둔다.
 - `mydocs/tech/`는 기술 조사와 설계 판단 근거 위치다. 공식 계약이나 사용자 참조 문서로 승격하려면 별도 task에서 공식 문서 루트를 선택하고 승인받는다.
@@ -213,7 +213,7 @@ Lifecycle 판단 결과는 적용 전 보고 형식이지 `mydocs/`에 장기 �
 - upstream release manifest가 바뀌면 `.hyper-waterfall/version.json`과 적용 저장소의 설치 사본 차이를 함께 확인한다.
 - `.hyper-waterfall/version.json`은 실제 적용 저장소에 남는 상태 파일이며, 본 프레임워크 저장소의 문서 산출물 템플릿과 섞지 않는다.
 - 사용자 수정 가능성이 높은 파일은 manifest에서 무조건 `overwrite`로 두지 않는다.
-- 설치·업데이트 설명이 바뀌면 `.hyper-waterfall/version.json`, immutable upstream artifact, `framework_lifecycle_guide.md`, `release_update_protocol.md` 설명을 함께 확인한다. 루트 README의 제품 설명은 별도 승인 없이 수정하지 않는다.
+- 설치·업데이트 설명이 바뀌면 `.hyper-waterfall/version.json`, immutable upstream artifact, `framework_lifecycle_guide.md`, `release_update_protocol.md` 설명을 함께 확인한다. 루트 README의 제품 설명은 작업 Scope에 포함될 때만 수정한다.
 
 ## 폴더별 상세 규칙
 
@@ -263,7 +263,7 @@ Lifecycle 판단 결과는 적용 전 보고 형식이지 `mydocs/`에 장기 �
 
 ### 마일스톤이 아직 확정되지 않았을 때
 
-신규 하이퍼-워터폴 타스크는 GitHub Issue의 마일스톤을 먼저 확인한다. 이슈가 아직 없으면 [`task-register`](../skills/task-register/SKILL.md) Skill로 열린 milestone을 확인하고 생성 전 작업지시자 승인을 받는다. 마일스톤이 비어 있거나 모호하면 임의로 `m000` 같은 임시명을 만들지 말고 작업지시자에게 확인한다. 기존 레거시 문서는 이름을 유지할 수 있지만, 신규 문서는 마일스톤 포함 형식을 기준으로 한다.
+Issue 기반 문서를 만드는 타스크는 GitHub Issue의 마일스톤을 먼저 확인한다. 이슈 등록을 요청받으면 [`task-register`](../skills/task-register/SKILL.md)로 열린 milestone을 확인하고 외부 이슈 생성 권한을 준수한다. 마일스톤이 비어 있거나 모호하면 임의로 `m000` 같은 임시명을 만들지 말고 확인한다. 기존 레거시 문서는 이름을 유지하되 신규 Issue 문서는 마일스톤 포함 형식을 따른다. 작은 로컬 작업은 기존 기록에 Scope·위험·Evidence를 남기며 신규 이슈나 문서 생성을 실행의 선행 조건으로 삼지 않는다.
 
 ### 외부 PR인지 내부 타스크인지 경계가 모호할 때
 
