@@ -221,3 +221,14 @@ ZIP 자체에는 staple하지 않는다. Accepted·stapled 앱을 담은 배포 
 main `f2b28e8563b0a0fa4ee5dad85f59f1e43d438cba`의 Electron/undici 보정이 devel에 아직 통합되지 않은 것을 확인했다. package-lock 충돌은 최신 검증 버전으로 해결하고 main의 `package.json` Electron 최소 범위 `^42.10.0`과 실제 `undici 7.30.0`을 보존했다. 사용자의 보안 변경을 되돌리지 않는다.
 
 통합 commit `80c93415e849d9464a43c26f77cd0e9426cb46fc`에서 패키징 metadata가 달라졌으므로 위 source312d run은 성공한 이전 후보로 보존하되 이 새 source의 배포 파일로 게시하지 않는다. 새 source-bound 서명·공증 run과 실제 수용이 필요하며, 이는 불확실한 Apple 제출의 자동 재시도가 아니다. 후속 기록에서 새 source와 별도 request/hash를 구분한다.
+
+### 최종 공개 v0.2.0 배포 수용 완료
+
+- PR [#35](https://github.com/jinzer0/GPUWatch/pull/35) 병합 뒤 최종 artifact source는 `5f00f6594f139a8a014a73f5f79db0e710082580`이다. main 승격 PR [#36](https://github.com/jinzer0/GPUWatch/pull/36)과 release commit `6a822930d94159e1147b93f0754963e83f1e89b1`은 이 source와 exact tree가 같다.
+- 최종 새 run `2026-10-12T02-07-27-638Z-1089fe24-f3ff-4d6f-9a85-64283737b477`: 앱 request `e7795598-6a01-4f13-9453-30d8249c087b`, DMG request `fe251a5a-517c-4d7a-8422-96497f61d361` 각각 실제 Accepted·uploaded SHA·staple·Gatekeeper·최종 signed runtime 검증 완료.
+- 최종 앱/DMG 제출 manifest anchor는 각각 `ddbdea389a94cb047f7c52e3cbe9a4effe50a6a65f2ad049f2bda3774f85b892` / `108be027c0dbed7297e72990d12e43c5eeb0d212b7d6e9548e5d1d4983e06dfc`다. signed distribution receipt SHA256은 `bb32ddc151918c2cce1ea689e08b8e88e9a64369bfc5c50414287e23ab68965e`다.
+- immutable tag `v0.2.0`은 위 release commit에 결박했다. [공개 GitHub Release](https://github.com/jinzer0/GPUWatch/releases/tag/v0.2.0), release ID `410076411`, arm64 DMG·ZIP·SHA256SUMS·release-validation.json 4개 asset 게시 완료. 이전 run의 파일을 대신 올리거나 기존 tag/asset을 덮어쓰지 않았다.
+- 공개 URL에서 인증 없이 실제 4개 파일을 새 디렉터리에 내려받고 길이·독립 SHA256·checksum membership을 검증했다. ZIP에서 꺼낸 실제 앱과 DMG의 strict codesign·stapler·Gatekeeper가 통과했고, 내려받은 앱으로 격리 정상 helper/UI·서버 저장·별도 helper EACCES UI/navigation/cleanup까지 재검증했다.
+- 게시·다운로드 최종 ZIP SHA256: `4af8bf3759bf11521183d451faff5adec6894c584685155481e9a67afe1d6cc1`; DMG SHA256: `cda4bfa59f14296cffb4f5ed11abb98afccdd464407d2e287aa6f31fac4e6acf`. 다운로드 runtime receipt SHA256: `eca6cc6bf5cb42cb88a24d1d5c0cfacd722c34a1aacf554374dbf57b489a458e`.
+- 최종 제품 검증은 Vitest760/core151/helper25 및 renderer/Electron build다. Production audit0과 dev tooling 잔여15건(높음5/중간10)을 구분한다. live SSH·물리 VoiceOver·실제 OS 알림·Intel·자동 업데이트 검증/지원으로 확대하지 않는다.
+- PR merge와 Release 승인은 Issue #31 close 승인이 아니다. 이슈는 OPEN으로 유지하며 기존 사용자 working tree·Task #31/main worktree·도구 권한을 보존한다. main에만 생긴 release commit과 이 기록은 동일 승인된 release operation의 main→devel 동기화로 반영한다.
