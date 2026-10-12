@@ -19,12 +19,12 @@ Apple Silicon Mac에서 SSH로 Linux NVIDIA GPU 서버를 지켜보는 데스크
 
 ### 앱 설치
 
-1. [GPUWatcher v0.1.0 Releases](https://github.com/jinzer0/GPUWatch/releases/tag/v0.1.0)에서 앱 파일을 받습니다. 이 문서의 현재 소스 UI와 기존 릴리스 UI는 다를 수 있습니다.
+1. [GPUWatcher v0.2.0 Releases](https://github.com/jinzer0/GPUWatch/releases/tag/v0.2.0)에서 Apple Silicon용 DMG 또는 ZIP을 받습니다.
 2. 내려받은 파일을 열고 GPUWatcher를 Applications로 옮긴 뒤 실행합니다.
 
-v0.1.0은 Apple Silicon Mac 전용 unsigned, non-notarized 앱입니다. macOS Gatekeeper가 차단하면 앱을 한 번 실행해 경고를 만든 뒤 `System Settings → Privacy & Security → Open Anyway`에서 확인 창의 `Open`을 누르세요. 자동 업데이트는 없으며 새 버전은 Releases에서 직접 확인합니다. 로컬 unsigned `.app`과 내부 테스트용 DMG/ZIP은 서명·공증·업로드된 프로덕션 배포 산출물이 아닙니다.
+v0.2.0 arm64 앱과 DMG는 Developer ID 서명·Apple 공증·staple 및 Gatekeeper 검증을 통과했습니다. ZIP에는 동일한 stapled 앱이 들어 있습니다. 자동 업데이트는 없으며 새 버전은 Releases에서 직접 확인합니다. 서명·공증은 사용자의 SSH 연결이나 실제 OS 알림 동작을 보장하지 않습니다.
 
-v0.2.0은 Developer ID 서명·Apple 공증·staple 및 격리 패키지 검증을 통과한 로컬 arm64 배포 후보를 준비 중입니다. 아직 GitHub Release나 다운로드 파일을 게시하지 않았으며 위 v0.1.0 링크가 v0.2.0을 제공하는 것은 아닙니다. 서명·공증은 자동 업데이트나 실제 SSH·OS 알림 검증을 뜻하지 않습니다.
+이전 [v0.1.0](https://github.com/jinzer0/GPUWatch/releases/tag/v0.1.0)은 unsigned, non-notarized 릴리스입니다. 로컬 unsigned `.app`과 내부 테스트용 DMG/ZIP도 외부 배포용 서명·공증 산출물이 아닙니다. v0.2.0 배포 파일에 서명 검증 오류가 발생하면 Gatekeeper를 끄거나 quarantine을 제거하지 말고 다운로드 파일과 SHA256을 다시 확인하세요.
 
 ### 서버 연결
 

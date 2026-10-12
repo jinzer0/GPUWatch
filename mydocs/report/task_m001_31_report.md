@@ -203,3 +203,21 @@ ZIP 자체에는 staple하지 않는다. Accepted·stapled 앱을 담은 배포 
 - production npm audit는 0건이다. 전체 audit에는 개발 도구 경로 15건(높음 5, 중간 10)이 남는다. Tailwind 4로의 breaking 전환이나 builder downgrade를 자동 적용하지 않았고, 전체 audit clean으로 보고하지 않는다. 실제 앱에 포함되는 Electron advisory는 같은 major의 패치로 보정했다.
 - Developer ID Application 인증서 1개 및 `gpuwatcher-notary` Keychain profile 인증을 재확인했다. 이는 새 산출물의 Accepted·staple·Gatekeeper·실제 실행 성공 증거가 아니다.
 - 앱과 DMG 각각 준비 시 source/manifest/artifact hash를 캡처하고 실행 직전 재검증한다. 최종 서명·공증·배포 결과는 실제 완료 후 이 절에 추가하며, 이전 source의 성공을 소급 사용하지 않는다.
+
+### 새 source의 실제 서명·공증 수용
+
+- 보안 보정 PR [#34](https://github.com/jinzer0/GPUWatch/pull/34)은 병합됐다. 새 서명 source는 `312d5343d3e527b4f036a957e0cfed8a0a20a8e9`이며 승인 계획 blob `6aaa38b6321e3e2aa7407f672a16917e9d1f6a24`를 유지했다.
+- 새 run `2026-10-12T01-50-41-909Z-cf69d698-f6ea-40eb-b86e-ce3185d8eabd`의 앱과 arm64 helper는 최소 entitlement, hardened runtime, Developer ID, strict codesign 검증을 통과했다. unsigned fallback 또는 Gatekeeper 완화는 사용하지 않았다.
+- 앱 Apple request `de5d7a54-52e6-4e8e-875a-d3e90fe9049f`, DMG request `0e3c194f-ad9a-42de-b718-523a2497bcd6`은 각각 실제 `Accepted`, 동일 ID info/log·uploaded SHA 검증, staple/validate 및 Gatekeeper 수용을 완료했다.
+- 원 제출 manifest 독립 anchor: 앱 `3d56ff0e3204a86170a315343d6a51bc6c61c57cc640e89f8b245fd73b3f97fc`, DMG `c685cbbca4af3e4eba18718fd8c35453484553b51e004114c7ba64118b3a2af7`.
+- 최종 ZIP SHA256: `77b4ccbd7d3f75fe4e7ed553e6d239407a23c36223da50df5205ac2fbc9492ee`.
+- 최종 DMG SHA256: `52cd90ab8b404830ef148385968bd880225a91302c70ac07cb41e53912fc7a1d`.
+- 실제 signed distribution verifier는 원 승인 snapshot/제품 source 재검증, ZIP/DMG 앱 seal·staple·Gatekeeper, 격리 앱의 정상 helper/UI·서버 저장, 별도 helper EACCES 오류 UI와 navigation·owned cleanup을 통과했다. 원 앱 seal은 `0227ebf0c26ecebed2a56b6ef961e0b04f36640c3897e5ed34ec15401c602d2e`로 유지됐다. Electron `42.11.12` / helper `0.2.0`을 실제 관측했다.
+- verifier 원 stdout receipt SHA256: `cd5b2faf1a2cd1bae5e20cb4cda2e8053eb6d717c6a54e1c0a2617698d043212`. wrapper의 최초 JSON 파싱은 진행 로그 prefix 때문에 실패했으며 native verifier exit0와 trailing JSON을 검증해 기록했다. 이를 앱 수용 실패나 재실행 성공으로 바꾸지 않는다.
+- 이 기록 시점에는 main 승격·tag·GitHub Release 업로드와 실제 다운로드 검증은 아직 미실행이다. 실제 SSH·물리 키보드/VoiceOver·OS 알림은 이번 격리 smoke로 검증했다고 주장하지 않는다.
+
+### main 승격 전 기존 보안 변경 보존
+
+main `f2b28e8563b0a0fa4ee5dad85f59f1e43d438cba`의 Electron/undici 보정이 devel에 아직 통합되지 않은 것을 확인했다. package-lock 충돌은 최신 검증 버전으로 해결하고 main의 `package.json` Electron 최소 범위 `^42.10.0`과 실제 `undici 7.30.0`을 보존했다. 사용자의 보안 변경을 되돌리지 않는다.
+
+통합 commit `80c93415e849d9464a43c26f77cd0e9426cb46fc`에서 패키징 metadata가 달라졌으므로 위 source312d run은 성공한 이전 후보로 보존하되 이 새 source의 배포 파일로 게시하지 않는다. 새 source-bound 서명·공증 run과 실제 수용이 필요하며, 이는 불확실한 Apple 제출의 자동 재시도가 아니다. 후속 기록에서 새 source와 별도 request/hash를 구분한다.
