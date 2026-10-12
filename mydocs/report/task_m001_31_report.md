@@ -191,3 +191,15 @@ ZIP 자체에는 staple하지 않는다. Accepted·stapled 앱을 담은 배포 
 - 메시지: `Task #31: 최종 보고서 작성과 오늘할일 완료 처리`.
 - commit 후 final commit OID·report/orders blob OID·최신 acceptance evidence SHA256(072657)을 묶은 같은 스레드 `approve-final-report-and-evidence` tuple 승인을 요청한다. 이전 실패 포함 수용726720은 역사적으로 보존한다.
 - 그 승인 전 private publication directory/title/body를 만들지 않는다. 첫 승인도 remote mutation 허가가 아니며 read-only preparation 뒤 exact publication tuple의 별도 승인만 게시를 허용한다.
+
+## 2026-10-12 승인된 배포 후속 실행
+
+이전 내용은 당시 결과와 실패 기록으로 보존한다. PR #32와 #33은 이미 devel에 병합됐으며, 이번 실행은 최신 devel `4e2993becc164afab0b8c641111cdd13dbce3a56`에서 만든 별도 canonical checkout을 사용한다. 기존 사용자 working tree와 Task #31 worktree는 변경하지 않는다.
+
+- 같은 스레드에서 작업지시자가 취약점 보정의 merge, v0.2.0 arm64의 서명·공증·실제 배포 검증, Apple 제출 및 GitHub Release를 명시 허용했다. 이 권한은 이슈 close나 도구 권한 완화를 포함하지 않는다.
+- lockfile 범위의 호환 업데이트: `http-cache-semantics 4.3.0`, `vite 7.3.7` / `esbuild 0.28.2`, `electron 42.11.12`, `electron-builder 26.17.0`. major 전환이나 `npm audit fix --force`는 적용하지 않았다.
+- `npm test`: 31개 파일, 760개 검사 통과. 최초 실행은 debug helper가 아직 빌드되지 않아 integration 1건 실패했으며, `cargo build --manifest-path crates/gpuwatcher-helper/Cargo.toml` 후 전체 재검증에 성공했다.
+- core/helper Cargo test, renderer build, Electron TypeScript build 및 diff whitespace 검증을 수행했다. 운영 SSH와 production DB를 사용하지 않았다.
+- production npm audit는 0건이다. 전체 audit에는 개발 도구 경로 15건(높음 5, 중간 10)이 남는다. Tailwind 4로의 breaking 전환이나 builder downgrade를 자동 적용하지 않았고, 전체 audit clean으로 보고하지 않는다. 실제 앱에 포함되는 Electron advisory는 같은 major의 패치로 보정했다.
+- Developer ID Application 인증서 1개 및 `gpuwatcher-notary` Keychain profile 인증을 재확인했다. 이는 새 산출물의 Accepted·staple·Gatekeeper·실제 실행 성공 증거가 아니다.
+- 앱과 DMG 각각 준비 시 source/manifest/artifact hash를 캡처하고 실행 직전 재검증한다. 최종 서명·공증·배포 결과는 실제 완료 후 이 절에 추가하며, 이전 source의 성공을 소급 사용하지 않는다.
