@@ -215,3 +215,9 @@ ZIP 자체에는 staple하지 않는다. Accepted·stapled 앱을 담은 배포 
 - 실제 signed distribution verifier는 원 승인 snapshot/제품 source 재검증, ZIP/DMG 앱 seal·staple·Gatekeeper, 격리 앱의 정상 helper/UI·서버 저장, 별도 helper EACCES 오류 UI와 navigation·owned cleanup을 통과했다. 원 앱 seal은 `0227ebf0c26ecebed2a56b6ef961e0b04f36640c3897e5ed34ec15401c602d2e`로 유지됐다. Electron `42.11.12` / helper `0.2.0`을 실제 관측했다.
 - verifier 원 stdout receipt SHA256: `cd5b2faf1a2cd1bae5e20cb4cda2e8053eb6d717c6a54e1c0a2617698d043212`. wrapper의 최초 JSON 파싱은 진행 로그 prefix 때문에 실패했으며 native verifier exit0와 trailing JSON을 검증해 기록했다. 이를 앱 수용 실패나 재실행 성공으로 바꾸지 않는다.
 - 이 기록 시점에는 main 승격·tag·GitHub Release 업로드와 실제 다운로드 검증은 아직 미실행이다. 실제 SSH·물리 키보드/VoiceOver·OS 알림은 이번 격리 smoke로 검증했다고 주장하지 않는다.
+
+### main 승격 전 기존 보안 변경 보존
+
+main `f2b28e8563b0a0fa4ee5dad85f59f1e43d438cba`의 Electron/undici 보정이 devel에 아직 통합되지 않은 것을 확인했다. package-lock 충돌은 최신 검증 버전으로 해결하고 main의 `package.json` Electron 최소 범위 `^42.10.0`과 실제 `undici 7.30.0`을 보존했다. 사용자의 보안 변경을 되돌리지 않는다.
+
+통합 commit `80c93415e849d9464a43c26f77cd0e9426cb46fc`에서 패키징 metadata가 달라졌으므로 위 source312d run은 성공한 이전 후보로 보존하되 이 새 source의 배포 파일로 게시하지 않는다. 새 source-bound 서명·공증 run과 실제 수용이 필요하며, 이는 불확실한 Apple 제출의 자동 재시도가 아니다. 후속 기록에서 새 source와 별도 request/hash를 구분한다.
