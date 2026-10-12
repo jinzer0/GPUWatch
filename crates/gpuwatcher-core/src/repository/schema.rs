@@ -99,12 +99,9 @@ impl Repository {
             params![3],
             |row| row.get::<_, bool>(0),
         )?;
-        if version_three_applied {
-            return Ok(());
-        }
-
-        let transaction = self.conn.unchecked_transaction()?;
-        transaction.execute_batch(
+        if !version_three_applied {
+            let transaction = self.conn.unchecked_transaction()?;
+            transaction.execute_batch(
             "
             CREATE TABLE IF NOT EXISTS watch_rules (
               id TEXT PRIMARY KEY,
@@ -146,8 +143,41 @@ impl Repository {
               ON notification_outbox(consumed_at, created_at);
             ",
         )?;
+            transaction.execute(
+                "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(3, ?1)",
+                params![now_string()],
+            )?;
+            transaction.commit()?;
+        }
+
+        if self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version = 4)",
+            [],
+            |row| row.get::<_, bool>(0),
+        )? {
+            return Ok(());
+        }
+        let transaction = rusqlite::Transaction::new_unchecked(
+            &self.conn,
+            rusqlite::TransactionBehavior::Immediate,
+        )?;
+        transaction.execute_batch(
+            "CREATE TABLE IF NOT EXISTS gpu_availability_observations (
+              server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+              gpu_identity TEXT NOT NULL,
+              state TEXT NOT NULL CHECK(state IN ('in_use', 'candidate', 'available', 'unknown')),
+              condition_started_at TEXT,
+              last_observed_at TEXT NOT NULL,
+              PRIMARY KEY (server_id, gpu_identity)
+            );",
+        )?;
+        if !column_exists(&transaction, "watch_runtime_state", "last_observed_at")? {
+            transaction.execute_batch(
+                "ALTER TABLE watch_runtime_state ADD COLUMN last_observed_at TEXT;",
+            )?;
+        }
         transaction.execute(
-            "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(3, ?1)",
+            "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(4, ?1)",
             params![now_string()],
         )?;
         transaction.commit()?;

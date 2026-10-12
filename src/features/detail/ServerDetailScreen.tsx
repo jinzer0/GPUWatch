@@ -27,14 +27,14 @@ export const ServerDetailScreen = ({ selectedServerId }: { readonly selectedServ
   const refreshResult = controller.refreshMutation.data;
 
   if (!selectedServerId) {
-    return <EmptyState title="No server selected" body="Choose a server from Overview to inspect the latest backend detail DTO." />;
+    return <EmptyState title="No server selected" body="Choose a server from the sidebar, or add a server using server management." />;
   }
 
   if (controller.detailQuery.isLoading) {
     return <LoadingState label="Loading server detail DTO..." />;
   }
 
-  if (controller.detailQuery.error) {
+  if (controller.detailQuery.error && !detail) {
     return <ErrorState message={controller.detailQuery.error.message} />;
   }
 
@@ -70,6 +70,15 @@ export const ServerDetailScreen = ({ selectedServerId }: { readonly selectedServ
           </section>
         ) : null}
       </header>
+
+      {controller.detailQuery.error ? (
+        <section aria-label="Detail diagnostic" role="alert">
+          <DiagnosticPanel errorType={getErrorType(controller.detailQuery.error)} message={controller.detailQuery.error.message} title="Detail diagnostic" />
+          <p className="mt-3 text-sm text-[color:var(--color-muted)]">
+            상세 정보를 다시 읽지 못했습니다. 마지막 성공 데이터를 표시하며 현재 GPU 가용 여부는 확인할 수 없습니다.
+          </p>
+        </section>
+      ) : null}
 
       <ul aria-label="Server health" className="detail-health-strip grid gap-3" role="list">
         <ServerHealthItem label="Health" value={detail.health.status} />
@@ -112,11 +121,8 @@ export const ServerDetailScreen = ({ selectedServerId }: { readonly selectedServ
             <DetailGpuCard
               detail={detail}
               gpu={gpu}
-              key={gpu.uuid}
-              liveSamples={controller.liveSamples}
+              key={`${detail.server.id}:${gpu.uuid.trim() ? `uuid:${gpu.uuid}` : `index:${gpu.index}`}`}
               saveWatch={controller.saveWatch}
-              storedHistory={controller.storedHistory}
-              storedHistoryReady={controller.storedHistoryReady}
               watchPending={watchPending}
               watchRule={watchRule}
               watchRulesReady={controller.watchRulesQuery.isSuccess}

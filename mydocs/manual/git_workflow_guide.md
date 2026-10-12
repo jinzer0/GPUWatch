@@ -37,8 +37,8 @@ local/task{N} ── 커밋 · 커밋 · 커밋 ──→ publish/task{N} push
 
 병렬 task는 각각 독립적인 `local/task{N}` 브랜치로 위 흐름을 반복한다.
 
-- **타스크 브랜치**: `local/task{N}`에서 잘게 커밋. 작업 단위마다 커밋.
-- **원격 게시 브랜치**: `local/task{N}` 작업이 리뷰 가능한 상태가 되면 [`task-final-report`](../skills/task-final-report/SKILL.md)의 두 승인 절차로 `publish/task{N}` exact OID를 게시한다. no-PR 상태에서는 draft를 만들고 반환 identity를 검증한 뒤 ready로 전환하며, 기존 ready 상태는 verification-only로 처리한다.
+- **타스크 브랜치**: `local/task{N}`에서 작업하며, 커밋은 명시 요청된 경우에만 작업 단위로 수행한다.
+- **원격 게시 브랜치**: `local/task{N}` 작업이 리뷰 가능한 상태가 되면 [`task-final-report`](../skills/task-final-report/SKILL.md)의 non-blocking final evidence 무결성 Checkpoint 후 단일 exact publication Human 승인으로 `publish/task{N}` exact OID를 게시한다. no-PR 상태에서는 draft를 만들고 반환 identity를 검증한 뒤 ready로 전환하며, 기존 ready 상태는 verification-only로 처리한다.
 - **원격 push**: `local/task` 브랜치는 **로컬 유지 (원격 push 금지)**를 원칙으로 한다. 원격에는 `publish/task{N}`와 merge 결과 브랜치만 유지한다.
 - **`devel` 대상 PR**: 작업 단위 PR은 기본적으로 Open PR로 생성하고, 최종 보고와 검증 결과를 PR 본문에 반영한 상태에서 review/merge 한다.
 - **merge 전략**: `devel` 대상 PR은 merge commit 유지 또는 `--no-ff` 원칙을 기본으로 한다. squash merge는 단계별 커밋 의미가 사라질 수 있으므로 기본값으로 두지 않는다.
@@ -61,7 +61,7 @@ Hyper-Waterfall 최초 bootstrap을 `main`에 반영하는 PR은 app release가 
 
 이 절의 목적은 브랜치 흐름을 설명하는 것이며, GitHub 변경 명령을 복사해 실행하는 위치가 아니다. host, repository, remote ref, PR head는 승인 대기 중에도 변할 수 있으므로 ambient repository 또는 현재 `HEAD`를 기준으로 `gh` 명령을 실행하지 않는다.
 
-1. task PR의 publish와 Open PR 생성은 [`task-final-report`](../skills/task-final-report/SKILL.md)만 사용한다. 이 절차는 final report/evidence 승인과 publication 승인을 분리한다. 첫 승인이 있기 전에는 publication input을 만들지 않고, 둘째 승인이 있기 전에는 원격 mutation(`push`, `gh api --method POST`, PR 생성 또는 재개)을 하지 않는다. Publication 준비 단계의 canonical identity, issue, ref, Open PR 상태 조회는 read-only로만 수행한다.
+1. task PR의 publish와 Open PR 생성은 [`task-final-report`](../skills/task-final-report/SKILL.md)만 사용한다. final report/evidence는 응답 대기 없는 무결성 Checkpoint로 검증하고 private publication input을 준비한다. 단일 exact publication Human 승인 전에는 원격 mutation(`push`, `gh api --method POST`, PR 생성 또는 재개)을 하지 않는다. Publication 준비 단계의 canonical identity, issue, ref, Open PR 상태 조회는 read-only로만 수행한다.
 2. task publication은 `branch-absent-pr-absent`, `branch-exact-pr-absent`, `branch-exact-pr-draft`, `branch-exact-pr-ready`만 유효 상태로 분류하고 모든 state의 matching PR을 조회한다. 실행 시작 state는 승인 state와 exact하게 같아야 하며 absent 승인은 concurrent PR을 adopt하지 않는다. no-PR 상태는 생성 직전 absence를 재검증한 뒤 draft 생성, POST 반환 number/node ID 결박, exact draft GET, 같은 node ready 전환, exact non-draft GET, closing linkage 순으로 진행한다. ready 상태는 verification-only다. duplicate, closed, mismatch, create/ready interruption 또는 state drift는 fresh preparation과 replacement publication 승인을 요구하며 manifest나 fuzzy resume를 사용하지 않는다.
 3. 리뷰 및 merge는 [`pr_process_guide.md`](pr_process_guide.md)의 승인 절차를 따른다. 이 매뉴얼에 `gh pr review`나 `gh pr merge`의 축약 예시를 두지 않는다. 직접 실행이 불가피한 자동화는 승인된 PR 번호, canonical repository, base/head tuple, head OID를 REST로 다시 읽고, merge REST 요청의 `sha`에 확인한 head OID를 넣어야 한다. 확인값이 하나라도 달라지면 review/merge하지 않는다.
 4. merged task PR의 branch, worktree, issue 정리는 [`pr-merge-cleanup`](../skills/pr-merge-cleanup/SKILL.md)만 사용한다. merge 자체는 현재 `OPEN` 이슈 close 승인이 아니다. 이 절차는 read-only preflight에서 merged PR tuple과 atomically fetched issue `state`/exact server `updated_at`를 확인하고, 이슈가 `OPEN`이면 그 값을 포함한 exact approval tuple을 요구한다. 삭제 직전과 close 직전에도 같은 PR tuple과 exact `updated_at`를 다시 읽고, 그 경계에서 `OPEN`이면 같은 exact approval tuple 없이는 삭제 또는 close로 진행하지 않는다. 이전 관측에서 `CLOSED`였다는 이유만으로 현재 `OPEN` 이슈를 닫을 수 없다.
@@ -95,7 +95,7 @@ GH_HOST=github.com gh pr create --repo "$CANONICAL_REPOSITORY" --base devel --he
 
 ### `devel`에 rebase가 필요해 보일 때
 
-기본 흐름은 `git fetch origin` 후 새 `local/taskN` 브랜치를 정확한 최신 `origin/devel`에서 만드는 것이다. local `devel`의 unpublished commit은 새 task에 포함하거나 임의로 reset/rebase하지 않는다. PR 충돌이나 오래된 기준 브랜치 문제가 생기면 충돌 파일과 local/remote branch 관계를 확인하고, rebase/merge 중 어떤 방식으로 회복할지 작업지시자 승인 후 진행한다.
+기본 흐름은 `git fetch origin` 후 새 `local/taskN` 브랜치를 정확한 최신 `origin/devel`에서 만드는 것이다. local `devel`의 unpublished commit은 새 task에 포함하거나 임의로 reset/rebase하지 않는다. PR 충돌이나 오래된 기준 브랜치 문제가 생기면 충돌 파일과 local/remote branch 관계를 확인한다. Scope 내에서 가역적이며 사용자 작업을 덮어쓰지 않는 로컬 충돌 회복은 방법과 결과를 기록하고 자율 수행한다. 사용자 이력 변경, 원격 이력 재작성 또는 Scope 밖 결정은 해당 위험 행동의 명시 승인을 받으며 publication/merge 권한으로 확대하지 않는다.
 
 ### 잘못된 브랜치를 원격에 push했을 때
 
@@ -111,7 +111,7 @@ PR이 `MERGED` 상태이고 base/head가 대상 task와 일치하는지 read-onl
 
 ## 관련 매뉴얼
 
-- [`task_workflow_guide.md`](task_workflow_guide.md): 이슈 기반 타스크 시작, 단계 승인, 최종 보고, PR 게시 순서.
+- [`task_workflow_guide.md`](task_workflow_guide.md): 이슈 기반 타스크 시작, non-blocking 단계 Checkpoint, 최종 보고, PR 게시 순서.
 - [`document_structure_guide.md`](document_structure_guide.md): 계획서, 단계 보고서, 최종 보고서의 문서 위치와 파일명.
 - [`pr_command_guide.md`](pr_command_guide.md): PR 생성 명령과 문서 링크 규칙.
 - [`pr_process_guide.md`](pr_process_guide.md): PR 처리 entrypoint.

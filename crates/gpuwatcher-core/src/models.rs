@@ -79,6 +79,7 @@ pub struct GpuAvailableWatchInput {
     pub gpu_index: i64,
     pub enabled: bool,
     pub utilization_threshold_percent: Option<f64>,
+    #[serde(rename = "memoryThresholdMiB")]
     pub memory_threshold_mib: Option<i64>,
     pub sustain_seconds: Option<i64>,
     pub cooldown_seconds: Option<i64>,
@@ -93,6 +94,7 @@ pub struct GpuAvailableWatchRule {
     pub gpu_index: i64,
     pub enabled: bool,
     pub utilization_threshold_percent: f64,
+    #[serde(rename = "memoryThresholdMiB")]
     pub memory_threshold_mib: i64,
     pub sustain_seconds: i64,
     pub cooldown_seconds: i64,
@@ -280,6 +282,7 @@ pub struct GpuCardDto {
     pub name: String,
     pub driver_version: Option<String>,
     pub busy: bool,
+    pub availability: GpuAvailabilityDto,
     #[serde(rename = "memoryTotalMiB")]
     pub memory_total_mib: Option<i64>,
     #[serde(rename = "memoryUsedMiB")]
@@ -320,6 +323,13 @@ pub struct GpuCardDto {
     pub memory_clock_mhz: Option<i64>,
     pub process_count: i64,
     pub processes: Vec<CollectorProcess>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuAvailabilityDto {
+    pub state: String,
+    pub condition_started_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

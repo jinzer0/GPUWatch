@@ -1,7 +1,31 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createScheduler } from './scheduler.js';
+import { createScheduler as createRealScheduler, type ElectronScheduler } from './scheduler.js';
 import type { HelperRunner } from './helperRunner.js';
+
+const schedulers: ElectronScheduler[] = [];
+
+function createScheduler(...args: Parameters<typeof createRealScheduler>): ElectronScheduler {
+  const scheduler = createRealScheduler(...args);
+  schedulers.push(scheduler);
+  return scheduler;
+}
+
+afterEach(() => {
+  for (const scheduler of schedulers.splice(0)) scheduler.stop();
+});
+
+function withStartupReset(runner: HelperRunner, guardOnly = false): HelperRunner {
+  return {
+    cancelActive: () => runner.cancelActive?.(),
+    run(request) {
+      if (request.action === 'reset_availability_observations' || (guardOnly && (request.action === 'list_servers' || request.action === 'consume_notification_events'))) {
+        return Promise.resolve({ ok: true, data: [] });
+      }
+      return runner.run(request);
+    }
+  };
+}
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -65,7 +89,7 @@ describe('Electron scheduler', () => {
       }
     };
     const scheduler = createScheduler();
-    scheduler.start();
+    await scheduler.start(withStartupReset(runner, true));
 
     const first = scheduler.run(runner, { action: 'seed_demo_data', payload: {} });
     const second = scheduler.run(runner, { action: 'seed_demo_data', payload: {} });
@@ -77,7 +101,7 @@ describe('Electron scheduler', () => {
     expect(maxActive).toBe(1);
   });
 
-  it('drains pending notifications when the scheduler starts', async () => {
+  it('discards pending notifications without displaying them when the scheduler starts', async () => {
     const show = vi.fn();
     let consumes = 0;
     const runner: HelperRunner = {
@@ -97,10 +121,9 @@ describe('Electron scheduler', () => {
     };
     const scheduler = createScheduler({ notifier: { show }, pollIntervalMs: 60_000 });
 
-    scheduler.start(runner);
+    await scheduler.start(withStartupReset(runner));
 
-    await waitForCondition(() => expect(show).toHaveBeenCalledWith({ title: 'GPU available', body: 'GPU 0 is available' }));
-    expect(show).toHaveBeenCalledTimes(1);
+    expect(show).not.toHaveBeenCalled();
     expect(consumes).toBe(1);
     scheduler.stop();
   });
@@ -118,7 +141,7 @@ describe('Electron scheduler', () => {
       }
     };
     const scheduler = createScheduler();
-    scheduler.start();
+    await scheduler.start(withStartupReset(runner, true));
 
     const refresh = scheduler.run(runner, { action: 'refresh_server', payload: { id: 'server-1' } });
     await waitForCondition(() => expect(actions).toEqual(['refresh_server']));
@@ -151,7 +174,7 @@ describe('Electron scheduler', () => {
       }
     };
     const scheduler = createScheduler();
-    scheduler.start();
+    await scheduler.start(withStartupReset(runner, true));
 
     const refresh = scheduler.run(runner, { action: 'refresh_server', payload: { id: 'server-1' } });
     await waitForCondition(() => expect(actions).toEqual(['refresh_server']));
@@ -180,7 +203,7 @@ describe('Electron scheduler', () => {
       }
     };
     const scheduler = createScheduler();
-    scheduler.start();
+    await scheduler.start(withStartupReset(runner, true));
 
     const refresh = scheduler.run(runner, { action: 'refresh_server', payload: { id: 'server-1' } });
     await Promise.resolve();
@@ -212,7 +235,7 @@ describe('Electron scheduler', () => {
       }
     };
     const scheduler = createScheduler();
-    scheduler.start();
+    await scheduler.start(withStartupReset(runner, true));
 
     const first = scheduler.run(runner, { action: 'test_connection', payload: { id: 'server-1' } });
     const second = scheduler.run(runner, { action: 'test_connection', payload: { id: 'server-2' } });
@@ -234,7 +257,7 @@ describe('Electron scheduler', () => {
       }
     };
     const scheduler = createScheduler({ pollConcurrency: 1 });
-    scheduler.start();
+    await scheduler.start(withStartupReset(runner, true));
 
     const first = scheduler.run(runner, { action: 'refresh_server', payload: { id: 'server-1' } });
     await Promise.resolve();
@@ -263,7 +286,7 @@ describe('Electron scheduler', () => {
       }
     };
     const scheduler = createScheduler({ pollConcurrency: 1 });
-    scheduler.start();
+    await scheduler.start(withStartupReset(runner, true));
 
     await expect(scheduler.run(runner, { action: 'refresh_server', payload: { id: 'server-1' } })).resolves.toMatchObject({ ok: true });
     await expect(scheduler.run(runner, { action: 'refresh_server', payload: { id: 'server-1' } })).resolves.toMatchObject({ ok: true });
@@ -283,7 +306,7 @@ describe('Electron scheduler', () => {
       }
     };
     const scheduler = createScheduler({ pollConcurrency: 1 });
-    scheduler.start();
+    await scheduler.start(withStartupReset(runner, true));
 
     await expect(scheduler.run(runner, { action: 'refresh_server', payload: { id: 'server-1' } })).resolves.toMatchObject({ ok: false });
     await expect(scheduler.run(runner, { action: 'refresh_server', payload: { id: 'server-1' } })).resolves.toMatchObject({ ok: false });
@@ -311,7 +334,7 @@ describe('Electron scheduler', () => {
       }
     };
     const scheduler = createScheduler({ notifier: { show } });
-    scheduler.start();
+    await scheduler.start(withStartupReset(runner, true));
 
     await expect(scheduler.run(runner, { action: 'refresh_server', payload: { id: 'server-1' } })).resolves.toEqual({
       ok: false,
@@ -343,7 +366,7 @@ describe('Electron scheduler', () => {
       }
     };
     const scheduler = createScheduler({ notifier: { show: () => { throw new Error('notification failed'); } } });
-    scheduler.start();
+    await scheduler.start(withStartupReset(runner, true));
 
     await expect(scheduler.run(runner, { action: 'refresh_server', payload: { id: 'server-1' } })).resolves.toEqual({ ok: true, data: { refreshed: 1 } });
     await expect(scheduler.run(runner, { action: 'refresh_server', payload: { id: 'server-1' } })).resolves.toEqual({ ok: true, data: { refreshed: 2 } });
@@ -363,14 +386,14 @@ describe('Electron scheduler', () => {
       }
     };
     const scheduler = createScheduler({ pollConcurrency: 1 });
-    scheduler.start();
+    await scheduler.start(withStartupReset(runner, true));
 
     await expect(scheduler.run(runner, { action: 'refresh_server', payload: { id: 'server-1' } })).rejects.toThrow('helper runner rejected');
     await expect(scheduler.run(runner, { action: 'refresh_server', payload: { id: 'server-1' } })).resolves.toMatchObject({ ok: true });
     await expect(scheduler.run(runner, { action: 'refresh_server', payload: { id: 'server-2' } })).resolves.toMatchObject({ ok: true });
   });
 
-  it('cancels active helper work when the scheduler stops', () => {
+  it('cancels active helper work when the scheduler stops', async () => {
     let cancelled = 0;
     const runner: HelperRunner = {
       cancelActive() {
@@ -382,8 +405,9 @@ describe('Electron scheduler', () => {
     };
     const scheduler = createScheduler({ pollIntervalMs: 60_000 });
 
-    scheduler.start(runner);
+    const starting = scheduler.start(withStartupReset(runner));
     scheduler.stop();
+    await starting;
 
     expect(cancelled).toBe(1);
   });
@@ -408,14 +432,14 @@ describe('Electron scheduler', () => {
       }
     };
     const scheduler = createScheduler({ pollConcurrency: 1 });
-    scheduler.start(runner);
+    await scheduler.start(withStartupReset(runner, true));
 
     const refresh = scheduler.run(runner, { action: 'refresh_server', payload: { id: 'server-1' } });
     await waitForCondition(() => expect(refreshCalls).toBe(1));
 
     scheduler.stop();
     await expect(refresh).rejects.toThrow('cancelled');
-    scheduler.start();
+    await scheduler.start(withStartupReset(runner, true));
 
     await expect(scheduler.run(runner, { action: 'refresh_server', payload: { id: 'server-1' } })).resolves.toMatchObject({ ok: true });
     expect(cancelled).toBe(1);
@@ -465,12 +489,13 @@ describe('Electron scheduler', () => {
                 : { ok: true, status: 'online', errorType: null, message: 'snapshot stored' }
           };
         }
+        if (request.action === 'consume_notification_events') return { ok: true, data: [] };
         throw new Error(`unexpected action ${request.action}`);
       }
     };
     const scheduler = createScheduler({ pollIntervalMs: 60_000, now: () => new Date('2026-06-07T00:01:31.000Z') });
 
-    scheduler.start(runner);
+    await scheduler.start(withStartupReset(runner));
 
     await waitForCondition(() => {
       expect(actions.filter((entry) => entry.action === 'refresh_server').map((entry) => (entry.payload as { id: string }).id)).toEqual([
@@ -509,7 +534,7 @@ describe('Electron scheduler', () => {
     };
     const scheduler = createScheduler({ notifier: { show }, pollIntervalMs: 60_000, now: () => new Date('2026-06-07T00:00:00.000Z') });
 
-    scheduler.start(runner);
+    await scheduler.start(withStartupReset(runner));
 
     await waitForCondition(() => expect(show).toHaveBeenCalledWith({ title: 'GPU available', body: 'GPU 0 is available' }));
     expect(show).toHaveBeenCalledTimes(1);
@@ -540,7 +565,7 @@ describe('Electron scheduler', () => {
       }
     };
     const scheduler = createScheduler({ notifier: { show } });
-    scheduler.start();
+    await scheduler.start(withStartupReset(runner, true));
 
     const first = scheduler.run(runner, { action: 'refresh_server', payload: { id: 'server-1' } });
     await waitForCondition(() => expect(consumes).toBe(1));
@@ -580,12 +605,13 @@ describe('Electron scheduler', () => {
           active -= 1;
           return { ok: true, data: { ok: true, status: 'online', errorType: null, message: 'snapshot stored' } };
         }
+        if (request.action === 'consume_notification_events') return { ok: true, data: [] };
         throw new Error(`unexpected action ${request.action}`);
       }
     };
     const scheduler = createScheduler({ pollIntervalMs: 60_000, pollConcurrency: 2, now: () => new Date('2026-06-07T00:00:00.000Z') });
 
-    scheduler.start(runner);
+    await scheduler.start(withStartupReset(runner));
     await waitForCondition(() => expect(maxActive).toBe(2));
     expect(active).toBe(2);
     releaseRefresh.resolve();
@@ -618,6 +644,7 @@ describe('Electron scheduler', () => {
           refreshed.push((request.payload as { id: string }).id);
           return { ok: true, data: { ok: true, status: 'online', errorType: null, message: 'snapshot stored' } };
         }
+        if (request.action === 'consume_notification_events') return { ok: true, data: [] };
         throw new Error(`unexpected action ${request.action}`);
       }
     };
@@ -627,9 +654,270 @@ describe('Electron scheduler', () => {
       now: () => new Date('2026-06-07T00:00:02.000Z')
     });
 
-    scheduler.start(runner);
+    await scheduler.start(withStartupReset(runner));
 
     await waitForCondition(() => expect(refreshed).toEqual(['stale-polling']));
+    scheduler.stop();
+  });
+
+  it('discards the old outbox then gates startup collection until reset succeeds', async () => {
+    const reset = deferred<void>();
+    const actions: string[] = [];
+    const runner: HelperRunner = {
+      async run(request) {
+        actions.push(request.action);
+        if (request.action === 'reset_availability_observations') await reset.promise;
+        return { ok: true, data: [] };
+      }
+    };
+    const scheduler = createScheduler({ pollIntervalMs: 60_000 });
+    const starting = scheduler.start(runner);
+    await waitForCondition(() => expect(actions).toEqual(['consume_notification_events', 'reset_availability_observations']));
+    expect(scheduler.isRunning).toBe(false);
+    await expect(scheduler.run(runner, { action: 'refresh_server', payload: { id: 's' } })).resolves.toMatchObject({ ok: false, error: { type: 'scheduler_not_ready' } });
+    await expect(scheduler.run(runner, { action: 'save_server', payload: { input: {} } })).resolves.toMatchObject({ ok: false, error: { type: 'scheduler_not_ready' } });
+    await expect(scheduler.run(runner, { action: 'get_server_detail', payload: { id: 's' } })).resolves.toMatchObject({ ok: false, error: { type: 'scheduler_not_ready' } });
+    await expect(scheduler.run(runner, { action: 'health', payload: {} })).resolves.toMatchObject({ ok: true });
+    expect(actions.filter((action) => action === 'consume_notification_events')).toHaveLength(1);
+    reset.resolve();
+    await starting;
+    expect(scheduler.isRunning).toBe(true);
+    expect(actions.indexOf('consume_notification_events')).toBeLessThan(actions.indexOf('reset_availability_observations'));
+    scheduler.stop();
+  });
+
+  it.each(['envelope', 'rejection'])('fails closed on a startup reset %s error', async (failure) => {
+    const actions: string[] = [];
+    const show = vi.fn();
+    const runner: HelperRunner = {
+      async run(request) {
+        actions.push(request.action);
+        if (request.action === 'consume_notification_events') return { ok: true, data: [] };
+        if (request.action === 'health' || request.action === 'list_servers' || request.action === 'list_watch_rules') return { ok: true, data: [] };
+        if (failure === 'rejection') throw new Error('reset unavailable');
+        return { ok: false, error: { layer: 'helper_contract', type: 'reset_failed', message: 'reset unavailable' } };
+      }
+    };
+    const scheduler = createScheduler({ notifier: { show } });
+    await expect(scheduler.start(runner)).rejects.toThrow('reset unavailable');
+    await expect(scheduler.start(runner)).rejects.toThrow('reset unavailable');
+    expect(scheduler.isRunning).toBe(false);
+    await expect(scheduler.run(runner, { action: 'test_connection', payload: { id: 's' } })).resolves.toMatchObject({ ok: false, error: { type: 'scheduler_not_ready' } });
+    await expect(scheduler.run(runner, { action: 'get_server_detail', payload: { id: 's' } })).resolves.toMatchObject({ ok: false, error: { type: 'scheduler_not_ready' } });
+    expect(actions).toEqual(['consume_notification_events', 'reset_availability_observations']);
+    await expect(scheduler.run(runner, { action: 'health', payload: {} })).resolves.toMatchObject({ ok: true });
+    await expect(scheduler.run(runner, { action: 'list_servers', payload: {} })).resolves.toMatchObject({ ok: true });
+    await expect(scheduler.run(runner, { action: 'list_watch_rules', payload: { serverId: 's' } })).resolves.toMatchObject({ ok: true });
+    expect(scheduler.isRunning).toBe(false);
+    expect(show).not.toHaveBeenCalled();
+    scheduler.stop();
+  });
+
+  it('orders suspend and concurrent resume behind renderer refresh, test and queued writes', async () => {
+    const refresh = deferred<void>();
+    const test = deferred<void>();
+    const write = deferred<void>();
+    const actions: string[] = [];
+    const show = vi.fn();
+    const runner: HelperRunner = {
+      async run(request) {
+        actions.push(request.action);
+        if (request.action === 'refresh_server') await refresh.promise;
+        if (request.action === 'test_connection') await test.promise;
+        if (request.action === 'save_server') await write.promise;
+        return { ok: true, data: [] };
+      }
+    };
+    const scheduler = createScheduler({ notifier: { show }, pollIntervalMs: 60_000 });
+    await scheduler.start(runner);
+    const refreshing = scheduler.run(runner, { action: 'refresh_server', payload: { id: 'a' } });
+    const testing = scheduler.run(runner, { action: 'test_connection', payload: { id: 'b' } });
+    const saving = scheduler.run(runner, { action: 'save_server', payload: { input: {} } });
+    const queuedWrite = scheduler.run(runner, { action: 'seed_demo_data', payload: {} });
+    await waitForCondition(() => expect(actions).toContain('save_server'));
+    const suspended = scheduler.suspend();
+    const resumed = scheduler.resume();
+    expect(scheduler.isRunning).toBe(false);
+    await expect(scheduler.run(runner, { action: 'refresh_server', payload: { id: 'c' } })).resolves.toMatchObject({ ok: false });
+    refresh.resolve();
+    test.resolve();
+    await Promise.all([refreshing, testing]);
+    expect(actions.filter((action) => action === 'reset_availability_observations')).toHaveLength(1);
+    write.resolve();
+    await Promise.all([saving, queuedWrite, suspended, resumed]);
+    expect(actions.filter((action) => action === 'reset_availability_observations')).toHaveLength(3);
+    expect(actions.lastIndexOf('seed_demo_data')).toBeLessThan(actions.lastIndexOf('reset_availability_observations'));
+    expect(actions.filter((action) => action === 'consume_notification_events')).toHaveLength(3);
+    expect(scheduler.isRunning).toBe(true);
+    expect(show).not.toHaveBeenCalled();
+    await scheduler.suspend();
+    expect(scheduler.isRunning).toBe(false);
+    await scheduler.resume();
+    expect(scheduler.isRunning).toBe(true);
+    scheduler.stop();
+  });
+
+  it('fences stop, restart and old timer callbacks while reset is pending', async () => {
+    const reset = deferred<void>();
+    const callbacks: (() => void)[] = [];
+    const actions: string[] = [];
+    let resets = 0;
+    const runner: HelperRunner = {
+      async run(request) {
+        actions.push(request.action);
+        if (request.action === 'reset_availability_observations' && ++resets === 2) await reset.promise;
+        return { ok: true, data: [] };
+      }
+    };
+    const scheduler = createScheduler({
+      setIntervalFn: ((callback: () => void) => { callbacks.push(callback); return callbacks.length; }) as unknown as typeof setInterval,
+      clearIntervalFn: vi.fn()
+    });
+    await scheduler.start(runner);
+    const resuming = scheduler.resume();
+    await waitForCondition(() => expect(resets).toBe(2));
+    scheduler.stop();
+    const restarting = scheduler.start(runner);
+    const before = actions.length;
+    callbacks[0]();
+    expect(actions).toHaveLength(before);
+    reset.resolve();
+    await Promise.all([resuming, restarting]);
+    expect(resets).toBe(3);
+    expect(callbacks).toHaveLength(2);
+    expect(scheduler.isRunning).toBe(true);
+    scheduler.stop();
+    const stopped = actions.length;
+    callbacks[1]();
+    expect(actions).toHaveLength(stopped);
+  });
+
+  it('does not turn a pre-suspend scheduled server list into a post-reset refresh', async () => {
+    const list = deferred<void>();
+    const actions: string[] = [];
+    let lists = 0;
+    const runner: HelperRunner = {
+      async run(request) {
+        actions.push(request.action);
+        if (request.action === 'list_servers' && ++lists === 1) {
+          await list.promise;
+          return { ok: true, data: [{ id: 'old', enabled: true, pollingIntervalSeconds: 1 }] };
+        }
+        return { ok: true, data: [] };
+      }
+    };
+    const scheduler = createScheduler({ pollIntervalMs: 60_000 });
+    await scheduler.start(runner);
+    await waitForCondition(() => expect(lists).toBe(1));
+    const suspended = scheduler.suspend();
+    list.resolve();
+    await suspended;
+    expect(actions).not.toContain('refresh_server');
+    expect(actions).not.toContain('get_server_detail');
+    expect(scheduler.isRunning).toBe(false);
+    await scheduler.resume();
+    expect(lists).toBe(2);
+    expect(actions).not.toContain('refresh_server');
+    scheduler.stop();
+  });
+
+  it('discards startup and in-flight suspend events but shows a later fresh event exactly once', async () => {
+    const release = deferred<void>();
+    const stale = { title: 'GPU available', body: 'stale observation' };
+    const fresh = { title: 'GPU available', body: 'fresh qualified observation' };
+    let outbox = [stale];
+    let refreshes = 0;
+    const actions: string[] = [];
+    const show = vi.fn();
+    const runner: HelperRunner = {
+      async run(request) {
+        actions.push(request.action);
+        if (request.action === 'refresh_server') {
+          if (++refreshes === 1) {
+            await release.promise;
+            outbox.push(stale);
+          } else if (refreshes === 2) {
+            outbox.push(fresh);
+          }
+        }
+        if (request.action === 'consume_notification_events') {
+          const events = outbox;
+          outbox = [];
+          return { ok: true, data: events };
+        }
+        return { ok: true, data: [] };
+      }
+    };
+    const scheduler = createScheduler({ notifier: { show }, pollIntervalMs: 60_000 });
+    await scheduler.start(runner);
+    expect(outbox).toEqual([]);
+    expect(actions.slice(0, 2)).toEqual(['consume_notification_events', 'reset_availability_observations']);
+    expect(show).not.toHaveBeenCalled();
+    const refreshing = scheduler.run(runner, { action: 'refresh_server', payload: { id: 's' } });
+    const suspended = scheduler.suspend();
+    const resumed = scheduler.resume();
+    release.resolve();
+    await Promise.all([refreshing, suspended, resumed]);
+    expect(outbox).toEqual([]);
+    expect(show).not.toHaveBeenCalled();
+    await scheduler.run(runner, { action: 'refresh_server', payload: { id: 's' } });
+    await scheduler.run(runner, { action: 'refresh_server', payload: { id: 's' } });
+    expect(show).toHaveBeenCalledExactlyOnceWith(fresh);
+    scheduler.stop();
+  });
+
+  it.each(['envelope', 'rejection', 'malformed'])('fails closed when pending notification discard has a %s failure', async (failure) => {
+    const actions: string[] = [];
+    const show = vi.fn();
+    let failDiscard = true;
+    const runner: HelperRunner = {
+      async run(request) {
+        actions.push(request.action);
+        if (request.action === 'consume_notification_events' && failDiscard) {
+          if (failure === 'rejection') throw new Error('discard unavailable');
+          if (failure === 'malformed') return { ok: true, data: {} };
+          return { ok: false, error: { layer: 'helper_contract', type: 'consume_failed', message: 'discard unavailable' } };
+        }
+        return { ok: true, data: [] };
+      }
+    };
+    const scheduler = createScheduler({ notifier: { show }, pollIntervalMs: 60_000 });
+    await expect(scheduler.start(runner)).rejects.toThrow();
+    expect(scheduler.isRunning).toBe(false);
+    expect(actions).toEqual(['consume_notification_events']);
+    await expect(scheduler.run(runner, { action: 'refresh_server', payload: { id: 's' } })).resolves.toMatchObject({ ok: false, error: { type: 'scheduler_not_ready' } });
+    failDiscard = false;
+    await scheduler.resume();
+    expect(scheduler.isRunning).toBe(true);
+    failDiscard = true;
+    await expect(scheduler.suspend()).rejects.toThrow();
+    expect(scheduler.isRunning).toBe(false);
+    await expect(scheduler.resume()).rejects.toThrow();
+    expect(actions.filter((action) => action === 'reset_availability_observations')).toHaveLength(1);
+    expect(show).not.toHaveBeenCalled();
+    scheduler.stop();
+  });
+
+  it('keeps resume failure closed until an explicit successful retry', async () => {
+    let resets = 0;
+    const actions: string[] = [];
+    const runner: HelperRunner = {
+      async run(request) {
+        actions.push(request.action);
+        if (request.action === 'reset_availability_observations' && ++resets === 3) throw new Error('resume reset failed');
+        return { ok: true, data: [] };
+      }
+    };
+    const scheduler = createScheduler({ pollIntervalMs: 60_000 });
+    await scheduler.start(runner);
+    await scheduler.suspend();
+    const consumes = actions.filter((action) => action === 'consume_notification_events').length;
+    await expect(scheduler.resume()).rejects.toThrow('resume reset failed');
+    expect(scheduler.isRunning).toBe(false);
+    await expect(scheduler.run(runner, { action: 'test_connection', payload: { id: 's' } })).resolves.toMatchObject({ ok: false, error: { type: 'scheduler_not_ready' } });
+    expect(actions.filter((action) => action === 'consume_notification_events')).toHaveLength(consumes + 1);
+    await scheduler.resume();
+    expect(scheduler.isRunning).toBe(true);
     scheduler.stop();
   });
 });

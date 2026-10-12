@@ -22,6 +22,7 @@ pub enum HelperAction {
     TestConnection,
     RefreshServer,
     PollDueServers,
+    ResetAvailabilityObservations,
     ListWatchRules,
     SaveGpuAvailableWatch,
     DeleteWatchRule,
@@ -55,6 +56,7 @@ pub enum DbMutation {
     WatchRulesWrite,
     WatchRulesDelete,
     NotificationOutboxConsume,
+    AvailabilityReset,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -307,6 +309,17 @@ pub const HELPER_CONTRACT: &[HelperContractEntry] = &[
         polling_overlap_key: PollingOverlapKey::None,
         fallback_behavior: "Electron main consumes pending notification events exactly once; renderer bridge and IPC do not expose it.",
         notes: "Consumes pending native notification events from the local outbox.",
+    },
+    HelperContractEntry {
+        frontend_api: None,
+        helper_action: HelperAction::ResetAvailabilityObservations,
+        visibility: ActionVisibility::MainOnly,
+        electron_preload_method: None,
+        timeout_class: TimeoutClass::Local10s,
+        db_mutation: DbMutation::AvailabilityReset,
+        polling_overlap_key: PollingOverlapKey::ElectronMainScheduler,
+        fallback_behavior: "Return null after resetting one server or all servers; renderer bridge and IPC do not expose it.",
+        notes: "Electron main resets observation intervals across lifecycle gaps while preserving notification cooldown and armed history.",
     },
     HelperContractEntry {
         frontend_api: None,

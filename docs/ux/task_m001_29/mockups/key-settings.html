@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GPUWatcher — 별도 설정 창 · 설계 참조 시안</title>
+<style>
+/* Governing contracts: ../DESIGN.md — Brand & Style, Colors,
+   Typography, Layout & Spacing, Elevation & Depth, Shapes, Components
+   (WindowChrome, SettingsWindow, ThemeSelector, StatusNotice).
+   ../EXPERIENCE.md — Foundation, Information Architecture, Voice and Tone,
+   Component Patterns (SettingsWindow, ThemeSelector), State Patterns
+   (설정 창 focus/선택/시스템 외형 변화), Interaction Primitives,
+   Key Flows / Flow 3, Open Questions (기존 설정 보존·배치).
+   Initial system selection, sizing and visual tokens: unapproved [ASSUMPTION].
+   Mocked macOS chrome only: platform-semantic traffic-light colors are
+   decorative illustration, not DESIGN metric/status tokens or native behavior. */
+:root{color-scheme:light;--base:#F5F5F7;--panel:#FFFFFF;--text:#202124;--muted:#555860;--border:#D5D7DC;--focus:#155FC0;--selected:#E2ECFA;--warning:#815100;--error:#B42318;--s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--sidebar:220px;--control:28px;--r1:4px;--r2:6px;--r3:8px}
+*{box-sizing:border-box}body{margin:0;padding:var(--s5);background:var(--base);color:var(--text);font:400 13px/1.5 -apple-system,BlinkMacSystemFont,system-ui,sans-serif}h1,h2,p{margin:0}h1,h2{font-size:17px;line-height:1.4;font-weight:600}a{color:var(--focus);text-underline-offset:var(--s1)}a:focus-visible{outline:2px solid var(--focus);outline-offset:var(--s1)}.legend{max-width:calc(var(--sidebar)*3);margin:0 auto var(--s5);font-size:12px;color:var(--muted)}.legend p+p{margin-top:var(--s1)}nav{display:flex;gap:var(--s4);margin-top:var(--s2)}.window{width:calc(var(--sidebar)*3);max-width:100%;min-width:calc(var(--sidebar)*2);margin:auto;border:1px solid var(--border);border-radius:var(--r3);overflow:hidden;background:var(--base)}.titlebar{display:grid;grid-template-columns:1fr 1fr 1fr;align-items:center;min-height:calc(var(--s5)*2);padding:0 var(--s4);background:var(--base)}.window-controls{display:flex;gap:var(--s2)}.window-controls span{display:block;width:var(--s3);height:var(--s3);border-radius:50%;background:#FF5F57}.window-controls span:nth-child(2){background:#FEBC2E}.window-controls span:nth-child(3){background:#28C840}.titlebar strong{text-align:center;font-size:13px;font-weight:600}.settings-content{padding:var(--s5)}.intro{margin-bottom:var(--s5)}.meta{font-size:12px;color:var(--muted)}.intro p{margin-top:var(--s2)}fieldset{margin:0;padding:0;border:0}legend{font-size:13px;font-weight:600;padding:0;margin-bottom:var(--s3)}.options{display:grid;gap:var(--s2)}.option{display:flex;gap:var(--s3);align-items:center;padding:var(--s3) var(--s4);border:1px solid var(--border);border-radius:var(--r2);background:var(--panel)}.option.selected{background:var(--selected)}input{appearance:none;flex:none;width:var(--s4);height:var(--s4);margin:0;border:1px solid var(--muted);border-radius:50%;background:var(--panel);opacity:1}input:checked{border:var(--s1) solid var(--focus)}.option-copy{flex:1}.option-title{display:block;font-weight:600}.option-note{display:block;font-size:12px;color:var(--muted);margin-top:var(--s1)}.selection{font-size:12px;color:var(--muted)}.explanation{margin-top:var(--s3)}.scope-note{margin-top:var(--s5);padding-top:var(--s4);border-top:1px solid var(--border)}.scope-note p+p{margin-top:var(--s2)}.prototype-note{max-width:calc(var(--sidebar)*3);margin:var(--s4) auto 0;font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+<header class="legend">
+<p><strong>GPUWatcher · 별도 설정 창 시안</strong> — 최종 설계 참조 · 색·수치·초기 선택은 [ASSUMPTION] 잠정 기준</p>
+<p>제품과 분리된 비작동 모크입니다. 선택 상태와 데이터는 예시이며 실시간 정보·설정 저장·실제 SSH 연결이 없습니다.</p>
+<p>창 제어의 빨강·노랑·초록은 OS 외형의 장식이며 GPU 상태가 아닙니다. 실제 macOS 창 이동·재질·창 제어를 검증하지 않습니다.</p>
+<nav aria-label="시안 파일 이동"><a href="key-main-light.html">라이트 메인 시안</a><a href="key-main-dark.html">다크 메인 시안</a></nav>
+</header>
+<section class="window" aria-label="GPUWatcher 별도 설정 창 모형">
+<header class="titlebar"><div class="window-controls" aria-hidden="true"><span></span><span></span><span></span></div><strong>설정</strong><span></span></header>
+<main class="settings-content">
+<div class="intro"><h1>외형</h1><p class="meta">GPUWatcher의 라이트·다크 표시 방식을 선택합니다.</p></div>
+<fieldset aria-describedby="theme-explanation"><legend>테마</legend>
+<div class="options">
+<label class="option selected"><input type="radio" name="theme" checked disabled><span class="option-copy"><span class="option-title">시스템 설정 따르기</span><span class="option-note">macOS 외형 설정에 맞춰 표시</span></span><span class="selection">선택됨</span></label>
+<label class="option"><input type="radio" name="theme" disabled><span class="option-copy"><span class="option-title">라이트</span><span class="option-note">macOS 외형과 관계없이 밝게 표시</span></span></label>
+<label class="option"><input type="radio" name="theme" disabled><span class="option-copy"><span class="option-title">다크</span><span class="option-note">macOS 외형과 관계없이 어둡게 표시</span></span></label>
+</div>
+</fieldset>
+<p class="meta explanation" id="theme-explanation">예시 선택: 시스템 설정 따르기 · 초기 선택은 [ASSUMPTION]<br>이 시안은 라이트 외형을 예시로 표시합니다. 선택 조작과 외형 변경·저장은 동작하지 않습니다.</p>
+<div class="scope-note"><p class="meta">확인된 설정 진입: GPUWatcher → 설정… · ⌘, · 사이드바 설정 아이콘. 제품에서는 같은 별도 설정 창을 여는 계약입니다.</p><p class="meta">여기서는 외형 선택만 표현합니다. 가용 알림은 해당 GPU의 펼친 카드에 두며 기존 저장 조건은 보존합니다. 이 시안은 실제 설정 저장이나 알림 발송을 수행하지 않습니다.</p></div>
+</main>
+</section>
+<p class="prototype-note">시안 파일 링크는 창 밖에 있습니다. 브라우저에서 다른 HTML 파일로 이동할 뿐 실제 앱 창을 열거나 제품 조작을 수행하지 않습니다.</p>
+</body>
+</html>

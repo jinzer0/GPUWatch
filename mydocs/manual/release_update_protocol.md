@@ -53,11 +53,11 @@ Release-specific plan/procedure는 최소한 `github.com`, `jinzer0/GPUWatch`, r
 - 대상 저장소의 사용자 수정 diff
 - 목표 upstream artifact가 `localization`을 제공하면 `.hyper-waterfall/version.json`의 현재 locale 기록, 요청 locale 또는 전환 요청, 목표 release locale 지원, locale 관련 artifact diff, locale 보존/전환 판단
 
-판단 결과는 목표 upstream artifact의 update 판단 형식으로 먼저 보고한다. 승인 전에는 upstream artifact와 설치본 diff에 포함된 파일을 실제 대상 저장소에 적용하지 않는다.
+판단 결과는 목표 upstream artifact의 update 판단 형식으로 기록한다. [`공통 위험 정책`](agent_code_hyperfall_rule_conflict.md)에 따라 명확한 LOW/MEDIUM 업데이트 요청은 Scope 내 로컬 반영 권한이며 HIGH 결정만 별도 승인한다. 사용자 수정은 임의 덮어쓰지 않는다. 이 로컬 업데이트 권한은 release/tag/원격 게시 권한이 아니다.
 
 ## Hyper-Waterfall 버전 업데이트 PR
 
-Hyper-Waterfall 버전 업데이트 PR은 일반 task PR과 같은 브랜치 흐름을 사용한다. 차이는 PR의 입력과 본문이다. 따라서 최종 게시에는 `task-final-report`의 final report/evidence 승인과 publication 승인을 모두 사용하고, merge 후 정리에는 `pr-merge-cleanup`의 issue-state race handling을 사용한다.
+Hyper-Waterfall 버전 업데이트 PR은 일반 task PR과 같은 브랜치 흐름을 사용한다. 차이는 PR의 입력과 본문이다. 최종 게시에는 `task-final-report`의 non-blocking final report/evidence Checkpoint와 단일 exact publication Human 승인을 사용하고, merge 후 정리에는 `pr-merge-cleanup`의 issue-state race handling을 사용한다.
 
 - 입력: 기존 업데이트 판단 결과, upstream artifact와 설치본 diff, locale 관련 artifact diff, locale 보존/전환 판단
 - 본문: 목표 upstream artifact의 update PR 기준을 적용 저장소 `.github/pull_request_template.md` 설치본에 반영

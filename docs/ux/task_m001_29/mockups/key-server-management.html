@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GPUWatcher — 서버 관리 · 설계 참조 시안</title>
+<style>
+/* Governing spines: ../DESIGN.md#brand--style, #layout--spacing, #components;
+   ../EXPERIENCE.md#information-architecture, #key-flows (Flow 2), #state-patterns,
+   #accessibility-floor, #responsive--platform. These contracts take precedence.
+   Confirmed: sidebar + / server … placements. [ASSUMPTION]: sheet, confirmation,
+   result presentation, dimensions and responsive treatment. Offline mock only.
+   Field evidence: src/lib/types.ts ServerInput / SshConfigImportCandidate /
+   SshConfigImportResult / ConnectionTestResultDto; SettingsScreen.tsx and its
+   SettingsServerForm.tsx, SettingsImportPanel.tsx, settingsModel.ts (read-only).
+*/
+:root{color-scheme:light;--base:#F5F5F7;--panel:#FFFFFF;--text:#202124;--muted:#555860;--border:#D5D7DC;--focus:#155FC0;--selected:#E2ECFA;--warning:#815100;--error:#B42318;--sidebar:220px;--r1:4px;--r2:6px;--r3:8px}
+*{box-sizing:border-box}body{margin:0;padding:24px;background:var(--base);color:var(--text);font:400 13px/1.5 -apple-system,BlinkMacSystemFont,system-ui,sans-serif}h1,h2,h3,p{margin:0}h1,h2{font-size:17px;font-weight:600;line-height:1.4}h3{font-size:13px;font-weight:600}p+p{margin-top:4px}a{color:var(--focus);text-underline-offset:4px}a:focus-visible{outline:2px solid var(--focus);outline-offset:4px}button,input{font:inherit;color:inherit}button{min-height:28px;padding:4px 12px;border:1px solid var(--border);border-radius:var(--r1);background:var(--panel)}button:disabled,input:disabled{opacity:1;cursor:not-allowed;-webkit-text-fill-color:currentColor}button.primary{background:var(--focus);border-color:var(--focus);color:#FFFFFF}button.danger{color:var(--error);border-color:var(--error)}input:not([type=checkbox]){width:100%;min-width:0;min-height:30px;padding:5px 8px;background:var(--panel);border:1px solid #8A8D95;border-radius:var(--r1)}input[type=checkbox]{accent-color:var(--focus);width:14px;height:14px;flex:none;margin:0}code{font:400 12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}.meta{color:var(--muted);font-size:12px}.warning{color:var(--warning)}.error{color:var(--error)}.legend,.alternates,.footnote{max-width:1100px;margin:0 auto}.legend{margin-bottom:16px}.legend nav{display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:8px}.assumption{color:var(--warning);font-size:12px}.window{max-width:1100px;margin:auto;border:1px solid var(--border);border-radius:var(--r3);overflow:hidden;background:var(--base)}.titlebar{min-height:44px;display:grid;grid-template-columns:var(--sidebar) 1fr;align-items:center}.window-controls{display:flex;gap:8px;padding:0 16px}.window-controls span{width:12px;height:12px;border-radius:50%;background:#FF5F57}.window-controls span:nth-child(2){background:#FEBC2E}.window-controls span:nth-child(3){background:#28C840}.app-title{font-weight:600;padding:0 16px}.workspace{display:grid;grid-template-columns:var(--sidebar) minmax(0,1fr)}.sidebar{display:flex;flex-direction:column;gap:8px;border-right:1px solid var(--border);padding:12px;min-width:0}.sidebar-label,.server-row{display:flex;align-items:center;justify-content:space-between;gap:8px}.sidebar-label{padding:0 8px;margin-bottom:4px;color:var(--muted);font-size:12px}.icon-button{padding:0;min-width:28px;font-size:18px}.server-row{padding:8px;border-radius:var(--r2)}.server-row.selected{background:var(--selected)}.server-copy{min-width:0}.server-copy strong{display:block;overflow-wrap:anywhere}.server-copy small{display:block;color:var(--muted);font-size:12px}.menu-example{padding:8px;background:var(--panel);border:1px solid var(--border);border-radius:var(--r2)}.menu-example p{margin-bottom:4px}.menu-example button{display:block;width:100%;text-align:left;border:0;padding:5px 4px;overflow-wrap:anywhere}.menu-example button.current{background:var(--selected)}.menu-example button.separated{border-top:1px solid var(--border);border-radius:0;margin-top:4px}.sidebar-foot{margin-top:auto;padding:16px 8px 0}.stage{min-width:0;padding:12px 24px 20px}.context{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 12px;margin-bottom:12px}.sheet{max-width:590px;margin:0 auto;background:var(--panel);border:1px solid var(--border);border-radius:0 0 var(--r3) var(--r3);overflow:hidden}.sheet-header{padding:16px 20px 12px;border-bottom:1px solid var(--border)}.sheet-body{padding:16px 20px;display:grid;gap:12px}.fields{border:0;padding:0;margin:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}.field{min-width:0}.field label{display:block;font-size:12px;font-weight:600;margin-bottom:4px}.field p{margin-top:4px}.wide{grid-column:1/-1}.toggle{display:flex;gap:8px;align-items:center;margin-top:4px}.toggle label{margin:0}.note{padding:10px 12px;background:var(--base);border-radius:var(--r1)}.sheet-footer{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px;padding:12px 20px;border-top:1px solid var(--border)}.sheet-caption{max-width:590px;margin:10px auto 0}.alternates{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:24px}.section-card{min-width:0;padding:16px;border:1px solid var(--border);border-radius:var(--r3);background:var(--panel);scroll-margin-top:16px}.section-card>h2{margin-bottom:4px}.section-card>.assumption{margin-bottom:12px}.confirm{max-width:390px;margin:0 auto;padding:16px;border:1px solid var(--border);border-radius:var(--r3);background:var(--base)}.confirm h3{font-size:15px;margin-bottom:8px}.actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;margin-top:12px}.result{padding:10px 0}.result+.result{border-top:1px solid var(--border)}.result h3{margin-bottom:4px}.section-card .note{margin-top:12px}.span-all{grid-column:1/-1}.import-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:12px 0}.import-toolbar .actions{margin:0}.table-scroll{overflow-x:auto;margin-top:12px}table{width:100%;border-collapse:collapse;text-align:left;font-size:12px}caption{text-align:left;color:var(--muted);padding-bottom:8px}th{font-weight:600;color:var(--muted)}th,td{padding:10px 8px;border-bottom:1px solid var(--border);vertical-align:top}th:first-child,td:first-child{padding-left:0}th:last-child,td:last-child{padding-right:0}td .meta{display:block}.import-table{min-width:730px}.outcome-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px}.outcome-grid .note{margin:0}.footnote{padding:16px 0;margin-top:8px;font-size:12px;color:var(--muted)}:target{outline:2px solid var(--focus);outline-offset:3px}#editor{scroll-margin-top:16px}
+@media(max-width:960px){body{padding:16px}:root{--sidebar:190px}.stage{padding:12px}.sheet-header,.sheet-body{padding:12px 16px}.sheet-footer{padding:12px 16px}.alternates{grid-template-columns:1fr}.span-all{grid-column:auto}.outcome-grid{grid-template-columns:1fr}.fields{grid-template-columns:1fr}.wide{grid-column:auto}}
+@media(max-width:560px){body{padding:8px}:root{--sidebar:150px}.sidebar{padding:8px}.stage{padding:8px}.sheet-header,.sheet-body,.sheet-footer{padding:12px}.server-row{padding:6px;gap:4px}.server-row .icon-button{min-width:24px}.context{font-size:12px}.section-card{padding:12px}.legend nav{gap:8px 12px}}
+</style>
+</head>
+<body>
+<header class="legend">
+<h1>GPUWatcher · 서버 관리 시안</h1>
+<p class="assumption"><strong>최종 설계 참조 · 시트·삭제 확인·결과 표면·반응형 배치는 [ASSUMPTION] 잠정 기준입니다.</strong> 메뉴 진입 위치는 확인됨. 설계 최종화는 제품 구현 승인이 아닙니다.</p>
+<p class="meta">오프라인 정적 HTML · 모든 서버·입력·결과는 설명용 예시입니다. 모든 운영 조작은 비활성화되어 있으며 실제 SSH 연결·설정 저장·삭제·파일 읽기·알림 발송은 없습니다. 링크는 시안 탐색만 합니다.</p>
+<nav aria-label="시안 파일 이동"><a href="key-main-light.html">라이트 메인</a><a href="key-main-dark.html">다크 메인</a></nav>
+<nav aria-label="서버 관리 상태 이동"><a href="#editor">편집 시트</a><a href="#delete">삭제 확인</a><a href="#test">SSH 테스트</a><a href="#import">SSH config 가져오기</a><a href="#monitoring">모니터링 꺼짐</a></nav>
+</header>
+<section class="window" aria-label="서버 편집 시트가 열린 macOS 창 모형">
+<header class="titlebar"><div class="window-controls" aria-hidden="true"><span></span><span></span><span></span></div><div class="app-title">GPUWatcher</div></header>
+<div class="workspace">
+<aside class="sidebar" aria-label="항상 보이는 서버 목록과 승인된 메뉴 배치">
+<div class="sidebar-label"><span>서버 · 3</span><button class="icon-button" type="button" disabled aria-label="서버 추가 메뉴 · 모형">＋</button></div>
+<div class="menu-example" aria-label="사이드바 더하기 메뉴 예시"><p class="meta">+ 메뉴 · 배치 확인됨</p><button type="button" disabled>서버 직접 추가</button><button type="button" disabled>SSH config 가져오기</button></div>
+<div class="server-row selected"><div class="server-copy"><strong>gpu-lab-01</strong><small>선택됨 · 예시 서버</small></div><button class="icon-button" type="button" disabled aria-label="gpu-lab-01 관리 메뉴 · 모형">…</button></div>
+<div class="menu-example" aria-label="gpu-lab-01 서버별 관리 메뉴 예시"><p class="meta">gpu-lab-01의 … 메뉴</p><button class="current" type="button" disabled>편집</button><button class="danger" type="button" disabled>삭제</button><button class="separated" type="button" disabled>모니터링 끄기</button><button type="button" disabled>SSH 연결 테스트</button></div>
+<div class="server-row"><div class="server-copy"><strong>gpu-lab-02</strong><small>예시 서버</small></div><button class="icon-button" type="button" disabled aria-label="gpu-lab-02 관리 메뉴 · 모형">…</button></div>
+<div class="server-row"><div class="server-copy"><strong>inference-01</strong><small>모니터링 꺼짐 · 예시</small></div><button class="icon-button" type="button" disabled aria-label="inference-01 관리 메뉴 · 모형">…</button></div>
+<p class="meta">두 메뉴는 배치 비교를 위해 함께 표시했습니다. 실제 동시 열림을 뜻하지 않습니다.</p>
+<div class="sidebar-foot"><button type="button" disabled>설정</button></div>
+</aside>
+<div class="stage">
+<div class="context"><strong>gpu-lab-01</strong><span class="meta">서버 관리 · 예시</span></div>
+<section class="sheet" id="editor" aria-labelledby="editor-title">
+<header class="sheet-header"><p class="assumption">[ASSUMPTION] ServerEditor · 메인 창 부착 시트</p><h2 id="editor-title">서버 편집</h2><p class="meta">대상: gpu-lab-01 · 현재 저장값을 표시한 예시</p></header>
+<div class="sheet-body">
+<fieldset class="fields" disabled aria-label="기존 서버 연결 필드 · 비작동 모형">
+<div class="field wide"><label for="server-name">서버 이름 · 필수</label><input id="server-name" disabled value="gpu-lab-01"></div>
+<div class="field"><label for="server-host">호스트 · 필수</label><input id="server-host" disabled value="gpu-lab-01" aria-describedby="host-help"><p class="meta" id="host-help">호스트 이름, IP 주소 또는 SSH 별칭</p></div>
+<div class="field"><label for="server-port">SSH 포트 · 필수</label><input id="server-port" type="number" disabled value="22" min="1" max="65535" aria-describedby="port-help"><p class="meta" id="port-help">1–65535 정수</p></div>
+<div class="field wide"><label for="server-user">사용자 이름 · 필수</label><input id="server-user" disabled value="minsu"></div>
+<div class="field wide"><label for="server-key">SSH 키 경로 · 선택</label><input id="server-key" disabled value="/Users/minsu/.ssh/id_ed25519" aria-describedby="key-help"><p class="meta" id="key-help">이 Mac의 파일 경로만 입력합니다. 개인 키 내용은 입력·저장하지 않습니다.</p></div>
+<div class="field"><label for="server-interval">수집 간격 · 초</label><input id="server-interval" type="number" disabled value="10" min="1" max="86400" aria-describedby="interval-help"><p class="meta" id="interval-help">1–86400초 · 비워 두면 백엔드 기본 간격</p></div>
+<div class="field"><div class="toggle"><input id="server-enabled" type="checkbox" disabled checked aria-describedby="enabled-help"><label for="server-enabled">모니터링 사용</label></div><p class="meta" id="enabled-help">켜진 서버는 예약 수집에 포함됩니다.</p></div>
+</fieldset>
+<div class="note"><strong>설정 저장 ≠ SSH 연결 성공</strong><p class="meta">저장은 서버 정보를 보관하는 동작입니다. 저장된 서버의 … 메뉴에서 SSH 연결을 별도로 테스트합니다. 아직 저장하지 않은 신규 서버는 먼저 저장해야 합니다.</p></div>
+<p class="meta">추가도 같은 필드 구성 제안입니다. 서버 ID는 내부 식별자이며 별도 입력 필드로 노출하지 않습니다. 원격 명령 입력은 없습니다.</p>
+</div>
+<footer class="sheet-footer"><button type="button" disabled>취소</button><button class="primary" type="button" disabled>서버 정보 저장</button></footer>
+</section>
+<p class="sheet-caption meta">[ASSUMPTION] 취소는 원본을 유지하고 호출 위치로 복귀합니다. 포커스 제한·Esc·미저장 변경 보호는 이 정적 모형에서 구현하지 않았습니다.</p>
+</div>
+</div>
+</section>
+<main class="alternates" aria-label="독립적인 서버 관리 대체 상태 예시">
+<section class="section-card" id="delete" aria-labelledby="delete-title">
+<h2 id="delete-title">삭제 확인</h2><p class="assumption">[ASSUMPTION] 확인 창의 배치·문구 제안 · 별도 상태</p>
+<div class="confirm"><h3>gpu-lab-01을 삭제할까요?</h3><p>이 Mac의 서버 목록에서 <strong>gpu-lab-01</strong>을 삭제합니다. 원격 서버는 변경하지 않습니다.</p><p class="meta">대상: minsu@gpu-lab-01 · 포트 22</p><div class="actions"><button type="button" disabled>취소</button><button class="danger" type="button" disabled>gpu-lab-01 삭제</button></div></div>
+<div class="note"><p class="error"><strong>삭제 실패 예시:</strong> 서버 정보를 삭제하지 못했습니다.</p><p class="meta">[ASSUMPTION] 목록과 대상 이름을 유지하고 원인·재시도를 안내합니다. 이 시안에서 삭제된 서버는 없습니다.</p></div>
+</section>
+<section class="section-card" id="test" aria-labelledby="test-title">
+<h2 id="test-title">SSH 연결 테스트 결과</h2><p class="assumption">[ASSUMPTION] 저장된 gpu-lab-01의 … 메뉴에서 진입 · 두 결과는 독립 예시</p>
+<div class="result"><h3>성공 예시 · SSH 연결 확인</h3><p>저장된 gpu-lab-01에 연결했습니다.</p><p class="meta">설명용 성공 결과입니다. 현재 연결 상태·지속 연결·최신 GPU 수집 성공을 보장하는 표시가 아닙니다.</p></div>
+<div class="result"><h3 class="error">인증 실패 예시 · SSH 인증을 확인하세요</h3><p>저장된 사용자 이름과 SSH 키 경로를 확인하세요.</p><p class="meta">[ASSUMPTION] 결과 표면에서 원인과 수정 경로를 구분합니다. 연결 실패를 설정 삭제나 저장 실패로 표현하지 않습니다.</p></div>
+<div class="actions"><button type="button" disabled>서버 편집</button><button type="button" disabled>다시 테스트</button></div>
+<p class="meta">실제 테스트는 실행하지 않았습니다. 저장 전 편집 중인 값이 아니라 저장된 서버를 대상으로 하는 기존 계약을 유지합니다.</p>
+</section>
+<section class="section-card" id="monitoring" aria-labelledby="monitoring-title">
+<h2 id="monitoring-title">모니터링 꺼짐</h2><p class="assumption">[ASSUMPTION] 상태 안내 배치·문구 제안</p>
+<div class="result"><h3>inference-01 · 모니터링 꺼짐</h3><p>이 서버는 예약 수집에 포함되지 않습니다. 서버 정보는 목록에 남아 있습니다.</p><p class="meta">연결 실패와는 다른 상태입니다. 기존 값이 있어도 현재 관측이나 현재 사용 가능 상태로 표시하지 않습니다.</p></div>
+<div class="actions"><button type="button" disabled>모니터링 켜기</button></div>
+<p class="meta">서버별 … 메뉴 항목은 현재 상태에 따라 켜기/끄기로 표시하는 제안입니다. 이 버튼은 해당 메뉴 동작의 설명용 복제이며 실제 전환은 없습니다.</p>
+</section>
+<section class="section-card" aria-labelledby="editor-states-title">
+<h2 id="editor-states-title">편집의 짧은 상태 문구</h2><p class="assumption">[ASSUMPTION] 서로 다른 시점의 예시 · 상단 시트와 동시 발생 아님</p>
+<div class="result"><h3 class="error">입력 오류</h3><p>SSH 포트는 1–65535 사이의 정수여야 합니다.</p><p class="meta">해당 필드 아래 오류를 표시하고 입력을 유지하는 제안입니다.</p></div>
+<div class="result"><h3 class="error">저장 실패</h3><p>서버 정보를 저장하지 못했습니다.</p><p class="meta">입력을 유지하고 시트를 닫지 않는 제안입니다.</p></div>
+<div class="result"><h3>로컬 설정 저장 성공</h3><p>서버 정보를 저장했습니다. SSH 연결은 아직 확인하지 않았습니다.</p></div>
+</section>
+<section class="section-card span-all" id="import" aria-labelledby="import-title">
+<h2 id="import-title">SSH config 가져오기 · 미리보기</h2><p class="assumption">[ASSUMPTION] 사이드바 + 메뉴에서 진입하는 별도 표면 제안 · 선택 가능 여부와 오류 표시 방식은 아래 기존 계약에 근거</p>
+<p>SSH 별칭을 검토한 뒤 선택한 서버를 <strong>모니터링 꺼짐</strong>으로 저장합니다. 후보 하나를 편집 양식으로 가져오는 기존 경로도 유지합니다.</p>
+<div class="import-toolbar"><p><strong>선택 가능 2개 중 2개 선택</strong><br><span class="meta">일괄 선택 제외 3개 · 체크 상태는 예시이며 모두 비작동</span></p><div class="actions"><button type="button" disabled>SSH config 읽기</button><button type="button" disabled>선택 가능한 항목 모두 선택</button><button class="primary" type="button" disabled>선택한 2개 저장</button></div></div>
+<div class="table-scroll" role="region" tabindex="0" aria-label="가져오기 후보 표 · 좁은 화면에서 가로 스크롤">
+<table class="import-table"><caption>정적 후보 5개 · Host 별칭, 해석된 HostName, 저장 초안의 호스트·사용자·포트 · 모든 값은 예시</caption><thead><tr><th scope="col">선택</th><th scope="col">Host 별칭 / 초안 호스트</th><th scope="col">HostName</th><th scope="col">사용자 / 포트</th><th scope="col">선택 가능 여부 / 안내</th><th scope="col">개별 편집</th></tr></thead><tbody>
+<tr><td><input type="checkbox" checked disabled aria-label="gpu-lab-03 선택됨 · 예시"></td><td><strong>gpu-lab-03</strong><span class="meta">호스트: gpu-lab-03</span></td><td><code>192.0.2.31</code></td><td>minsu / 22</td><td><strong>선택 가능</strong></td><td><button type="button" disabled aria-label="gpu-lab-03을 편집 양식에 넣기">양식에 넣기</button></td></tr>
+<tr><td><input type="checkbox" checked disabled aria-label="inference-02 선택됨 · 예시"></td><td><strong>inference-02</strong><span class="meta">호스트: inference-02</span></td><td><code>192.0.2.32</code></td><td>minsu / 2222</td><td><strong>선택 가능</strong></td><td><button type="button" disabled aria-label="inference-02를 편집 양식에 넣기">양식에 넣기</button></td></tr>
+<tr><td><input type="checkbox" disabled aria-label="gpu-lab-01 선택 불가 · 이미 저장됨"></td><td><strong>gpu-lab-01</strong><span class="meta">호스트: gpu-lab-01</span></td><td><code>192.0.2.11</code></td><td>minsu / 22</td><td><strong class="warning">선택 제외 · 이미 저장된 서버</strong></td><td><button type="button" disabled aria-label="gpu-lab-01을 편집 양식에 넣기">양식에 넣기</button></td></tr>
+<tr><td><input type="checkbox" disabled aria-label="unconfigured 선택 불가 · 사용자 이름 없음"></td><td><strong>unconfigured</strong><span class="meta">호스트: unconfigured</span></td><td>알 수 없음</td><td>사용자 없음 / 22</td><td><strong class="warning">선택 제외 · 사용자 이름 없음</strong><span class="meta">후보 경고 예시: 사용자 이름을 확인하세요.</span></td><td><button type="button" disabled aria-label="unconfigured를 편집 양식에 넣기">양식에 넣기</button></td></tr>
+<tr><td><input type="checkbox" disabled aria-label="gpu-lab-03-copy 선택 불가 · 중복 후보"></td><td><strong>gpu-lab-03-copy</strong><span class="meta">호스트: gpu-lab-03</span></td><td><code>192.0.2.31</code></td><td>minsu / 22</td><td><strong class="warning">선택 제외 · 가져오기 후보 중복</strong></td><td><button type="button" disabled aria-label="gpu-lab-03-copy를 편집 양식에 넣기">양식에 넣기</button></td></tr>
+</tbody></table>
+</div>
+<p class="meta">기존 중복 판정은 초안 호스트·사용자 이름·포트 조합입니다. HostName이 같다는 이유만으로 중복으로 단정하지 않습니다. 경고는 전체 결과와 각 후보에 표시할 수 있으며, 경고 자체가 항상 선택 불가를 뜻하지는 않습니다.</p>
+<div class="outcome-grid">
+<div class="note"><h3>부분 저장 결과 예시 · 별도 상태</h3><p><strong>저장 1개 · 저장 시 건너뜀 0개 · 실패 1개</strong></p><p>gpu-lab-03 · 로컬 저장됨 / 모니터링 꺼짐</p><p class="error">inference-02 · 저장하지 못했습니다. (오류 문구 예시)</p><p class="meta">앞의 선택 제외 3개는 요청하지 않았으므로 이 결과의 건너뜀 수에 포함하지 않았습니다. 저장 성공은 SSH 연결 성공이 아닙니다.</p></div>
+<div class="note"><h3>읽기 실패·빈 결과 · 독립 예시</h3><p class="error">읽기 실패: SSH config를 읽지 못했습니다.</p><p>빈 결과: 가져올 SSH 별칭이 없습니다.</p><p class="meta">[ASSUMPTION] 두 상태를 구별하여 안내하고, 전체·후보별 경고와 저장 실패를 한 종류의 오류로 합치지 않습니다. 결과 표시는 제안이며 실제 파일을 읽지 않았습니다.</p></div>
+</div>
+<p class="meta" style="margin-top:12px">근거: 기존 후보 형식은 hostAlias·hostname·draft·warnings이며 draft는 기존 서버 필드만 담습니다. 선택 제외 사유는 사용자 이름 없음·저장 서버 중복·후보 중복입니다. 부분 결과는 기존 화면의 saved / skipped / failed 구분을 따릅니다. 자동 연결·원격 명령 실행을 추가하지 않습니다.</p>
+</section>
+</main>
+<footer class="footnote"><p><strong>[ASSUMPTION] 잠정안:</strong> 시트·삭제 확인의 크기·재질과 결과 배치·문구는 현재 시안을 유지합니다. 미저장 변경이 있으면 계속 편집/변경 버리기 확인을 제공하는 계약이며 이 HTML에는 해당 확인 동작이 없습니다. 960px 이하에서는 필드와 대체 상태를 한 열로 바꾸고 사이드바는 계속 표시합니다. 이는 최소 지원 창 크기 확정이 아닙니다.</p><p>초안 시각 토큰·시스템 폰트는 DESIGN.md를 따릅니다. 이 모형은 포커스 트랩·실제 macOS 창·제품 동작을 구현하거나 검증하지 않습니다.</p></footer>
+</body>
+</html>

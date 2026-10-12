@@ -26,12 +26,6 @@ export type SettingsValidationResult = {
 
 export type SshImportCandidateDomIdKind = 'reason' | 'warnings';
 
-export type ServerRegistrySummary = {
-  readonly total: number;
-  readonly enabled: number;
-  readonly disabled: number;
-};
-
 export const emptySettingsForm: SettingsFormState = {
   id: null,
   name: '',
@@ -42,6 +36,11 @@ export const emptySettingsForm: SettingsFormState = {
   pollingIntervalSeconds: '30',
   enabled: true
 };
+
+export const settingsFormsEqual = (left: SettingsFormState, right: SettingsFormState): boolean =>
+  left.id === right.id && left.name === right.name && left.host === right.host &&
+  left.port === right.port && left.username === right.username && left.sshKeyPath === right.sshKeyPath &&
+  left.pollingIntervalSeconds === right.pollingIntervalSeconds && left.enabled === right.enabled;
 
 type ServerFormSource = Omit<Server, 'pollingIntervalSeconds'> & {
   readonly pollingIntervalSeconds: number | null;
@@ -79,15 +78,6 @@ export const toServerInput = (form: SettingsFormState): ServerInput => ({
   pollingIntervalSeconds: form.pollingIntervalSeconds.trim() === '' ? null : Number(form.pollingIntervalSeconds),
   enabled: form.enabled
 });
-
-export const buildServerRegistrySummary = (servers: readonly Server[]): ServerRegistrySummary => {
-  const enabled = servers.filter((server) => server.enabled).length;
-  return {
-    total: servers.length,
-    enabled,
-    disabled: servers.length - enabled
-  };
-};
 
 export const getSettingsFieldHelperId = (field: SettingsFormField): string => `settings-${field}-helper`;
 
@@ -137,7 +127,7 @@ export const getBulkImportCandidateMetadata = ({ candidates, existingServers }: 
   const importKeys = new Set<string>();
 
   return candidates.map((candidate) => {
-    const duplicateKey = getBulkImportDuplicateKey(candidate.draft);
+    const duplicateKey = getBulkImportDuplicateKey(toBulkImportServerInput(candidate));
     const skipReasons: BulkImportSkipReason[] = [];
     if (candidate.draft.username.trim() === '') {
       skipReasons.push('missing_username');

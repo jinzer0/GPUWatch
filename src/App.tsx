@@ -2,52 +2,63 @@ import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 import { Shell } from './components/Shell';
-import { ErrorState } from './components/ui';
+import { ErrorState, LoadingState } from './components/ui';
 import { ServerDetailScreen } from './features/detail/ServerDetailScreen';
-import { HistoryMonitorScreen } from './features/history/HistoryMonitorScreen';
-import { OverviewScreen } from './features/overview/OverviewScreen';
-import { ProcessTableScreen } from './features/processes/ProcessTableScreen';
 import { SettingsScreen } from './features/settings/SettingsScreen';
+import { AppearanceSettings } from './features/settings/AppearanceSettings';
 import { initializeApp, listOverview, queryKeys } from './lib/api';
+import { connectAppearance } from './lib/appearance';
 import { useUiStore } from './lib/store';
 
-const App = () => {
-  const activeTab = useUiStore((state) => state.activeTab);
+const MainScreen = () => {
   const selectedServerId = useUiStore((state) => state.selectedServerId);
-  const selectServer = useUiStore((state) => state.selectServer);
-
+  const managementOpen = useUiStore((state) => state.managementOpen);
+  const reconcileServers = useUiStore((state) => state.reconcileServers);
   const initializeQuery = useQuery({ queryKey: queryKeys.initialize, queryFn: initializeApp });
-  const overviewQuery = useQuery({ queryKey: queryKeys.overview, queryFn: listOverview });
+  const overviewQuery = useQuery({
+    queryKey: queryKeys.overview,
+    queryFn: listOverview,
+    enabled: initializeQuery.isSuccess,
+    refetchInterval: 5_000
+  });
   const overview = overviewQuery.data ?? initializeQuery.data ?? null;
+  const validSelectedServerId = overviewQuery.data
+    ? overviewQuery.data.find((server) => server.id === selectedServerId)?.id ?? overviewQuery.data[0]?.id ?? null
+    : null;
 
   useEffect(() => {
-    if (!selectedServerId && overview && overview.length > 0) {
-      selectServer(overview[0].id);
+    if (overviewQuery.isSuccess) {
+      reconcileServers(overviewQuery.data.map((server) => server.id));
     }
-  }, [overview, selectServer, selectedServerId]);
+  }, [overviewQuery.data, overviewQuery.isSuccess, reconcileServers]);
 
-  const screen = (() => {
-    switch (activeTab) {
-      case 'detail':
-        return <ServerDetailScreen selectedServerId={selectedServerId} />;
-      case 'history':
-        return <HistoryMonitorScreen overview={overview ?? []} selectedServerId={selectedServerId} />;
-      case 'processes':
-        return <ProcessTableScreen />;
-      case 'settings':
-        return <SettingsScreen />;
-      case 'overview':
-      default:
-        return <OverviewScreen error={overviewQuery.error} isLoading={overviewQuery.isLoading} overview={overview ?? []} />;
-    }
-  })();
-
+  const error = initializeQuery.error ?? overviewQuery.error;
   return (
     <Shell overview={overview}>
-      {initializeQuery.error ? <ErrorState message={initializeQuery.error.message} /> : null}
-      {screen}
+      {error ? <ErrorState message={error.message} /> : null}
+      {initializeQuery.isPending || overviewQuery.isLoading ? (
+        <LoadingState label="Loading servers..." />
+      ) : error && !overviewQuery.data ? null : (
+        <ServerDetailScreen selectedServerId={validSelectedServerId} />
+      )}
+      {managementOpen ? <SettingsScreen /> : null}
     </Shell>
   );
+};
+
+export const getWindowRole = (search: string): 'main' | 'settings' =>
+  new URLSearchParams(search).get('window') === 'settings' ? 'settings' : 'main';
+
+const App = () => {
+  const role = getWindowRole(window.location.search);
+  useEffect(() => {
+    document.title = role === 'settings' ? 'GPUWatcher 설정' : 'GPUWatcher';
+    return connectAppearance();
+  }, [role]);
+  if (role === 'settings') {
+    return <div className="settings-window"><header className="settings-window-titlebar">GPUWatcher 설정</header><AppearanceSettings /></div>;
+  }
+  return <MainScreen />;
 };
 
 export default App;

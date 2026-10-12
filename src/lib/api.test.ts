@@ -56,6 +56,12 @@ describe('frontend backend transport adapter', () => {
     clearGpuWatcherBridge();
   });
 
+  it('reports missing desktop mutation transport with backend_unavailable', async () => {
+    await expect(saveServer(serverInput)).rejects.toMatchObject({ type: 'backend_unavailable' });
+    await expect(deleteServer('server-2')).rejects.toMatchObject({ type: 'backend_unavailable' });
+    await expect(saveGpuAvailableWatch(watchInput)).rejects.toMatchObject({ type: 'backend_unavailable' });
+  });
+
   it('calls every exported command-backed function through Electron action-specific bridge methods', async () => {
     const bridge = {
       initializeApp: vi.fn().mockResolvedValue(okBridgeResponse([overviewRow])),

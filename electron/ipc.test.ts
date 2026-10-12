@@ -161,16 +161,19 @@ describe('Electron IPC bridge contract', () => {
   });
 
   it('keeps main-only actions out of renderer IPC/preload', () => {
-    expect(mainOnlyHelperContract.map((entry) => entry.helperAction)).toEqual(['poll_due_servers', 'consume_notification_events']);
+    expect(mainOnlyHelperContract.map((entry) => entry.helperAction)).toEqual(['poll_due_servers', 'consume_notification_events', 'reset_availability_observations']);
     expect(mainOnlyHelperContract.every((entry) => entry.electronPreloadMethod === null)).toBe(true);
     expect(helperIpcChannels.map((entry) => entry.action)).not.toContain('poll_due_servers');
     expect(helperIpcChannels.map((entry) => entry.channel)).not.toContain('gpuwatcher:helper:pollDueServers');
     expect(helperIpcChannels.map((entry) => entry.action)).not.toContain('consume_notification_events');
     expect(helperIpcChannels.map((entry) => entry.channel)).not.toContain('gpuwatcher:helper:consumeNotificationEvents');
+    expect(helperIpcChannels.map((entry) => entry.action)).not.toContain('reset_availability_observations');
+    expect(packagedPreloadMethods()).not.toContain('resetAvailabilityObservations');
 
     const bridge = createGpuwatcherBridge(vi.fn());
     expect(Object.keys(bridge)).not.toContain('pollDueServers');
     expect(Object.keys(bridge)).not.toContain('consumeNotificationEvents');
+    expect(Object.keys(bridge)).not.toContain('resetAvailabilityObservations');
   });
 
   it('keeps TypeScript and Rust contract metadata aligned for actions and visibility', () => {
@@ -194,7 +197,7 @@ describe('Electron IPC bridge contract', () => {
       .map(([name]) => name)
       .sort();
 
-    expect(helperContract).toHaveLength(19);
+    expect(helperContract).toHaveLength(20);
     expect(helperContract.map((entry) => entry.helperAction)).toEqual([
       'initialize_app',
       'list_overview',
@@ -214,6 +217,7 @@ describe('Electron IPC bridge contract', () => {
       'save_gpu_available_watch',
       'delete_watch_rule',
       'consume_notification_events',
+      'reset_availability_observations',
       'health'
     ]);
     expect(rustEntries).toEqual(
@@ -236,8 +240,17 @@ describe('Electron IPC bridge contract', () => {
     expect(helperIpcChannels.map((entry) => entry.action)).toEqual(rendererHelperContract.map((entry) => entry.helperAction));
     expect(mainOnlyHelperContract).toEqual([
       expect.objectContaining({ helperAction: 'poll_due_servers', visibility: 'main-only' }),
-      expect.objectContaining({ helperAction: 'consume_notification_events', visibility: 'main-only' })
+      expect.objectContaining({ helperAction: 'consume_notification_events', visibility: 'main-only' }),
+      expect.objectContaining({ helperAction: 'reset_availability_observations', visibility: 'main-only' })
     ]);
+  });
+
+  it('validates exact nullable reset scope without accepting arbitrary payloads', () => {
+    expect(validateHelperPayload('reset_availability_observations', { serverId: null })).toEqual({ ok: true, data: { serverId: null } });
+    expect(validateHelperPayload('reset_availability_observations', { serverId: 'server-a' })).toEqual({ ok: true, data: { serverId: 'server-a' } });
+    for (const payload of [undefined, null, [], {}, { serverId: '' }, { serverId: ' ' }, { serverId: 1 }, { serverId: null, extra: true }]) {
+      expect(validateHelperPayload('reset_availability_observations', payload)).toMatchObject({ ok: false, error: { type: 'invalid_payload' } });
+    }
   });
 
   it('rejects malformed payloads with structured helper contract errors', () => {

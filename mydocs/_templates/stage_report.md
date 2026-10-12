@@ -1,9 +1,11 @@
 # 단계 보고서 템플릿
 
-이 파일은 `mydocs/working/task_{milestone_slug}_{issue}_stage{stage}.md` 작성용 중앙 템플릿이다. 단계 보고서는 한 Stage의 구현, 검증, 잔여 위험, 다음 단계 영향을 기록하고 다음 단계 진입 승인을 받기 위한 문서다.
+이 파일은 `mydocs/working/task_{milestone_slug}_{issue}_stage{stage}.md` 작성용 중앙 템플릿이다. 단계 보고서는 한 Stage의 구현, 검증, 잔여 위험, 다음 단계 영향을 기록한다. 단계 수는 작업에 맞게 1개 이상이며 작은 작업은 기존 이슈/맥락 기록에 동일한 증거를 남길 수 있다.
+
+위험 분류와 승인 범위는 [공유 위험 정책](../manual/agent_code_hyperfall_rule_conflict.md)을 따른다. LOW는 즉시, 명확히 요청된 MEDIUM 범위는 계획·구현·검증·보고·다음 단계까지 자동 진행한다. HIGH는 해당 위험 결정만 승인받고 정확한 결정과 근거를 기록한다. 독립적인 안전 작업은 계속하며 일반 단계 확인을 기다리지 않는다. 도구 권한과 명시적 커밋 허가는 별도로 유지한다.
 
 GitHub Issue: [#{issue}](https://github.com/jinzer0/GPUWatch/issues/{issue})
-구현계획서: [`task_{milestone_slug}_{issue}_impl.md`](../plans/task_{milestone_slug}_{issue}_impl.md)
+계획/맥락: {구현계획서 또는 작은 작업의 기존 이슈/맥락 기록 링크}
 Stage: {stage}
 
 ## 단계 목적
@@ -30,7 +32,7 @@ Stage: {stage}
 
 결과:
 
-- {OK/MISS와 핵심 출력 요약}
+- {OK/MISS와 핵심 출력 요약, 증거 위치. 실패/실행 불가도 원인, 미완료 항목과 영향을 기록하며 보고를 생략하지 않는다.}
 
 ## 잔여 위험
 
@@ -40,6 +42,9 @@ Stage: {stage}
 
 - {다음 Stage에서 이어받아야 할 맥락. 없으면 `없음`으로 적는다.}
 
-## 승인 요청
+## 위험 결정 기록
 
-- Stage {stage} 산출물과 검증 결과를 승인하면 다음 단계로 진행한다.
+- 위험 분류와 근거: {LOW/MEDIUM/HIGH와 이유}
+- HIGH 결정: {정확한 결정, 대상, 범위, 영향. 없으면 해당 없음}
+- HIGH 승인 근거/상태: {해당 결정에 대한 작업지시자 응답과 맥락. 없으면 해당 없음}
+- 다음 작업: {요청 범위 내 자동 진행 작업과 독립적인 안전 작업. 실패 시 완료로 표시하지 않고 필요한 수정/검증을 적는다.}

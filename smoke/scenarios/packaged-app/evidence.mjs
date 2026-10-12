@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { expectedBridgeKeys, forbiddenBridgeKeys, forbiddenElectronMetadataKeys } from '../../shared/constants.mjs';
 import { evidenceDir } from '../../shared/paths.mjs';
-import { helperRestored } from './helper-error.mjs';
+import { sourceHelperIsExecutable } from './helper-error.mjs';
 
 export function selectedLogExcerpt(logs) {
   return logs
@@ -13,7 +13,7 @@ export function selectedLogExcerpt(logs) {
     .slice(0, 8000);
 }
 
-export async function buildPackagedEvidence({ taskEvidenceName, startedAt, appPath, helperPath, executablePath, helperMode, success, failure, logs, timestamp }) {
+export async function buildPackagedEvidence({ taskEvidenceName, artifactMode, discovery, sourceUnchanged, startedAt, appPath, helperPath, executablePath, helperMode, success, failure, logs, timestamp }) {
   const packLogPath = path.join(evidenceDir, `${taskEvidenceName}-electron-pack.log`);
   const packLog = existsSync(packLogPath) ? await readFile(packLogPath, 'utf8') : '';
   const packageWarnings = packLog
@@ -22,13 +22,13 @@ export async function buildPackagedEvidence({ taskEvidenceName, startedAt, appPa
     .join('\n');
 
   const launchEvidence = [
-    'Task 2 unsigned local packaged Electron app launch smoke evidence',
+    `${taskEvidenceName} ${artifactMode} local packaged Electron app launch smoke evidence`,
     `Started at: ${startedAt}`,
     `Completed at: ${timestamp()}`,
-    'Package command: npm run electron:pack',
+    `Artifact mode: ${artifactMode}; packaging is not performed by this smoke`,
     `Package log: ${packLogPath}`,
     `Package warnings: ${packageWarnings || `No package warnings captured in ${taskEvidenceName}-electron-pack.log.`}`,
-    'App discovery: recursive release/electron first match, equivalent to find release/electron -name GPUWatcher.app -type d -print -quit',
+    `App discovery: ${discovery}`,
     `Discovered app path: ${appPath}`,
     `Packaged app executable: ${executablePath}`,
     `Packaged helper path: ${helperPath}`,
@@ -38,7 +38,13 @@ export async function buildPackagedEvidence({ taskEvidenceName, startedAt, appPa
     'Success launch environment: GPUWATCHER_HELPER_PATH unset; GPUWATCHER_TEST_DATA_DIR isolated; HOME isolated',
     `Isolated data dir: ${success.tempDataDir}`,
     `Isolated HOME: ${success.tempHomeDir}`,
-    `Canonical test DB exists: ${existsSync(success.dbPath)} (${success.dbPath})`,
+    `Canonical test DB existed before owned cleanup: ${success.dbExistedBeforeCleanup} (${success.dbPath})`,
+    `Disposable runtime app/helper: ${success.runtimeAppPath}; ${success.runtimeHelperPath}`,
+    `Guarded actions: ${JSON.stringify(success.guardActions)}`,
+    `Guard used: ${success.guardUsed}`,
+    `Pre-launch copy signature/ticket proof: ${JSON.stringify(success.signatureProof)}`,
+    `Source app seal unchanged: ${sourceUnchanged ?? 'not measured (unsigned); source helper executable checked'}`,
+    `Disposable app removed: ${success.isolatedCopyRemoved}`,
     `Renderer URL: ${success.bridgeInfo.url}`,
     `Nonblank UI body length: ${success.bridgeInfo.bodyLength}`,
     `window.gpuwatcher exposed: ${success.bridgeInfo.hasGpuwatcher}`,
@@ -56,22 +62,29 @@ export async function buildPackagedEvidence({ taskEvidenceName, startedAt, appPa
   ].join('\n');
 
   const failureEvidence = [
-    'Task 2 packaged helper resolution failure evidence',
+    `${taskEvidenceName} ${artifactMode} packaged helper fault evidence`,
     `Started at: ${startedAt}`,
     `Completed at: ${timestamp()}`,
-    'Failure mode: temporarily chmod removed executable bits from packaged helper, then restored them',
+    'Failure mode: removed executable bits only in an owned disposable app copy; source package untouched',
+    `Fault classification: ${failure.faultClass}; OS signature enforcement is not backend error acceptance`,
+    `Fault pre-mutation copy proof: ${JSON.stringify(failure.signatureBefore)}`,
+    `Fault post-mutation signature/ticket: ${JSON.stringify(failure.signatureAfter)}`,
+    `Fault launch outcome: ${JSON.stringify(failure.launchOutcome)}`,
+    `PID-scoped OS diagnostic: ${JSON.stringify(failure.osDiagnostic ?? null)}`,
     `App path: ${appPath}`,
     `Helper path: ${helperPath}`,
+    `Disposable fault helper: ${failure.faultHelperPath}`,
+    `Disposable app removed: ${failure.isolatedCopyRemoved}`,
     `Failure launch cwd: ${failure.nonRepoCwd}`,
     'Failure launch environment: GPUWATCHER_HELPER_PATH unset; GPUWATCHER_TEST_DATA_DIR isolated; HOME isolated',
     `Isolated data dir: ${failure.tempDataDir}`,
     `Isolated HOME: ${failure.tempHomeDir}`,
-    `Renderer bridge structured helperHealth error: ${JSON.stringify(failure.bridgeError)}`,
-    `Visible helper error excerpt: ${failure.errorBody.split('\n').filter((line) => /helper_spawn_failed|permission denied|EACCES|failed to spawn helper|helper_contract|helper|error/i.test(line)).slice(0, 12).join(' | ')}`,
-    `App remained nonblank after helper error: ${failure.errorBody.toLowerCase().includes('gpuwatcher') && failure.errorBody.toLowerCase().includes('server registry')}`,
-    `Navigation after helper error: ${failure.navigableBody.toLowerCase().includes('fleet snapshot') || failure.navigableBody.toLowerCase().includes('server registry')}`,
-    `Helper restored executable: ${helperRestored(helperPath)}`,
-    `Screenshot: ${failure.errorScreenshot}`,
+    `Renderer bridge structured helperHealth error: ${failure.bridgeError ? JSON.stringify(failure.bridgeError) : 'not observed (OS fault)'}`,
+    `Visible helper error excerpt: ${failure.errorBody?.split('\n').filter((line) => /helper_spawn_failed|permission denied|EACCES|failed to spawn helper|helper_contract|helper|error/i.test(line)).slice(0, 12).join(' | ') ?? 'not observed (OS fault)'}`,
+    `App remained nonblank after helper error: ${failure.errorBody ? failure.errorBody.includes('GPUWatcher') && failure.errorBody.includes('Save server') : 'not observed (OS fault)'}`,
+    `Management remains navigable after helper error: ${failure.navigableBody ? failure.navigableBody.includes('Save server') : 'not observed (OS fault)'}`,
+    `Source helper remains executable: ${sourceHelperIsExecutable(helperPath)}`,
+    `Screenshot: ${failure.errorScreenshot ?? 'not captured (OS fault)'}`,
     `Packaged app log excerpt: ${selectedLogExcerpt(logs) || 'No relevant packaged app log excerpt.'}`
   ].join('\n');
 

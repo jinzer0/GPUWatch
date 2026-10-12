@@ -70,7 +70,8 @@ fn watch_outbox_consumes_once_and_bounds_rows() {
     let events = repository.consume_notification_outbox().expect("outbox");
 
     assert_eq!(events.len(), 1);
-    assert_eq!(events[0].body, "Lab GPU · GPU 0 is available");
+    assert_eq!(events[0].title, "Configured condition met");
+    assert_eq!(events[0].body, "Lab GPU · GPU 0: configured condition met");
     assert_eq!(outbox_row_count(&db_path), 0);
 }
 

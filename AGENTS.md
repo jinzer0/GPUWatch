@@ -10,22 +10,24 @@
 
 ## 하이퍼-워터폴 핵심 규칙
 
-이 프로젝트는 **하이퍼-워터폴** 방법론을 적용한다. 에이전트의 기본 동작(빠른 실행, 자율 수정)과 충돌하므로 반드시 숙지한다. 상세: [`agent_code_hyperfall_rule_conflict.md`](mydocs/manual/agent_code_hyperfall_rule_conflict.md).
+이 프로젝트는 BMAD의 요구사항·설계와 **하이퍼-워터폴**의 실행·Evidence·Context Persistence를 결합한다. 승인 판단의 단일 진실 원천: [`agent_code_hyperfall_rule_conflict.md`](mydocs/manual/agent_code_hyperfall_rule_conflict.md). 하위 매뉴얼·Skill·템플릿의 단계 지침에도 이 위험 기반 정책을 적용한다.
 
-- 소스 수정 전 반드시 작업지시자 승인 요청
-- 작업은 GitHub Issue 기준으로 추적
-- 새 기능, 버그 수정, 구조 변경은 `이슈 -> 브랜치 -> 오늘할일 -> 계획서 -> 구현 -> 검증 -> 최종 보고서 -> PR` 순서 절대 생략 금지
-- 각 단계 완료 후 승인 없이 다음 단계 진행 금지
-- 범위가 불명확하거나 기존 작업과 충돌할 가능성이 있으면 먼저 확인
+- LOW(오타·문서·국소 수정·테스트)는 별도 승인 없이 실행·검증·보고한다.
+- MEDIUM(기존 아키텍처 내 기능·다중 파일 변경)은 명확한 사용자 요청 자체를 Scope 승인으로 삼아 계획·구현·테스트·리뷰·수정·기록을 자율 수행한다. 같은 범위를 다시 승인받지 않는다.
+- HIGH(중대한 설계·보안·호환성 변경, 파괴적 데이터 작업, 운영 배포, 중대한 외부 영향·비용, 큰 Scope 확장)는 해당 위험 결정/행동만 명시 승인받는다. 독립적인 안전 작업은 계속한다.
+- 위험도는 파일 수나 코드량이 아니라 영향·가역성·보안·데이터 무결성·외부 부작용으로 판단한다.
+- GitHub Issue가 있는 작업은 해당 이슈로 추적한다. 작은 작업은 기존 기록과 검증 근거로 충분하며, 신규 이슈·계획서·PR 전체 흐름을 실행의 선행 조건으로 강제하지 않는다.
+- Stage 수는 복잡도와 위험에 맞춘다(최소 수 없음). 계획·준비·Stage 전환·테스트·보고는 응답 대기 없는 Checkpoint다. 상태·Evidence·세션 handoff는 유지한다.
+- 핵심 요구사항 충돌·불명확성, 반복 실패, 해결 불가능한 차단, Scope 밖 결정만 확인/에스컬레이션한다.
 - 사용자나 다른 작업자가 만든 변경은 되돌리지 않음
 - 이슈가 `OPEN`이면 PR merge만으로 close를 승인하지 않으며, `pr-merge-cleanup` preflight가 atomically fetched `state`와 exact server `updated_at`를 포함해 출력한 exact approval tuple을 같은 스레드에서 승인받은 cleanup transaction에서만 close한다. 각 destructive boundary와 close 직전에 exact `updated_at`를 재검증하며, 이미 `CLOSED`인 이슈는 검증된 no-op으로 처리한다.
 - 문서 수정은 기존 내용을 먼저 읽고 필요한 부분만 수정하며, 불가피할 때만 내용을 추가
-- 제품/사용자/기여자/외부 통합/API/아키텍처/로드맵 문서를 생성, 이동, 수정할 때는 수행계획서에 문서 위치 판단을 기록하고 승인받음
+- 제품/사용자/기여자/외부 통합/API/아키텍처/로드맵 문서의 위치 판단은 기존 계획/작업 기록에 남긴다. 승인된 Scope 내 문서 갱신은 자율 수행하고 새 공식 루트 선택이나 위험한 설계 변경만 별도 결정한다.
 - `mydocs/manual`은 대상 프로젝트 제품 문서 위치가 아니며, 공식 문서 루트(`docs/`, `specs/`, `site/`, `website/`, `adr/` 등)는 대상 프로젝트가 별도 task에서 명시적으로 선택
 - 작업 완료 후 다음 작업에 필요하지 않은 로컬/원격 부산물은 정리
 - PR merge와 이슈 close 후에는 `devel`로 돌아오고, 더 이상 필요 없는 `local/task{번호}` 브랜치와 임시 worktree를 정리
 
-**승인 간주 조건**: 작업지시자가 같은 스레드에서 "계속 진행", "다음 단계 진행"처럼 명시 지시한 경우에만 해당 단계 승인으로 간주한다.
+**권한 경계**: 명확한 LOW/MEDIUM 요청은 해당 Scope의 실행 권한이다. HIGH 승인은 같은 스레드에 결정·대상·범위·근거를 기록하며 다른 위험 행동으로 전파하지 않는다. Commit·원격 게시·Merge·Release·이슈 close와 플랫폼 Tool Permission은 별도 기존 권한을 준수한다. 워크플로 변경은 도구 권한 완화가 아니다.
 
 ## 명명 규칙
 
@@ -53,7 +55,8 @@
 
 #### High-Value Paths
 
-- `package.json`: npm scripts and Electron Builder config; packaged output goes to `release/electron/` with `identity: null`.
+- `package.json`: npm scripts and Electron Builder unsigned defaults (`identity: null`). Signed runs use the explicit driver/native callback and live under `release/electron/signed/<run>/`; unsigned discovery must exclude that namespace.
+- `electron/signedRelease.mjs` and `electron/signPackagedApp.mjs`: approved plan/source/hash-bound Developer ID signing and separate app ZIP/DMG approval gates. Keep app JIT-only and helper empty entitlements; no unsigned/ad-hoc fallback or automatic retry of uncertain Apple submissions.
 - `electron/main.ts`: BrowserWindow security settings and scheduler startup; keep `contextIsolation: true` and `nodeIntegration: false`.
 - `electron/helperContract.ts`: canonical TS action contract. `poll_due_servers` is `main-only`; renderer/preload must not expose it.
 - `electron/preload.ts` and `electron/preload-runtime.cts`: action-specific `window.gpuwatcher` bridge. No generic `invoke`, `runAction`, or helper path exposure.
@@ -77,6 +80,9 @@ npm run electron:build              # tsc -p tsconfig.electron.json, includes .c
 npm run helper:build                # cargo build for helper binary
 npm run electron:pack               # build + helper build + unsigned electron-builder dir package
 npm run electron:dist:unsigned      # internal/test unsigned DMG+ZIP artifacts, no publish
+npm run electron:pack:signed        # explicit identity/Team/profile; signing-only candidate, no Apple submit
+npm run electron:dist:signed -- --manifest "$SIGNED_MANIFEST" # formats the same Accepted/stapled app, no app resign
+node smoke/electron-signed-dist-artifacts.mjs --manifest "$SIGNED_MANIFEST" --approved-app-manifest-sha256 "$APPROVED_APP_MANIFEST_SHA256" --approved-dmg-manifest-sha256 "$APPROVED_DMG_MANIFEST_SHA256" # original approval hashes; same selectors
 npm run smoke:electron:first-run    # Electron dev-surface UI smoke; requires built helper
 node smoke/electron-packaged-app-smoke.mjs  # packaged .app smoke after electron:pack
 cargo test --manifest-path crates/gpuwatcher-core/Cargo.toml
@@ -89,6 +95,13 @@ GPUWATCHER_LIVE_SSH_TARGET=tml-server cargo test --manifest-path crates/gpuwatch
 - Normal tests must not require live SSH or `tml-server`; live checks stay ignored and env-gated with the exact command above.
 - `npm run electron:pack` creates an unsigned local `.app` directory, not a signed/notarized/DMG/uploaded release. Discover the app path with `find release/electron -name GPUWatcher.app -type d` instead of hardcoding `mac` vs `mac-arm64`.
 - `npm run electron:dist:unsigned` creates internal/test unsigned DMG+ZIP artifacts only. They are not signed, notarized, uploaded, auto-updated, production release-ready, or external distribution-ready.
+- Signed workflow: fresh P/C-bound run → prepare-app → exact app tuple approval → submit-app/Accepted/staple → package/prepare-dmg → separate exact DMG tuple approval → submit-dmg/Accepted/staple → final verifier. ZIP itself is not stapled. Details: `docs/smoke-checklist.md`.
+- Runtime plan validation pins the approved immutable plan blob against HEAD/index/working bytes and regular nonexecutable file metadata. The historical approved plan OID remains the approval/manifest anchor, but runtime must not require its object or ancestry after squash. Task-stage approvals still validate the exact plan-only commit and topic lineage separately; do not weaken those gates.
+- Final signed verification requires explicit identity/Team/profile selectors, read-only Apple info/log rechecks, codesign/stapler/spctl, app equality in ZIP/DMG, final hashes and owned cleanup. Keep the original source app immutable; launch canonical isolated copies with the original helper, without the unsigned guard. Disposable chmod-only faults require either real structured backend/UI proof or exact PID/time-scoped signature enforcement proof; ambiguity is failure.
+- The final verifier requires the manifest source commit object and checks its tree against HEAD plus index/working/untracked inputs before Apple/native/runtime work and again before success. Only regular nonexecutable nonbinary README.md/AGENTS.md or .md files under docs/mydocs may differ; the approved plan blob stays fixed. Product/packaging drift, document-shaped symlinks/binaries or unknown source require a fresh run and approvals, not an old Accepted artifact or automatic fetch. The receipt records the source/head/documentation proof; never relabel the manifest source after squash or document-only commits.
+- Source proof rejects assume-unchanged/skip-worktree/unresolved index flags and compares physical bytes/modes against indexed blobs so clean filters or core.fileMode=false cannot hide product edits. Only the unchanged committed root .gitignore may exclude generated/local files; local/global/nested ignore rules cannot authorize untracked product inputs. This is a versioned-source proof, not a filesystem lock or a hermetic build/environment claim.
+- Submit must exclusive-create the original pre-submit approval-app-manifest.json/approval-dmg-manifest.json before state mutation/upload. Final verification requires independently supplied original app/DMG approval manifest SHA256 anchors and validates snapshot/source/tuple bindings before native work and before success. Never derive anchors from mutable finalized records, overwrite missing/tampered snapshots, or relabel artifact source after a document-only commit. A read-only file alone is not immutable approval evidence.
+- Local Accepted/stapled artifacts are not GitHub publication, auto-update, live SSH/physical input/OS notification success, or final external-distribution approval. Historical artifacts retain their own source/plan even when a new correction changes product inputs.
 - Plain Vite browser runs lack the Electron preload bridge; screens should keep static identity/read-only empty states and explicit `backend_unavailable` errors for backend actions.
 - Use `GPUWATCHER_TEST_DATA_DIR` only for tests/smoke isolation. Production data lives under the macOS data dir as `GPUWatcher/gpuwatcher.sqlite3`.
 - Rust LSP may be unavailable because `rust-analyzer` is not installed here; use `cargo fmt`, focused Cargo tests, and crate tests for Rust verification.
@@ -114,6 +127,7 @@ GPUWATCHER_LIVE_SSH_TARGET=tml-server cargo test --manifest-path crates/gpuwatch
 #### Commit Convention
 
 - Do not commit unless explicitly requested.
+- New repository commits must use the configured GPG signing key and verify the exact commit signature/fingerprint before publication. Do not override commit.gpgsign to false or use unsigned fallback; do not rewrite existing history just to retrofit signatures.
 - Existing history uses English conventional commits such as `feat(electron): ...`, `refactor(core): ...`, `docs(electron): ...`.
 - Every future commit attribution must include exactly:
   `Ultraworked with [Sisyphus](https://github.com/code-yeongyu/oh-my-openagent)`
@@ -123,7 +137,7 @@ GPUWATCHER_LIVE_SSH_TARGET=tml-server cargo test --manifest-path crates/gpuwatch
 
 - [`README.md`](README.md) — 프로젝트 개요, 초기 설정, 빌드
 - [`mydocs/manual/document_structure_guide.md`](mydocs/manual/document_structure_guide.md) — `mydocs/` 폴더 역할, 문서 파일명, 외부 PR 폴더 정책, Skills 위치 정책
-- [`mydocs/manual/task_workflow_guide.md`](mydocs/manual/task_workflow_guide.md) — 타스크 진행 16단계, 커밋 메시지 규칙, 작업 시간 규칙
+- [`mydocs/manual/task_workflow_guide.md`](mydocs/manual/task_workflow_guide.md) — 규모에 맞는 타스크 진행, Evidence, 커밋 메시지 규칙, 작업 시간 규칙
 - [`mydocs/manual/git_workflow_guide.md`](mydocs/manual/git_workflow_guide.md) — 브랜치 정책, Git 다이어그램, 메인테이너/컨트리뷰터 워크플로우
 - [`mydocs/manual/pr_process_guide.md`](mydocs/manual/pr_process_guide.md) — 외부 기여 PR 검토
 - [`mydocs/manual/agent_code_hyperfall_rule_conflict.md`](mydocs/manual/agent_code_hyperfall_rule_conflict.md) — 하이퍼-워터폴과 에이전트 기본 동작 충돌 규칙

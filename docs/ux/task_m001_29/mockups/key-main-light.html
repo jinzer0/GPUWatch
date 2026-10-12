@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GPUWatcher — 라이트 메인 창 · 설계 참조 시안</title>
+<style>
+/* DESIGN: ServerSidebar/ServerRow; EXPERIENCE: Information Architecture, Flow 2.
+   메뉴 펼침만 HTML 기본 동작이며 서버 조작은 비작동 모형이다. */
+.server-item{position:relative;margin-bottom:4px}.server-item>.server{padding-right:40px}.server-menu{position:relative;margin-top:-42px;padding-top:0}.server-menu>summary{list-style:none;cursor:pointer;width:28px;height:28px;margin-left:auto;margin-right:6px;display:grid;place-items:center;border-radius:4px;color:var(--text)}.server-menu>summary::-webkit-details-marker,.add-menu>summary::-webkit-details-marker{display:none}.server-menu[open]{padding-bottom:4px}.menu-items{margin:8px 0;padding:4px;border:1px solid var(--border);border-radius:6px;background:var(--panel)}.menu-items button{display:block;width:100%;text-align:left;border:0;background:none;padding:6px;color:var(--text);opacity:1}.menu-items .destructive{color:var(--error)}.add-menu>summary{list-style:none;cursor:pointer;padding:6px 8px;color:var(--text)}.menu-note{font-size:11px;color:var(--muted);padding:4px 6px}
+:root{color-scheme:light;--base:#F5F5F7;--panel:#FFFFFF;--text:#202124;--muted:#555860;--border:#D5D7DC;--focus:#155FC0;--selected:#E2ECFA;--warning:#815100;--error:#B42318;--metric-low:#2E7D32;--metric-medium:#F2D000;--metric-high:#C62828;--metric-track:#E6E8EC;--s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--sidebar:220px;--control:28px;--r1:4px;--r2:6px;--r3:8px}
+*{box-sizing:border-box}body{margin:0;padding:var(--s5);background:var(--base);color:var(--text);font:400 13px/1.5 -apple-system,BlinkMacSystemFont,system-ui,sans-serif}h1,h2,h3,p{margin:0}h1,h2{font-size:17px;font-weight:600;line-height:1.4}h3{font-size:13px;font-weight:600}button{font:inherit;color:inherit}a{color:var(--focus);text-underline-offset:var(--s1)}:focus-visible{outline:2px solid var(--focus);outline-offset:var(--s1)}
+.legend,.boundary{max-width:calc(var(--sidebar)*5);margin:0 auto var(--s4);font-size:12px;color:var(--muted)}.legend p+p{margin-top:var(--s1)}.legend nav{display:flex;gap:var(--s4);margin-top:var(--s2)}
+.window{display:grid;grid-template-rows:auto minmax(0,1fr);width:calc(var(--sidebar)*5);max-width:100%;min-width:calc(var(--sidebar)*4);height:calc(var(--sidebar)*3 + var(--s5)*2);margin:auto;border:1px solid var(--border);border-radius:var(--r3);overflow:hidden;background:var(--base)}.titlebar{display:grid;grid-template-columns:var(--sidebar) 1fr;min-height:calc(var(--s5)*2);align-items:center;background:var(--base)}.window-controls{display:flex;gap:var(--s2);padding:0 var(--s4);color:var(--muted)}.window-controls span{display:grid;place-items:center;width:var(--s3);height:var(--s3);border:0;border-radius:50%;font-size:0;background:#FF5F57}.window-controls span:nth-child(2){background:#FEBC2E}.window-controls span:nth-child(3){background:#28C840}.app-title{font-size:12px;font-weight:600;color:var(--muted);padding-left:var(--s4)}
+.workspace{display:grid;grid-template-columns:var(--sidebar) 1fr;min-height:0}.sidebar{display:flex;flex-direction:column;min-height:0;overflow:hidden;padding:var(--s4) var(--s3);border-right:1px solid var(--border);background:var(--base)}.sidebar-scroll{min-height:0;overflow-y:auto}.sidebar-label{display:flex;justify-content:space-between;align-items:center;padding:0 var(--s2);font-size:12px;color:var(--muted);margin-bottom:var(--s3)}.server{width:100%;text-align:left;background:none;border:0;padding:var(--s3) var(--s2);border-radius:var(--r2);margin-bottom:var(--s1);opacity:1}.server.selected{background:var(--selected)}.server strong{display:block;font-weight:600}.server small{display:block;font-size:12px;color:var(--muted);margin-top:var(--s1)}.manage{display:flex;gap:var(--s2);margin-top:var(--s4);padding:0 var(--s2)}.quiet{display:inline-flex;align-items:center;gap:var(--s1);height:var(--control);padding:0 var(--s2);border:1px solid var(--border);border-radius:var(--r1);background:none;opacity:1}.quiet .icon{font-size:17px;line-height:1}.sidebar-foot{flex:none;margin-top:auto;padding:var(--s3) var(--s2) 0;border-top:1px solid var(--border)}.sidebar-foot p{font-size:12px;color:var(--muted);margin-top:var(--s2)}
+.content{min-height:0;overflow-y:auto;padding:var(--s4)}.server-heading{display:flex;justify-content:space-between;align-items:baseline;gap:var(--s3);margin-bottom:var(--s2)}.meta{font-size:12px;color:var(--muted)}.snapshot{margin-bottom:var(--s4)}.cards{display:grid;gap:var(--s3)}.gpu{background:var(--panel);border:1px solid var(--border);border-radius:var(--r3);overflow:hidden}.gpu > summary{list-style:none;cursor:pointer;padding:var(--s4);display:grid;grid-template-columns:1fr auto;gap:var(--s3);align-items:center}.gpu > summary::-webkit-details-marker{display:none}.gpu > summary::after{content:'＋';font-size:17px;color:var(--muted)}.gpu[open] > summary::after{content:'−'}.gpu-head{display:flex;justify-content:space-between;gap:var(--s3);align-items:baseline;margin-bottom:var(--s3)}.gpu-name{font-weight:600}.metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--s4)}.metric-label{display:block;font-size:12px;color:var(--muted);margin-bottom:var(--s1)}.metric-value{display:block;font-size:16px;font-weight:600;line-height:1.35;font-variant-numeric:tabular-nums}.metric-band{font-size:12px;font-weight:400;white-space:nowrap}.metric-bar{display:block;width:100%;height:8px;margin-top:var(--s2);overflow:hidden;border-radius:2px;background:var(--metric-track);mask-image:repeating-linear-gradient(to right,#000 0 calc(5% - 2px),transparent calc(5% - 2px) 5%)}.metric-fill{display:block;width:0;height:100%;background:var(--metric-low)}.metric-bar[data-band="medium"] .metric-fill{background:var(--metric-medium)}.metric-bar[data-band="high"] .metric-fill{background:var(--metric-high)}.metric-bar[data-band="unknown"]{mask-image:none;height:6px;border:1px dashed var(--muted);background:transparent}.metric-stale .metric-value{color:var(--muted)}.metric-stale .metric-bar{opacity:.55}
+.detail{border-top:1px solid var(--border);padding:var(--s3) var(--s4) var(--s4)}.detail-heading{display:flex;justify-content:space-between;align-items:baseline;gap:var(--s3);margin-bottom:var(--s2)}.detail-heading strong{font-weight:600}.table-scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;text-align:left;font-size:13px}caption{text-align:left;font-size:12px;color:var(--muted);padding-bottom:var(--s2)}th{font-size:12px;font-weight:400;color:var(--muted)}th,td{padding:var(--s2);border-bottom:1px solid var(--border);white-space:nowrap}th:first-child,td:first-child{padding-left:0}th:last-child,td:last-child{text-align:right;padding-right:0}tbody tr:last-child td{border-bottom:0}code{font:400 12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
+.alternative{max-width:calc(var(--sidebar)*5);min-width:calc(var(--sidebar)*4);margin:var(--s5) auto 0;padding:var(--s4);border:1px solid var(--border);border-radius:var(--r3);background:var(--panel)}.alternative h2{margin-bottom:var(--s2)}.warning{color:var(--warning)}.alternative .metrics{margin-top:var(--s4)}.unknown{font-size:16px;font-weight:600}.footnote{margin-top:var(--s3)}
+.boundary{margin:var(--s5) auto 0;padding-top:var(--s4);border-top:1px solid var(--border)}.boundary h2{margin-bottom:var(--s2);color:var(--text)}.boundary-intro{margin-bottom:var(--s4)}.fixture-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s4)}.fixture-group h3{margin-bottom:var(--s2);color:var(--text)}.fixture-list{list-style:none;padding:0;margin:0}.fixture-row{display:grid;grid-template-columns:minmax(148px,1fr) minmax(72px,1fr);align-items:center;gap:var(--s2);margin-top:var(--s2)}.fixture-label{font-variant-numeric:tabular-nums}.fixture-row .metric-bar{margin:0}
+.gpu[data-availability="available"]{background:#EFF8F0;border-color:#6AA876}.availability{color:var(--metric-low);font-weight:600}.availability-history{display:block;margin-bottom:var(--s3)}.notification-setting{margin-top:var(--s3);padding-top:var(--s3);border-top:1px solid var(--border)}.notification-setting label{display:flex;align-items:center;gap:var(--s2);font-weight:600}.notification-setting p{margin-top:var(--s1)}.notification-example{max-width:calc(var(--sidebar)*5);margin:var(--s5) auto}.notification-example h2{font-size:13px;margin-bottom:var(--s2)}.notification-preview{max-width:380px;padding:var(--s3) var(--s4);border:1px solid var(--border);border-radius:var(--r3);background:var(--panel)}.notification-preview p+p{margin-top:var(--s1)}
+.extra-metrics{margin-top:var(--s3);border-top:1px solid var(--border)}.extra-metrics > summary{display:list-item;list-style:disclosure-closed inside;cursor:pointer;padding:var(--s2) 0;font-weight:600;color:var(--text)}.extra-metrics[open] > summary{list-style-type:disclosure-open}.extra-metrics section{margin-top:var(--s3)}.extra-metrics dl{display:grid;grid-template-columns:minmax(140px,1fr) minmax(0,2fr);gap:var(--s1) var(--s3);margin:var(--s2) 0 0}.extra-metrics dt{color:var(--muted)}.extra-metrics dd{margin:0;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}.extra-metrics section+section{padding-top:var(--s3);border-top:1px solid var(--border)}
+</style>
+</head>
+<body>
+<header class="legend">
+<p><strong>GPUWatcher · 라이트 메인 창 시안</strong> — 최종 설계 참조 · 중간색과 구간 경계는 확정, 나머지 세부 수치는 [ASSUMPTION] 잠정 기준</p>
+<p>모든 값과 시각은 설명용 예시이며 live 데이터가 아닙니다. 비작동 HTML 모크로 실제 수집·SSH 연결·저장은 수행하지 않습니다.</p>
+<p>각 GPU의 프로세스 아래 추가 지표는 기본 접힘이며 독립적으로 펼칩니다. GPU 3 알림 설정은 추가 지표와 별개로 유지됩니다.</p>
+<p>세 지표 모두 20칸 분절형 미터입니다. 색과 구간 텍스트는 부하/온도 구간만 뜻합니다. 창 제어는 장식이며 실제 macOS 창 동작을 검증하지 않습니다.</p>
+<p>GPU 3만 최신 유효 관측에서 유휴 조건이 5분 연속 유지된 이력을 가정합니다. 단일 0% 표본이나 GPU 2의 낮음 구간은 가용 판정이 아닙니다. 사용 가능 강조는 알림 선택과 무관하며 배경·테두리 hex도 [ASSUMPTION]입니다.</p>
+<p>서버별 …와 +는 펼쳐볼 수 있습니다. 메뉴 항목은 비작동이며 관리 화면은 아래 별도 시안에서 확인합니다.</p>
+<nav aria-label="시안 파일 이동"><a href="key-main-dark.html">다크 메인 시안</a><a href="key-settings.html">별도 설정 창 시안</a><a href="key-server-management.html">서버 관리 시안</a></nav>
+</header>
+<section class="window" aria-label="GPUWatcher 라이트 메인 창 모형">
+<header class="titlebar"><div class="window-controls" aria-hidden="true"><span></span><span></span><span></span></div><div class="app-title">GPUWatcher</div></header>
+<div class="workspace">
+<aside class="sidebar" aria-label="항상 보이는 서버 목록과 설정 모형">
+<div class="sidebar-scroll">
+<div class="sidebar-label"><span>서버</span><span>3</span></div>
+<div class="server-item"><button class="server selected" disabled aria-label="gpu-lab-01, 선택됨, 예시 서버"><strong>gpu-lab-01</strong><small>선택됨 · 예시 스냅샷</small></button><details class="server-menu"><summary aria-label="gpu-lab-01 관리 메뉴">…</summary><div class="menu-items"><p class="menu-note">gpu-lab-01 · 비작동 예시</p><button disabled>편집…</button><button disabled>모니터링 끄기</button><button disabled>SSH 연결 테스트</button><button class="destructive" disabled>삭제…</button></div></details></div>
+<div class="server-item"><button class="server" disabled><strong>gpu-lab-02</strong><small>예시 서버</small></button><details class="server-menu"><summary aria-label="gpu-lab-02 관리 메뉴">…</summary><div class="menu-items"><p class="menu-note">gpu-lab-02 · 비작동 예시</p><button disabled>편집…</button><button disabled>모니터링 끄기</button><button disabled>SSH 연결 테스트</button><button class="destructive" disabled>삭제…</button></div></details></div>
+<div class="server-item"><button class="server" disabled><strong>inference-01</strong><small>모니터링 꺼짐 · 예시</small></button><details class="server-menu"><summary aria-label="inference-01 관리 메뉴">…</summary><div class="menu-items"><p class="menu-note">inference-01 · 비작동 예시</p><button disabled>편집…</button><button disabled>모니터링 켜기</button><button disabled>SSH 연결 테스트</button><button class="destructive" disabled>삭제…</button></div></details></div>
+<details class="add-menu"><summary aria-label="서버 추가 메뉴">+ 서버 추가</summary><div class="menu-items"><button disabled>서버 직접 추가…</button><button disabled>SSH config 가져오기…</button></div></details>
+</div>
+<div class="sidebar-foot"><button class="quiet" disabled title="설정 · 비작동 모크"><span class="icon" aria-hidden="true">⚙</span>설정</button><p>조작 버튼은 비작동 모형</p></div>
+</aside>
+<main class="content">
+<div class="server-heading"><h1>gpu-lab-01</h1><span class="meta">GPU 4개 · 예시</span></div>
+<p class="meta snapshot">예시 마지막 성공: <time datetime="2026-10-04T19:42:10+09:00">2026-10-04 19:42:10 KST (UTC+09:00)</time><br>세 카드를 동시에 펼친 상태 · 각 헤더로 독립 접기/펼치기</p>
+<div class="cards">
+<details class="gpu" open><summary><div><div class="gpu-head"><span class="gpu-name">GPU 0</span><span class="meta">NVIDIA A100 · 40 GiB</span></div><div class="metrics">
+<div><span class="metric-label">VRAM 사용량 / 총량</span><span class="metric-value">28.8 / 40 GiB · 72% · 높음</span><span class="metric-bar" aria-hidden="true" data-metric="vram-used-percent" data-value="72" data-band="high"><span class="metric-fill" style="width:72%"></span></span></div>
+<div><span class="metric-label">GPU UTIL</span><span class="metric-value">86% · 높음</span><span class="metric-bar" aria-hidden="true" data-metric="gpu-util-percent" data-value="86" data-band="high"><span class="metric-fill" style="width:86%"></span></span></div>
+<div><span class="metric-label">온도</span><span class="metric-value">81°C · 높음</span><span class="metric-bar" aria-hidden="true" data-metric="temperature-celsius" data-value="81" data-band="high"><span class="metric-fill" style="width:81%"></span></span></div>
+</div></div></summary><div class="detail"><div class="detail-heading"><strong>프로세스 2개</strong><span class="meta">VRAM 28.8 / 40 GiB · 설명용 예시</span></div><div class="table-scroll"><table><caption>GPU 0 · 읽기 전용 설명용 예시 데이터 · 표 열은 [ASSUMPTION]</caption><thead><tr><th scope="col">PID</th><th scope="col">사용자</th><th scope="col">명령</th><th scope="col">VRAM</th></tr></thead><tbody><tr><td><code>18432</code></td><td>minsu</td><td><code>python train.py --config baseline.yaml</code></td><td>20.0 GiB</td></tr><tr><td><code>18507</code></td><td>jiwon</td><td><code>python evaluate.py --batch-size 32</code></td><td>8.8 GiB</td></tr></tbody></table></div>
+<details class="extra-metrics">
+<summary>추가 지표</summary>
+<p class="meta">GPU 0 · 설명용 가상 예시 데이터 · 실제 수집 값이 아닙니다. 메모리 활동률은 메모리 읽기/쓰기 활동 비율이며 VRAM 용량 사용 비율과 다릅니다. 미지원·미제공·수집 불가 값은 알 수 없음으로 표시하며 0으로 대체하지 않습니다.</p>
+<section><h3>운영 지표</h3><dl>
+<dt>메모리 활동률</dt><dd data-field="memoryUtilizationPercent">64%</dd>
+<dt>여유 메모리</dt><dd data-field="memoryFreeMiB">11.2 GiB</dd>
+<dt>소비 전력</dt><dd data-field="powerDrawWatt">235 W</dd>
+<dt>전력 한도</dt><dd data-field="powerLimitWatt">250 W</dd>
+<dt>팬 속도</dt><dd data-field="fanSpeedPercent">알 수 없음 · 미지원</dd>
+</dl></section>
+<section><h3>기능 및 식별 정보</h3><dl>
+<dt>인코더 활동률</dt><dd data-field="encoderUtilizationPercent">알 수 없음 · 미지원</dd>
+<dt>디코더 활동률</dt><dd data-field="decoderUtilizationPercent">0%</dd>
+<dt>JPEG 활동률</dt><dd data-field="jpegUtilizationPercent">알 수 없음 · 미제공</dd>
+<dt>OFA 활동률</dt><dd data-field="ofaUtilizationPercent">알 수 없음 · 미지원</dd>
+<dt>PCI 버스 ID</dt><dd data-field="pciBusId">00000000:31:00.0</dd>
+<dt>GPU별 드라이버</dt><dd data-field="driverVersion">550.54.15</dd>
+<dt>그래픽 클록</dt><dd data-field="graphicsClockMhz">1,410 MHz</dd>
+<dt>메모리 클록</dt><dd data-field="memoryClockMhz">1,215 MHz</dd>
+<dt>UUID</dt><dd data-field="uuid">GPU-7c31a200-f643-4b62-9150-49b6a287f100</dd>
+</dl></section>
+<section><h3>PCIe / MIG</h3><dl>
+<dt>PCIe 수신 (RX)</dt><dd data-field="pcieRxKibPerSec">65,536 KiB/s</dd>
+<dt>PCIe 송신 (TX)</dt><dd data-field="pcieTxKibPerSec">32,768 KiB/s</dd>
+<dt>PCIe 현재 세대</dt><dd data-field="pcieLinkGenCurrent">Gen 4</dd>
+<dt>PCIe 현재 폭</dt><dd data-field="pcieLinkWidthCurrent">x16</dd>
+<dt>MIG 현재 모드</dt><dd data-field="migModeCurrent">비활성</dd>
+<dt>MIG 대기 모드</dt><dd data-field="migModePending">비활성</dd>
+<dt>MIG 인스턴스 수</dt><dd data-field="migInstanceCount">0개</dd>
+<dt>MIG 정보 가용성</dt><dd data-field="migAvailability">MIG 비활성 · 인스턴스 없음이 확인된 예시입니다.</dd>
+</dl></section>
+</details>
+</div></details>
+<details class="gpu" open><summary><div><div class="gpu-head"><span class="gpu-name">GPU 1</span><span class="meta">NVIDIA A100 · 40 GiB</span></div><div class="metrics">
+<div><span class="metric-label">VRAM 사용량 / 총량</span><span class="metric-value">18.0 / 40 GiB · 45% · 중간</span><span class="metric-bar" aria-hidden="true" data-metric="vram-used-percent" data-value="45" data-band="medium"><span class="metric-fill" style="width:45%"></span></span></div>
+<div><span class="metric-label">GPU UTIL</span><span class="metric-value">52% · 중간</span><span class="metric-bar" aria-hidden="true" data-metric="gpu-util-percent" data-value="52" data-band="medium"><span class="metric-fill" style="width:52%"></span></span></div>
+<div><span class="metric-label">온도</span><span class="metric-value">57°C · 낮음</span><span class="metric-bar" aria-hidden="true" data-metric="temperature-celsius" data-value="57" data-band="low"><span class="metric-fill" style="width:57%"></span></span></div>
+</div></div></summary><div class="detail"><div class="detail-heading"><strong>프로세스 1개</strong><span class="meta">VRAM 18.0 / 40 GiB · 설명용 예시</span></div><div class="table-scroll"><table><caption>GPU 1 · 읽기 전용 설명용 예시 데이터 · 표 열은 [ASSUMPTION]</caption><thead><tr><th scope="col">PID</th><th scope="col">사용자</th><th scope="col">명령</th><th scope="col">VRAM</th></tr></thead><tbody><tr><td><code>19261</code></td><td>minsu</td><td><code>python inference.py --model baseline</code></td><td>18.0 GiB</td></tr></tbody></table></div>
+<details class="extra-metrics">
+<summary>추가 지표</summary>
+<p class="meta">GPU 1 · 설명용 가상 예시 데이터 · 실제 수집 값이 아닙니다. 메모리 활동률은 메모리 읽기/쓰기 활동 비율이며 VRAM 용량 사용 비율과 다릅니다. 미지원·미제공·수집 불가 값은 알 수 없음으로 표시하며 0으로 대체하지 않습니다.</p>
+<section><h3>운영 지표</h3><dl>
+<dt>메모리 활동률</dt><dd data-field="memoryUtilizationPercent">38%</dd>
+<dt>여유 메모리</dt><dd data-field="memoryFreeMiB">22.0 GiB</dd>
+<dt>소비 전력</dt><dd data-field="powerDrawWatt">180 W</dd>
+<dt>전력 한도</dt><dd data-field="powerLimitWatt">250 W</dd>
+<dt>팬 속도</dt><dd data-field="fanSpeedPercent">알 수 없음 · 미지원</dd>
+</dl></section>
+<section><h3>기능 및 식별 정보</h3><dl>
+<dt>인코더 활동률</dt><dd data-field="encoderUtilizationPercent">알 수 없음 · 미지원</dd>
+<dt>디코더 활동률</dt><dd data-field="decoderUtilizationPercent">0%</dd>
+<dt>JPEG 활동률</dt><dd data-field="jpegUtilizationPercent">알 수 없음 · 미제공</dd>
+<dt>OFA 활동률</dt><dd data-field="ofaUtilizationPercent">알 수 없음 · 미지원</dd>
+<dt>PCI 버스 ID</dt><dd data-field="pciBusId">00000000:4B:00.0</dd>
+<dt>GPU별 드라이버</dt><dd data-field="driverVersion">550.54.15</dd>
+<dt>그래픽 클록</dt><dd data-field="graphicsClockMhz">1,215 MHz</dd>
+<dt>메모리 클록</dt><dd data-field="memoryClockMhz">1,215 MHz</dd>
+<dt>UUID</dt><dd data-field="uuid">GPU-7c31a201-f643-4b62-9150-49b6a287f101</dd>
+</dl></section>
+<section><h3>PCIe / MIG</h3><dl>
+<dt>PCIe 수신 (RX)</dt><dd data-field="pcieRxKibPerSec">16,384 KiB/s</dd>
+<dt>PCIe 송신 (TX)</dt><dd data-field="pcieTxKibPerSec">8,192 KiB/s</dd>
+<dt>PCIe 현재 세대</dt><dd data-field="pcieLinkGenCurrent">Gen 4</dd>
+<dt>PCIe 현재 폭</dt><dd data-field="pcieLinkWidthCurrent">x16</dd>
+<dt>MIG 현재 모드</dt><dd data-field="migModeCurrent">비활성</dd>
+<dt>MIG 대기 모드</dt><dd data-field="migModePending">비활성</dd>
+<dt>MIG 인스턴스 수</dt><dd data-field="migInstanceCount">0개</dd>
+<dt>MIG 정보 가용성</dt><dd data-field="migAvailability">MIG 비활성 · 인스턴스 없음이 확인된 예시입니다.</dd>
+</dl></section>
+</details>
+</div></details>
+<details class="gpu"><summary><div><div class="gpu-head"><span class="gpu-name">GPU 2</span><span class="meta">NVIDIA A100 · 40 GiB</span></div><div class="metrics">
+<div><span class="metric-label">VRAM 사용량 / 총량</span><span class="metric-value">7.2 / 40 GiB · 18% · 낮음</span><span class="metric-bar" aria-hidden="true" data-metric="vram-used-percent" data-value="18" data-band="low"><span class="metric-fill" style="width:18%"></span></span></div>
+<div><span class="metric-label">GPU UTIL</span><span class="metric-value">24% · 낮음</span><span class="metric-bar" aria-hidden="true" data-metric="gpu-util-percent" data-value="24" data-band="low"><span class="metric-fill" style="width:24%"></span></span></div>
+<div><span class="metric-label">온도</span><span class="metric-value">49°C · 낮음</span><span class="metric-bar" aria-hidden="true" data-metric="temperature-celsius" data-value="49" data-band="low"><span class="metric-fill" style="width:49%"></span></span></div>
+</div></div></summary><div class="detail"><div class="detail-heading"><strong>프로세스 1개</strong><span class="meta">VRAM 7.2 / 40 GiB · 설명용 예시</span></div><div class="table-scroll"><table><caption>GPU 2 · 읽기 전용 설명용 예시 데이터 · 표 열은 [ASSUMPTION]</caption><thead><tr><th scope="col">PID</th><th scope="col">사용자</th><th scope="col">명령</th><th scope="col">VRAM</th></tr></thead><tbody><tr><td><code>20418</code></td><td>jiwon</td><td><code>python embed.py --input samples.jsonl</code></td><td>7.2 GiB</td></tr></tbody></table></div>
+<details class="extra-metrics">
+<summary>추가 지표</summary>
+<p class="meta">GPU 2 · 설명용 가상 예시 데이터 · 실제 수집 값이 아닙니다. 메모리 활동률은 메모리 읽기/쓰기 활동 비율이며 VRAM 용량 사용 비율과 다릅니다. 미지원·미제공·수집 불가 값은 알 수 없음으로 표시하며 0으로 대체하지 않습니다.</p>
+<section><h3>운영 지표</h3><dl>
+<dt>메모리 활동률</dt><dd data-field="memoryUtilizationPercent">12%</dd>
+<dt>여유 메모리</dt><dd data-field="memoryFreeMiB">32.8 GiB</dd>
+<dt>소비 전력</dt><dd data-field="powerDrawWatt">110 W</dd>
+<dt>전력 한도</dt><dd data-field="powerLimitWatt">250 W</dd>
+<dt>팬 속도</dt><dd data-field="fanSpeedPercent">알 수 없음 · 미지원</dd>
+</dl></section>
+<section><h3>기능 및 식별 정보</h3><dl>
+<dt>인코더 활동률</dt><dd data-field="encoderUtilizationPercent">알 수 없음 · 미지원</dd>
+<dt>디코더 활동률</dt><dd data-field="decoderUtilizationPercent">0%</dd>
+<dt>JPEG 활동률</dt><dd data-field="jpegUtilizationPercent">알 수 없음 · 미제공</dd>
+<dt>OFA 활동률</dt><dd data-field="ofaUtilizationPercent">알 수 없음 · 미지원</dd>
+<dt>PCI 버스 ID</dt><dd data-field="pciBusId">00000000:B1:00.0</dd>
+<dt>GPU별 드라이버</dt><dd data-field="driverVersion">550.54.15</dd>
+<dt>그래픽 클록</dt><dd data-field="graphicsClockMhz">900 MHz</dd>
+<dt>메모리 클록</dt><dd data-field="memoryClockMhz">1,215 MHz</dd>
+<dt>UUID</dt><dd data-field="uuid">GPU-7c31a202-f643-4b62-9150-49b6a287f102</dd>
+</dl></section>
+<section><h3>PCIe / MIG</h3><dl>
+<dt>PCIe 수신 (RX)</dt><dd data-field="pcieRxKibPerSec">8,192 KiB/s</dd>
+<dt>PCIe 송신 (TX)</dt><dd data-field="pcieTxKibPerSec">4,096 KiB/s</dd>
+<dt>PCIe 현재 세대</dt><dd data-field="pcieLinkGenCurrent">Gen 4</dd>
+<dt>PCIe 현재 폭</dt><dd data-field="pcieLinkWidthCurrent">x16</dd>
+<dt>MIG 현재 모드</dt><dd data-field="migModeCurrent">비활성</dd>
+<dt>MIG 대기 모드</dt><dd data-field="migModePending">비활성</dd>
+<dt>MIG 인스턴스 수</dt><dd data-field="migInstanceCount">알 수 없음 · 수집 불가</dd>
+<dt>MIG 정보 가용성</dt><dd data-field="migAvailability">MIG 모드는 확인했으나 인스턴스 목록은 수집 불가입니다. 인스턴스 수를 0으로 간주하지 않습니다.</dd>
+</dl></section>
+</details>
+</div></details>
+<details class="gpu" data-availability="available" open><summary><div><div class="gpu-head"><span class="gpu-name">GPU 3 · <span class="availability">사용 가능</span></span><span class="meta">NVIDIA A100 · 40 GiB</span></div><span class="meta availability-history">조건 5분 지속 · 예시</span><div class="metrics">
+<div><span class="metric-label">VRAM 사용량 / 총량</span><span class="metric-value">0 / 40 GiB · 0% · 낮음</span><span class="metric-bar" aria-hidden="true" data-metric="vram-used-percent" data-value="0" data-band="low"><span class="metric-fill" style="width:0%"></span></span></div>
+<div><span class="metric-label">GPU UTIL</span><span class="metric-value">0% · 낮음</span><span class="metric-bar" aria-hidden="true" data-metric="gpu-util-percent" data-value="0" data-band="low"><span class="metric-fill" style="width:0%"></span></span></div>
+<div><span class="metric-label">온도</span><span class="metric-value">38°C · 낮음</span><span class="metric-bar" aria-hidden="true" data-metric="temperature-celsius" data-value="38" data-band="low"><span class="metric-fill" style="width:38%"></span></span></div>
+</div></div></summary><div class="detail"><div class="detail-heading"><strong>프로세스 없음</strong><span class="meta">VRAM 0 / 40 GiB · 설명용 예시</span></div><p class="meta">성공한 빈 목록을 가정한 예시입니다. 위의 0은 알려진 값이며 수집 불가를 대신한 값이 아닙니다. 가용 판정은 최신 유효 관측이 5분간 연속 충족된 설명용 이력에 근거합니다.</p>
+<details class="extra-metrics">
+<summary>추가 지표</summary>
+<p class="meta">GPU 3 · 설명용 가상 예시 데이터 · 실제 수집 값이 아닙니다. 메모리 활동률은 메모리 읽기/쓰기 활동 비율이며 VRAM 용량 사용 비율과 다릅니다. 미지원·미제공·수집 불가 값은 알 수 없음으로 표시하며 0으로 대체하지 않습니다.</p>
+<section><h3>운영 지표</h3><dl>
+<dt>메모리 활동률</dt><dd data-field="memoryUtilizationPercent">0%</dd>
+<dt>여유 메모리</dt><dd data-field="memoryFreeMiB">40.0 GiB</dd>
+<dt>소비 전력</dt><dd data-field="powerDrawWatt">48 W</dd>
+<dt>전력 한도</dt><dd data-field="powerLimitWatt">250 W</dd>
+<dt>팬 속도</dt><dd data-field="fanSpeedPercent">알 수 없음 · 미지원</dd>
+</dl></section>
+<section><h3>기능 및 식별 정보</h3><dl>
+<dt>인코더 활동률</dt><dd data-field="encoderUtilizationPercent">알 수 없음 · 미지원</dd>
+<dt>디코더 활동률</dt><dd data-field="decoderUtilizationPercent">0%</dd>
+<dt>JPEG 활동률</dt><dd data-field="jpegUtilizationPercent">알 수 없음 · 미제공</dd>
+<dt>OFA 활동률</dt><dd data-field="ofaUtilizationPercent">알 수 없음 · 미지원</dd>
+<dt>PCI 버스 ID</dt><dd data-field="pciBusId">00000000:CA:00.0</dd>
+<dt>GPU별 드라이버</dt><dd data-field="driverVersion">550.54.15</dd>
+<dt>그래픽 클록</dt><dd data-field="graphicsClockMhz">210 MHz</dd>
+<dt>메모리 클록</dt><dd data-field="memoryClockMhz">405 MHz</dd>
+<dt>UUID</dt><dd data-field="uuid">GPU-7c31a203-f643-4b62-9150-49b6a287f103</dd>
+</dl></section>
+<section><h3>PCIe / MIG</h3><dl>
+<dt>PCIe 수신 (RX)</dt><dd data-field="pcieRxKibPerSec">128 KiB/s</dd>
+<dt>PCIe 송신 (TX)</dt><dd data-field="pcieTxKibPerSec">64 KiB/s</dd>
+<dt>PCIe 현재 세대</dt><dd data-field="pcieLinkGenCurrent">Gen 1</dd>
+<dt>PCIe 현재 폭</dt><dd data-field="pcieLinkWidthCurrent">x16</dd>
+<dt>MIG 현재 모드</dt><dd data-field="migModeCurrent">비활성</dd>
+<dt>MIG 대기 모드</dt><dd data-field="migModePending">비활성</dd>
+<dt>MIG 인스턴스 수</dt><dd data-field="migInstanceCount">0개</dd>
+<dt>MIG 정보 가용성</dt><dd data-field="migAvailability">MIG 비활성 · 인스턴스 없음이 확인된 예시입니다.</dd>
+</dl></section>
+</details>
+<div class="notification-setting"><label><input type="checkbox" checked disabled>사용 가능해지면 알림</label><p class="meta">GPU 3 알림 켜짐 · 변경·저장하지 않는 정적 예시</p><p class="meta">저장된 기본 조건 · GPU UTIL ≤5% · VRAM 사용량 ≤1 GiB · 5분 지속</p><p class="meta">연속 유휴 구간당 1회만 알림 · 유휴가 계속되면 반복하지 않음 · 사용 재개 후 다시 조건이 5분 지속될 때 재알림 · 알림 간 최소 15분</p><p class="meta notification-permission">macOS 알림 허용 상태는 확인되지 않았습니다. 배너가 보이지 않으면 시스템 설정 → 알림 → GPUWatcher 및 집중 모드를 확인하세요.</p><p class="meta">[ASSUMPTION] 저장 조건은 읽기 전용으로 표시합니다. 알림을 껐다 켜도 기존 사용자 지정 조건은 보존합니다.</p></div></div></details>
+</div>
+</main>
+</div>
+</section>
+<section class="notification-example" aria-label="앱 외부 정적 macOS 알림 예시">
+<h2>macOS 알림 예시 · 실제 발송 없음</h2>
+<div class="notification-preview"><p class="meta">GPUWatcher · STATIC · 앱 모형 외부</p><p><strong>GPU 사용 가능</strong></p><p>gpu-lab-01 · GPU 3</p><p>설정한 유휴 조건이 5분간 유지되었습니다.</p></div>
+<p class="meta footnote">네이티브 알림의 내용·배치만 보여주는 정적 예시입니다. 실제 OS 알림·권한 요청·클릭 동작은 없습니다.</p>
+</section>
+<section class="alternative" aria-label="알림 설정과 권한 대체 상태 예시">
+<h2>알림 대체 상태 · [ASSUMPTION] 정적 예시</h2>
+<p class="meta">아래는 서로 다른 시점의 독립 예시입니다. 실제 저장·권한 조회·알림 발송은 없습니다.</p>
+<div class="notification-setting" data-watch-state="custom"><h3>기존 사용자 지정 조건</h3><p>gpu-lab-01 · GPU 3 · UTIL ≤3% · VRAM ≤512 MiB · 600초 지속 · 재알림 최소 간격 1800초</p><p class="meta">저장값을 그대로 읽어 표시하며 기본 조건으로 덮어쓰지 않습니다. 이 시안은 임의 조건 편집 폼을 추가하지 않습니다.</p></div>
+<div class="notification-setting" data-watch-state="save-error"><h3>알림 설정을 저장하지 못했습니다.</h3><p>마지막 저장 상태를 유지했습니다. 다시 시도하세요.</p><p class="meta">입력 시도와 저장 성공을 구분하며 가용 카드·프로세스 읽기는 유지합니다.</p></div>
+<div class="notification-setting" data-watch-state="unavailable"><h3>저장된 알림 설정을 읽을 수 없습니다.</h3><p>알림 상태를 확인한 후 변경할 수 있습니다.</p><p class="meta">알림 꺼짐이나 기본 조건으로 추정하지 않습니다. OS 권한을 관측하지 못한 상태도 허용·거부로 단정하지 않습니다.</p></div>
+</section>
+<section class="alternative" aria-label="메인 창 stale 및 unknown 상태 예시">
+<h2>대체 상태 · 마지막 성공 값 + 알 수 없는 지표</h2>
+<p><strong>가용 여부 확인 불가</strong> · stale·알 수 없음·수집 실패는 유휴로 판정하지 않으며 사용 가능 강조나 알림을 표시하지 않습니다.</p>
+<p class="warning">최신 정보를 가져오지 못했습니다. 마지막 성공: <time datetime="2026-10-04T19:42:10+09:00">2026-10-04 19:42:10 KST (UTC+09:00)</time></p>
+<p class="meta">gpu-lab-01 / GPU 0 · 위 GPU 목록과 분리된 설명용 stale/부분 지표 예시입니다. 흐린 VRAM·온도는 마지막 성공 snapshot이며 현재값이 아닙니다.</p>
+<div class="metrics">
+<div class="metric-stale"><span class="metric-label">VRAM · 마지막 성공 값</span><span class="metric-value">28.8 / 40 GiB · 72% · 높음 · 마지막 성공</span><span class="metric-bar" aria-hidden="true" data-metric="vram-used-percent" data-value="72" data-band="high"><span class="metric-fill" style="width:72%"></span></span></div>
+<div><span class="metric-label">GPU UTIL · 알 수 없음</span><span class="metric-value unknown">알 수 없음</span><span class="metric-bar" aria-hidden="true" data-metric="gpu-util-percent" data-band="unknown"></span></div>
+<div class="metric-stale"><span class="metric-label">온도 · 마지막 성공 값</span><span class="metric-value">63°C · 중간 · 마지막 성공</span><span class="metric-bar" aria-hidden="true" data-metric="temperature-celsius" data-value="63" data-band="medium"><span class="metric-fill" style="width:63%"></span></span></div>
+</div>
+<p class="meta footnote">GPU UTIL은 마지막 성공 snapshot에서도 제공되지 않았습니다. 0으로 대체하지 않으며 보존한 VRAM·온도를 최신 값처럼 표시하지 않습니다.</p>
+</section>
+<section class="boundary" aria-label="앱 외부 정적 metric 경계 fixture">
+<h2>경계 fixture · 앱 화면 바깥 · 정적 설계 증거</h2>
+<p class="boundary-intro">아래는 구현이 아닌 설명용 고정 값입니다. 부하/온도 구간 텍스트와 bar 색은 같은 의미이며 정확한 색 hex는 [ASSUMPTION]입니다.</p>
+<div class="fixture-grid">
+<div class="fixture-group"><h3>GPU UTIL / VRAM 사용률</h3><ul class="fixture-list">
+<li class="fixture-row"><span class="fixture-label">0% · 낮음</span><span class="metric-bar" aria-hidden="true" data-metric="gpu-util-percent" data-value="0" data-band="low"><span class="metric-fill" style="width:0%"></span></span></li>
+<li class="fixture-row"><span class="fixture-label">30% · 낮음</span><span class="metric-bar" aria-hidden="true" data-metric="gpu-util-percent" data-value="30" data-band="low"><span class="metric-fill" style="width:30%"></span></span></li>
+<li class="fixture-row"><span class="fixture-label">31% · 중간</span><span class="metric-bar" aria-hidden="true" data-metric="gpu-util-percent" data-value="31" data-band="medium"><span class="metric-fill" style="width:31%"></span></span></li>
+<li class="fixture-row"><span class="fixture-label">60% · 중간</span><span class="metric-bar" aria-hidden="true" data-metric="gpu-util-percent" data-value="60" data-band="medium"><span class="metric-fill" style="width:60%"></span></span></li>
+<li class="fixture-row"><span class="fixture-label">61% · 높음</span><span class="metric-bar" aria-hidden="true" data-metric="gpu-util-percent" data-value="61" data-band="high"><span class="metric-fill" style="width:61%"></span></span></li>
+<li class="fixture-row"><span class="fixture-label">100% · 높음</span><span class="metric-bar" aria-hidden="true" data-metric="gpu-util-percent" data-value="100" data-band="high"><span class="metric-fill" style="width:100%"></span></span></li>
+<li class="fixture-row"><span class="fixture-label">101% · 범위 밖 · 알 수 없음</span><span class="metric-bar" aria-hidden="true" data-metric="gpu-util-percent" data-band="unknown"></span></li>
+<li class="fixture-row"><span class="fixture-label">총량 없음/0 · 알 수 없음</span><span class="metric-bar" aria-hidden="true" data-metric="vram-used-percent" data-band="unknown"></span></li>
+</ul></div>
+<div class="fixture-group"><h3>온도 · 길이 척도 [ASSUMPTION] 0–100°C</h3><p class="meta">길이 전용 척도이며 퍼센트나 하드웨어 최대 온도가 아닙니다. 색 구간 경계: 60°C / 80°C.</p><ul class="fixture-list">
+<li class="fixture-row"><span class="fixture-label">60°C · 낮음</span><span class="metric-bar" aria-hidden="true" data-metric="temperature-celsius" data-value="60" data-band="low"><span class="metric-fill" style="width:60%"></span></span></li>
+<li class="fixture-row"><span class="fixture-label">61°C · 중간</span><span class="metric-bar" aria-hidden="true" data-metric="temperature-celsius" data-value="61" data-band="medium"><span class="metric-fill" style="width:61%"></span></span></li>
+<li class="fixture-row"><span class="fixture-label">80°C · 중간</span><span class="metric-bar" aria-hidden="true" data-metric="temperature-celsius" data-value="80" data-band="medium"><span class="metric-fill" style="width:80%"></span></span></li>
+<li class="fixture-row"><span class="fixture-label">81°C · 높음</span><span class="metric-bar" aria-hidden="true" data-metric="temperature-celsius" data-value="81" data-band="high"><span class="metric-fill" style="width:81%"></span></span></li>
+<li class="fixture-row"><span class="fixture-label">알 수 없음</span><span class="metric-bar" aria-hidden="true" data-metric="temperature-celsius" data-band="unknown"></span></li>
+</ul></div>
+</div>
+</section>
+</body>
+</html>

@@ -1,109 +1,82 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
-import { useUiStore, type DensityMode } from '../lib/store';
-import type { ServerOverviewDto, TabId } from '../lib/types';
-
-const tabLabels: Record<TabId, string> = {
-  detail: 'Server Detail',
-  history: 'Live Monitor',
-  overview: 'Overview',
-  processes: 'Process Table',
-  settings: 'Settings'
-};
-
-const tabs: ReadonlyArray<{ readonly id: TabId; readonly label: string }> = [
-  { id: 'overview', label: tabLabels.overview },
-  { id: 'detail', label: tabLabels.detail },
-  { id: 'history', label: tabLabels.history },
-  { id: 'processes', label: tabLabels.processes },
-  { id: 'settings', label: tabLabels.settings }
-];
-
-const densityOptions: ReadonlyArray<{ readonly id: DensityMode; readonly label: string }> = [
-  { id: 'full', label: 'Full' },
-  { id: 'compact', label: 'Compact' }
-];
+import { InlineActionsMenu, ServerActionsMenu } from '../features/settings/ConfiguredServersPanel';
+import { openSettings } from '../lib/appearance';
+import { useUiStore } from '../lib/store';
+import type { ServerOverviewDto } from '../lib/types';
 
 export const Shell = ({ children, overview }: { children: ReactNode; overview: ServerOverviewDto[] | null }) => {
-  const activeTab = useUiStore((state) => state.activeTab);
-  const densityMode = useUiStore((state) => state.densityMode);
-  const setActiveTab = useUiStore((state) => state.setActiveTab);
-  const setDensityMode = useUiStore((state) => state.setDensityMode);
-  const onlineCount = overview?.filter((server) => server.status.toLowerCase() === 'online').length ?? null;
-  const serverCountLabel = overview === null ? 'unknown' : `${overview.length} ${overview.length === 1 ? 'server' : 'servers'}`;
-  const onlineCountLabel = onlineCount === null ? 'unknown' : `${onlineCount} online`;
+  const selectedServerId = useUiStore((state) => state.selectedServerId);
+  const selectServer = useUiStore((state) => state.selectServer);
+  const openServerManager = useUiStore((state) => state.openServerManager);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  const selectedServer = overview?.find((server) => server.id === selectedServerId);
+  const runtime = window.gpuWatcherElectron?.isElectron && window.gpuwatcher ? '데스크톱' : '브라우저 · 읽기 전용';
+
+  const showSettings = async () => {
+    setSettingsError(null);
+    try {
+      await openSettings();
+    } catch (error) {
+      setSettingsError(error instanceof Error ? error.message : 'Could not open settings.');
+    }
+  };
 
   return (
-    <div className="app-shell" data-density={densityMode}>
+    <div className="app-shell">
       <header className="window-titlebar">
         <div className="titlebar-sidebar">
           <div className="traffic-light-space" aria-hidden="true" />
           <div className="app-name">GPUWatcher</div>
         </div>
         <div className="titlebar-main">
-          <div className="titlebar-page-title">{tabLabels[activeTab]}</div>
-          <div aria-label="Fleet status" className="titlebar-status">
-            <span>{serverCountLabel}</span>
-            <span>{onlineCountLabel}</span>
+          <div className="titlebar-heading">
+            <div className="titlebar-page-title">{selectedServer?.name ?? 'GPUWatcher'}</div>
           </div>
+          <span className="titlebar-page-context">{runtime}</span>
         </div>
       </header>
-
-      <aside className="app-sidebar" aria-label="Application navigation">
-        <nav className="sidebar-nav" aria-label="Primary">
-          {tabs.map((tab) => {
-            const isActive = activeTab === tab.id;
-
-            return (
-              <button
-                aria-current={isActive ? 'page' : undefined}
-                className={`no-drag sidebar-nav-item w-full border-l-2 px-4 py-3 text-left text-sm transition ${
-                  isActive
-                    ? 'sidebar-nav-item-active border-[color:var(--color-brand)] font-extrabold text-[color:var(--color-text)]'
-                    : 'border-transparent font-semibold text-[color:var(--color-muted)] hover:bg-white/5 hover:text-[color:var(--color-text)]'
-                }`}
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                type="button"
-              >
-                {tab.label}
-              </button>
-            );
-          })}
+      <aside className="app-sidebar" aria-label="서버">
+        <div className="server-sidebar-heading">
+          <span>서버</span>
+          <InlineActionsMenu label="서버 추가 또는 가져오기" trigger="+" addTrigger>
+            {(close) => <>
+              <button role="menuitem" type="button" className="rounded px-2 py-1 text-left" onClick={() => { close(); openServerManager('add'); }}>직접 추가</button>
+              <button role="menuitem" type="button" className="rounded px-2 py-1 text-left" onClick={() => { close(); openServerManager('import'); }}>SSH config 가져오기</button>
+            </>}
+          </InlineActionsMenu>
+        </div>
+        <nav className="sidebar-nav" aria-label="서버">
+          {overview === null ? <p className="sidebar-notice">서버 목록을 확인할 수 없습니다</p> : null}
+          {overview?.length === 0 ? <p className="sidebar-notice">등록된 서버가 없습니다</p> : null}
+          {overview?.map((server) => (
+            <div className="server-sidebar-entry" key={server.id}>
+            <button
+              aria-current={selectedServerId === server.id ? 'page' : undefined}
+              aria-label={`${server.name} ${server.status}`}
+              className={`no-drag server-sidebar-row min-w-0 flex-1 ${selectedServerId === server.id ? 'server-sidebar-row-selected' : ''}`}
+              onClick={() => selectServer(server.id)}
+              title={`${server.name} — ${server.host}`}
+              type="button"
+            >
+              <span className="server-sidebar-name">{server.name}</span>
+              <span className="server-sidebar-status">{server.status}</span>
+            </button>
+            <ServerActionsMenu id={server.id} name={server.name} />
+            </div>
+          ))}
         </nav>
-
         <footer className="sidebar-footer">
-          <section aria-labelledby="display-mode-heading" className="density-control">
-            <div className="eyebrow" id="display-mode-heading">
-              Display mode
-            </div>
-            <div className="density-control-options mt-3 grid grid-cols-2 gap-2" role="group" aria-labelledby="display-mode-heading">
-              {densityOptions.map((option) => {
-                const isActive = densityMode === option.id;
-
-                return (
-                  <button
-                    aria-label={`Use ${option.id} display mode`}
-                    aria-pressed={isActive}
-                    className={`no-drag density-control-option rounded-[var(--radius-sm)] border px-3 py-2 text-sm font-extrabold transition ${
-                      isActive
-                        ? 'density-control-option-active border-[color:var(--color-brand)] bg-[var(--color-brand-soft)] text-[color:var(--color-brand)]'
-                        : 'border-[color:var(--color-line)] text-[color:var(--color-muted)] hover:border-[color:var(--color-line-strong)] hover:bg-white/5 hover:text-[color:var(--color-text)]'
-                    }`}
-                    key={option.id}
-                    onClick={() => setDensityMode(option.id)}
-                    type="button"
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
-          </section>
+          <button className="no-drag settings-icon" aria-label="외형 설정 열기" onClick={() => void showSettings()} type="button">
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <circle cx="12" cy="12" r="3" />
+              <path d="m9 3-1 3-3 1-2 3 2 2-1 3 2 3 3-1 2 3h3l1-3 3-1 2-3-2-2 1-3-2-3-3 1-2-3Z" />
+            </svg>
+          </button>
+          {settingsError ? <p role="alert">{settingsError}</p> : null}
         </footer>
       </aside>
-
-      <main className="app-content">
+      <main aria-label="Server detail content" className="app-content">
         <div className="page-container">{children}</div>
       </main>
     </div>

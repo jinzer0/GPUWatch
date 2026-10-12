@@ -25,3 +25,12 @@ pub fn consume_notification_outbox(
 ) -> Result<Vec<NotificationOutboxEvent>, AppError> {
     state.repository()?.consume_notification_outbox()
 }
+
+pub fn reset_availability_observations(
+    state: &AppState,
+    server_id: Option<String>,
+) -> Result<(), AppError> {
+    state
+        .repository()?
+        .reset_availability_observations(server_id.as_deref())
+}

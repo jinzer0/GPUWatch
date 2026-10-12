@@ -1,6 +1,6 @@
 # 구현계획서 템플릿
 
-이 파일은 `mydocs/plans/task_{milestone_slug}_{issue}_impl.md` 작성용 중앙 템플릿이다. 구현계획서는 승인된 수행계획을 실제 Stage 단위 산출물, 검증 명령, 커밋 메시지로 고정하는 문서다.
+이 파일은 `mydocs/plans/task_{milestone_slug}_{issue}_impl.md` 작성용 중앙 템플릿이다. 허용된 Scope를 Stage별 산출물과 검증으로 정리한다. 기존 BMAD 계획이 있으면 참조하여 중복 작성하지 않는다. Stage 수에 최소값은 없으며 필요한 Stage만 남긴다. 승인 기준은 [`공통 정책`](../manual/agent_code_hyperfall_rule_conflict.md)을 따른다.
 
 수행계획서: [`task_{milestone_slug}_{issue}.md`](task_{milestone_slug}_{issue}.md)
 GitHub Issue: [#{issue}](https://github.com/jinzer0/GPUWatch/issues/{issue})
@@ -20,7 +20,7 @@ GitHub Issue: [#{issue}](https://github.com/jinzer0/GPUWatch/issues/{issue})
 
 | 파일 | 수행계획서상 선택 위치 | Stage 산출물 경로 | 일치 여부 | 비고 |
 |---|---|---|---|---|
-| `{path 또는 해당 없음}` | `{path}` | `{path}` | OK/MISS | {불일치 시 계획 변경 승인 필요} |
+| `{path 또는 해당 없음}` | `{path}` | `{path}` | OK/MISS | {불일치 시 위치 판단 보정; HIGH/Scope 변경만 승인} |
 
 ## Stage 1 — {제목}
 
@@ -101,26 +101,26 @@ Task #{issue} Stage 3: {핵심 내용 요약}
 
 - 각 Stage 검증 명령은 단계 보고서 작성 전에 실행한다.
 - 실패한 검증은 단계 완료로 처리하지 않는다.
-- 계획 변경이 필요하면 구현계획서를 먼저 갱신하고 작업지시자 승인을 받는다.
-- 문서 위치가 수행계획서 판단과 달라지면 구현 전에 수행계획서 또는 구현계획서를 갱신하고 작업지시자 승인을 받는다.
+- Scope 내 계획/문서 위치 변경은 기존 계획의 판단 근거를 갱신하고 자동 진행한다.
+- HIGH 결정 또는 Scope 확장만 명시 승인받고 안전한 독립 작업은 계속한다.
 
 ## 커밋
 
-- 본 문서가 승인되면 Stage 1 시작 전에 `Task #{issue}: 승인된 구현 계획서 확정` 독립 커밋으로 기록한다.
-- 승인된 구현계획서 커밋에는 저장소가 요구하는 Sisyphus attribution 두 줄을 포함한다.
+- Commit은 명시 요청된 경우에만 수행한다. 계획 commit은 일반 구현의 선행 승인 조건이 아니다.
+- 구현계획서 커밋에는 저장소가 요구하는 Sisyphus attribution 두 줄을 포함한다.
 - 단계 커밋은 단계 산출물과 `mydocs/working/task_{milestone_slug}_{issue}_stage{N}.md`를 함께 묶는다.
 - 커밋 메시지는 `Task #{issue} Stage {N}: {핵심 내용 요약}` 형식을 따른다.
 
 ## 단계 의존성
 
 - Stage 2는 Stage 1의 산출물 확정 후 진행한다.
-- Stage 3은 Stage 2의 검증과 보고서 승인 후 진행한다.
+- Stage 3은 Stage 2의 검증과 Evidence 기록 후 자동 진행한다.
 
 ## 위험과 대응
 
 - **{리스크 이름}**: {대응}
 
-## 승인 요청 사항
+## 위험 결정과 Checkpoint
 
-- {Stage 분할, 산출물, 검증 명령, 커밋 메시지에 대한 승인 요청}
-- 승인 후 본 구현계획서를 독립 커밋하고 Stage 1에 진입하는 것에 대한 승인 요청
+- {위험 수준·허용된 Scope·수용 기준·필요한 HIGH 결정/승인 또는 해당 없음}
+- 계획·Stage 진입/전환·검증·기록은 응답 대기 없는 Checkpoint다.

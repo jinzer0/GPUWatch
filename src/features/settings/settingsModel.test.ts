@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import type { Server, SshConfigImportCandidate } from '../../lib/types';
 import {
   buildBulkImportServerInputs,
-  buildServerRegistrySummary,
   formFromServer,
   formFromSshConfigCandidate,
   getBulkImportCandidateMetadata,
@@ -216,15 +215,6 @@ describe('settingsModel SSH import mapping', () => {
 });
 
 describe('settingsModel registry and form mapping', () => {
-  it('derives total enabled and disabled counts from known servers', () => {
-    // Given: known server data with both enabled states.
-    const servers = [savedServer, { ...savedServer, id: 'server-disabled', enabled: false }];
-
-    // When: the registry summary is built.
-    // Then: every known server is counted exactly once.
-    expect(buildServerRegistrySummary(servers)).toEqual({ total: 2, enabled: 1, disabled: 1 });
-  });
-
   it('maps nullable server fields through an empty form and back to null payloads', () => {
     // Given: server data with no key path or polling interval.
     const server = { ...savedServer, sshKeyPath: null, pollingIntervalSeconds: null };

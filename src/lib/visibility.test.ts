@@ -7,12 +7,12 @@ import {
   filterOverviewRows,
   filterProcessRows,
   getVisibleProcessRows,
+  processRowKey,
   sortOverviewRows,
   sortProcessRows,
   type OverviewSortKey,
   type ProcessTableSortKey
 } from './visibility';
-import { processRowKey } from '../features/processes/processTableModel';
 import { gpuCardFixture, makeProcessRow, processLedgerCollisionRows, visibilityProcessRows as processRows } from '../test-utils/process-fixtures';
 import { overviewRows } from '../test-utils/server-fixtures';
 

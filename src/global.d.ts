@@ -1,3 +1,4 @@
+import type { UiBridge } from '../electron/uiContract';
 import type {
   ConnectionTestResultDto,
   GpuAvailableWatchInput,
@@ -56,6 +57,7 @@ interface GpuwatcherElectronMetadata {
 declare global {
   interface Window {
     gpuwatcher?: GpuwatcherBridge;
+    gpuwatcherUi?: UiBridge;
     gpuWatcherElectron?: GpuwatcherElectronMetadata;
   }
 }

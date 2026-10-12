@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { readdir } from 'node:fs/promises';
+import { lstat, readdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
 
 export const root = process.cwd();
@@ -41,6 +41,8 @@ export async function walk(directory) {
   const paths = [];
   for (const entry of entries) {
     const entryPath = path.join(directory, entry.name);
+    // Signed runs are selected by explicit manifest, never by unsigned discovery.
+    if (path.resolve(entryPath) === path.join(releaseElectronRoot(), 'signed')) continue;
     if (entry.isDirectory()) {
       paths.push(entryPath);
       paths.push(...await walk(entryPath));
@@ -55,13 +57,19 @@ export function releaseElectronRoot() {
   return path.join(root, 'release', 'electron');
 }
 
-export async function discoverAppPath() {
-  const paths = await walk(releaseElectronRoot());
-  const appPath = paths.find((candidate) => candidate.endsWith(`${path.sep}GPUWatcher.app`));
-  if (!appPath) {
-    throw new Error('Expected release/electron/**/GPUWatcher.app from npm run electron:pack, found none.');
+export async function discoverAppPath(explicitAppPath) {
+  if (explicitAppPath !== undefined) {
+    if (!path.isAbsolute(explicitAppPath) || !explicitAppPath.endsWith('.app') || await realpath(explicitAppPath) !== explicitAppPath || !(await lstat(explicitAppPath)).isDirectory()) {
+      throw new Error('Expected a canonical real explicit app directory.');
+    }
+    return explicitAppPath;
   }
-  return appPath;
+  const paths = await walk(releaseElectronRoot());
+  const apps = paths.filter((candidate) => candidate.endsWith(`${path.sep}GPUWatcher.app`));
+  if (apps.length !== 1) {
+    throw new Error(`Expected one unsigned release/electron/**/GPUWatcher.app, found ${apps.length}.`);
+  }
+  return discoverAppPath(apps[0]);
 }
 
 export function canonicalDbPath(dataDir) {

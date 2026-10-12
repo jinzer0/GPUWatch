@@ -163,7 +163,7 @@ function noRuntimeFallback<Name extends keyof CommandMap>(
     return unavailableSshConfigImportResult() as CommandMap[Name]['result'];
   }
 
-  throw new Error(backendUnavailableMessage);
+  throw Object.assign(new Error(backendUnavailableMessage), { type: 'backend_unavailable' });
 }
 
 async function callCommand<Name extends keyof CommandMap>(

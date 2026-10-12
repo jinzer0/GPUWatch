@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use rusqlite::{params, OptionalExtension};
 
+use super::availability;
 use super::history::gpu_history_retention_cutoff;
 use super::mappers::read_snapshot;
 use super::watches::{evaluate_success, reset_server};
@@ -46,8 +47,34 @@ impl Repository {
         let summary_json = serde_json::to_string(success).map_err(|err| {
             AppError::new("storage_app", "snapshot_write_failed", err.to_string())
         })?;
-        let retention_cutoff = gpu_history_retention_cutoff(finished_at)?;
-        let transaction = self.conn.unchecked_transaction()?;
+        let retention_cutoff = match gpu_history_retention_cutoff(finished_at) {
+            Ok(cutoff) => cutoff,
+            Err(error) => {
+                self.reset_availability_observations(Some(id))?;
+                return Err(error);
+            }
+        };
+        let transaction = rusqlite::Transaction::new_unchecked(
+            &self.conn,
+            rusqlite::TransactionBehavior::Immediate,
+        )?;
+        let previous_at = transaction
+            .query_row(
+                "SELECT received_at FROM latest_snapshots WHERE server_id = ?1",
+                params![id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?;
+        if previous_at
+            .as_deref()
+            .and_then(|at| chrono::DateTime::parse_from_rfc3339(at).ok())
+            == chrono::DateTime::parse_from_rfc3339(finished_at).ok()
+        {
+            transaction.commit()?;
+            return Ok(());
+        }
+        availability::evaluate_success(&transaction, id, success, finished_at)?;
+        evaluate_success(&transaction, id, success, finished_at)?;
         transaction.execute(
             "INSERT INTO latest_snapshots(server_id, protocol_version, schema_version, received_at, raw_json, parsed_summary_json)
              VALUES(?1, ?2, ?3, ?4, ?5, ?6)
@@ -121,7 +148,6 @@ impl Repository {
              WHERE server_id = ?2",
             params![finished_at, id],
         )?;
-        evaluate_success(&transaction, id, success, finished_at)?;
         transaction.commit()?;
         Ok(())
     }
@@ -133,7 +159,13 @@ impl Repository {
         finished_at: &str,
     ) -> Result<(), AppError> {
         let has_snapshot = self.latest_snapshot(id)?.is_some();
-        let retention_cutoff = gpu_history_retention_cutoff(finished_at)?;
+        let retention_cutoff = match gpu_history_retention_cutoff(finished_at) {
+            Ok(cutoff) => cutoff,
+            Err(error) => {
+                self.reset_availability_observations(Some(id))?;
+                return Err(error);
+            }
+        };
         let status = if has_snapshot {
             "stale"
         } else if error.layer == "transport_ssh" {
@@ -153,6 +185,7 @@ impl Repository {
             params![status, error.error_type, error.message, finished_at, id],
         )?;
         reset_server(&transaction, id, finished_at)?;
+        availability::reset_server(&transaction, id)?;
         transaction.commit()?;
         Ok(())
     }

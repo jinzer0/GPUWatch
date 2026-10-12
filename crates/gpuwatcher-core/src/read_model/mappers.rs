@@ -1,5 +1,5 @@
 use crate::config::BUSY_MEMORY_THRESHOLD_MIB;
-use crate::models::{CollectorGpu, GpuCardDto, ServerHealth, ServerHealthDto};
+use crate::models::{CollectorGpu, GpuAvailabilityDto, GpuCardDto, ServerHealth, ServerHealthDto};
 
 pub fn health_dto(health: Option<&ServerHealth>) -> ServerHealthDto {
     ServerHealthDto {
@@ -25,6 +25,10 @@ pub(super) fn gpu_card(gpu: &CollectorGpu) -> GpuCardDto {
     GpuCardDto {
         index: gpu.index,
         uuid: gpu.uuid.clone(),
+        availability: GpuAvailabilityDto {
+            state: "unknown".to_string(),
+            condition_started_at: None,
+        },
         pci_bus_id: gpu.pci_bus_id.clone(),
         name: gpu.name.clone(),
         driver_version: gpu.driver_version.clone(),

@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration};
 use rusqlite::{params, OptionalExtension, Transaction};
 use uuid::Uuid;
 
@@ -72,12 +72,12 @@ impl Repository {
         input: GpuAvailableWatchInput,
     ) -> Result<GpuAvailableWatchRule, AppError> {
         let now = now_string();
-        let utilization = input
+        let mut utilization = input
             .utilization_threshold_percent
             .unwrap_or(DEFAULT_UTILIZATION);
-        let memory = input.memory_threshold_mib.unwrap_or(DEFAULT_MEMORY_MIB);
-        let sustain = input.sustain_seconds.unwrap_or(DEFAULT_SUSTAIN_SECONDS);
-        let cooldown = input.cooldown_seconds.unwrap_or(DEFAULT_COOLDOWN_SECONDS);
+        let mut memory = input.memory_threshold_mib.unwrap_or(DEFAULT_MEMORY_MIB);
+        let mut sustain = input.sustain_seconds.unwrap_or(DEFAULT_SUSTAIN_SECONDS);
+        let mut cooldown = input.cooldown_seconds.unwrap_or(DEFAULT_COOLDOWN_SECONDS);
         if !(0.0..=100.0).contains(&utilization)
             || input.gpu_index < 0
             || memory < 0
@@ -90,7 +90,10 @@ impl Repository {
                 "watch thresholds and durations must be non-negative",
             ));
         }
-        let transaction = self.conn.unchecked_transaction()?;
+        let transaction = rusqlite::Transaction::new_unchecked(
+            &self.conn,
+            rusqlite::TransactionBehavior::Immediate,
+        )?;
         let id = match input.id.as_deref() {
             Some(id) => {
                 let owner = transaction.query_row("SELECT server_id FROM watch_rules WHERE id = ?1", params![id], |row| row.get::<_, String>(0)).optional()?;
@@ -107,6 +110,12 @@ impl Repository {
             ).optional()?.unwrap_or_else(|| Uuid::new_v4().to_string()),
         };
         let existing = transaction.query_row("SELECT server_id, gpu_uuid, gpu_index, enabled, utilization_threshold_percent, memory_threshold_mib, sustain_seconds, cooldown_seconds, created_at FROM watch_rules WHERE id = ?1", params![id], |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?, row.get::<_, i64>(2)?, row.get::<_, i64>(3)?, row.get::<_, f64>(4)?, row.get::<_, i64>(5)?, row.get::<_, i64>(6)?, row.get::<_, i64>(7)?, row.get::<_, String>(8)?))).optional()?;
+        if let Some(current) = &existing {
+            utilization = input.utilization_threshold_percent.unwrap_or(current.4);
+            memory = input.memory_threshold_mib.unwrap_or(current.5);
+            sustain = input.sustain_seconds.unwrap_or(current.6);
+            cooldown = input.cooldown_seconds.unwrap_or(current.7);
+        }
         let changed = existing.as_ref().is_none_or(|current| {
             current.0 != input.server_id
                 || current.1 != input.gpu_uuid
@@ -123,7 +132,7 @@ impl Repository {
             .unwrap_or_else(|| now.clone());
         transaction.execute("INSERT INTO watch_rules(id, server_id, kind, gpu_uuid, gpu_index, enabled, utilization_threshold_percent, memory_threshold_mib, sustain_seconds, cooldown_seconds, created_at, updated_at) VALUES(?1, ?2, 'gpu_available', ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11) ON CONFLICT(id) DO UPDATE SET server_id=excluded.server_id, gpu_uuid=excluded.gpu_uuid, gpu_index=excluded.gpu_index, enabled=excluded.enabled, utilization_threshold_percent=excluded.utilization_threshold_percent, memory_threshold_mib=excluded.memory_threshold_mib, sustain_seconds=excluded.sustain_seconds, cooldown_seconds=excluded.cooldown_seconds, updated_at=excluded.updated_at", params![id, input.server_id, input.gpu_uuid, input.gpu_index, bool_to_i64(input.enabled), utilization, memory, sustain, cooldown, created_at, now])?;
         if changed {
-            transaction.execute("INSERT INTO watch_runtime_state(rule_id, condition_started_at, last_triggered_at, armed, updated_at) VALUES(?1, NULL, NULL, 1, ?2) ON CONFLICT(rule_id) DO UPDATE SET condition_started_at=NULL, last_triggered_at=NULL, armed=1, updated_at=excluded.updated_at", params![id, now])?;
+            transaction.execute("INSERT INTO watch_runtime_state(rule_id, condition_started_at, last_triggered_at, armed, updated_at) VALUES(?1, NULL, NULL, 1, ?2) ON CONFLICT(rule_id) DO UPDATE SET condition_started_at=NULL, last_observed_at=NULL, updated_at=excluded.updated_at", params![id, now])?;
         }
         transaction.commit()?;
         self.get_watch_rule(&id)?.ok_or_else(|| {
@@ -165,12 +174,37 @@ pub(super) fn evaluate_success(
     success: &SuccessEnvelope,
     at: &str,
 ) -> Result<(), AppError> {
-    let server_name = transaction.query_row(
-        "SELECT name FROM servers WHERE id = ?1",
+    let (server_name, interval, server_enabled) = transaction.query_row(
+        "SELECT name, polling_interval_seconds, enabled FROM servers WHERE id = ?1",
         params![server_id],
-        |row| row.get::<_, String>(0),
+        |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, bool>(2)?,
+            ))
+        },
     )?;
-    let mut statement = transaction.prepare("SELECT r.id, r.gpu_uuid, r.gpu_index, r.utilization_threshold_percent, r.memory_threshold_mib, r.sustain_seconds, r.cooldown_seconds, s.condition_started_at, s.last_triggered_at, s.armed FROM watch_rules r JOIN watch_runtime_state s ON s.rule_id = r.id WHERE r.server_id = ?1 AND r.kind = 'gpu_available' AND r.enabled = 1")?;
+    if !server_enabled {
+        return reset_server(transaction, server_id, at);
+    }
+    let previous_snapshot_at = transaction
+        .query_row(
+            "SELECT received_at FROM latest_snapshots WHERE server_id = ?1",
+            params![server_id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?;
+    let snapshot_gap = previous_snapshot_at
+        .as_deref()
+        .and_then(|previous| elapsed(previous, at));
+    if snapshot_gap == Some(Duration::zero()) {
+        return Ok(());
+    }
+    if previous_snapshot_at.is_some() && snapshot_gap.is_none_or(|gap| gap < Duration::zero()) {
+        return reset_server(transaction, server_id, at);
+    }
+    let mut statement = transaction.prepare("SELECT r.id, r.gpu_uuid, r.gpu_index, r.utilization_threshold_percent, r.memory_threshold_mib, r.sustain_seconds, r.cooldown_seconds, s.condition_started_at, s.last_triggered_at, s.armed, r.enabled, s.last_observed_at FROM watch_rules r JOIN watch_runtime_state s ON s.rule_id = r.id WHERE r.server_id = ?1 AND r.kind = 'gpu_available'")?;
     let rows = statement.query_map(params![server_id], |row| {
         Ok((
             row.get::<_, String>(0)?,
@@ -183,36 +217,97 @@ pub(super) fn evaluate_success(
             row.get::<_, Option<String>>(7)?,
             row.get::<_, Option<String>>(8)?,
             row.get::<_, i64>(9)?,
+            row.get::<_, i64>(10)?,
+            row.get::<_, Option<String>>(11)?,
         ))
     })?;
     for row in rows {
-        let (id, uuid, index, utilization, memory, sustain, cooldown, started, last, armed) = row?;
-        let gpu = matching_gpu(&success.gpus, uuid.as_deref(), index);
-        let eligible = gpu.is_some_and(|gpu| {
-            gpu.gpu_utilization_percent
-                .is_some_and(|value| value <= utilization)
-                && gpu.memory_used_mib.is_some_and(|value| value <= memory)
-        });
-        if !eligible {
-            reset(transaction, &id, at)?;
+        let (
+            id,
+            uuid,
+            index,
+            utilization,
+            memory,
+            sustain,
+            cooldown,
+            started,
+            last,
+            armed,
+            enabled,
+            observed,
+        ) = row?;
+        let Ok(observation_time) = DateTime::parse_from_rfc3339(at) else {
+            break_condition(transaction, &id, at)?;
+            continue;
+        };
+        let previous_time = observed
+            .as_deref()
+            .and_then(|previous| DateTime::parse_from_rfc3339(previous).ok());
+        let gap = observed
+            .as_deref()
+            .and_then(|previous| elapsed(previous, at));
+        if previous_time == Some(observation_time) {
             continue;
         }
-        let started = match started {
-            Some(started) if elapsed(&started, at)? >= 0 => started,
-            Some(_) | None => at.to_string(),
+        if observed.is_some() && previous_time.is_none_or(|previous| previous > observation_time) {
+            break_condition(transaction, &id, at)?;
+            continue;
+        }
+        let gpu = matching_gpu(&success.gpus, uuid.as_deref(), index);
+        let metrics = gpu.and_then(|gpu| {
+            let usage = gpu.gpu_utilization_percent?;
+            let used = gpu.memory_used_mib?;
+            (usage.is_finite() && (0.0..=100.0).contains(&usage) && used >= 0)
+                .then_some((usage, used))
+        });
+        let Some((usage, used)) = metrics else {
+            break_condition(transaction, &id, at)?;
+            continue;
         };
-        let sustained = elapsed(&started, at)? >= sustain;
+        if usage > utilization || used > memory {
+            transaction.execute("UPDATE watch_runtime_state SET condition_started_at=NULL, last_observed_at=?1, armed=1, updated_at=?1 WHERE rule_id=?2", params![at, id])?;
+            continue;
+        }
+        let continuous = gap.is_some_and(|duration| {
+            duration
+                <= Duration::seconds(super::availability::max_observation_gap_seconds(interval))
+        });
+        let started = started
+            .filter(|start| {
+                continuous
+                    && elapsed(start, at).is_some_and(|duration| duration >= Duration::zero())
+            })
+            .unwrap_or_else(|| at.to_string());
+        let sustained =
+            elapsed(&started, at).is_some_and(|duration| duration.num_seconds() >= sustain);
         let cooled = last
             .as_deref()
-            .map(|value| elapsed(value, at).map(|seconds| seconds >= cooldown))
-            .transpose()?
+            .map(|value| {
+                elapsed(value, at).is_some_and(|duration| {
+                    duration.num_seconds() >= cooldown.max(DEFAULT_COOLDOWN_SECONDS)
+                })
+            })
             .unwrap_or(true);
-        if armed != 0 && sustained && cooled {
+        if enabled != 0 && armed != 0 && sustained && cooled {
             let gpu_label = gpu.map(|value| value.index).unwrap_or(index);
-            transaction.execute("INSERT INTO notification_outbox(id, rule_id, server_id, event_type, title, body, created_at) VALUES(?1, ?2, ?3, 'gpu_available', 'GPU available', ?4, ?5)", params![Uuid::new_v4().to_string(), id, server_id, format!("{server_name} · GPU {gpu_label} is available"), at])?;
-            transaction.execute("UPDATE watch_runtime_state SET condition_started_at=?1, last_triggered_at=?1, armed=0, updated_at=?1 WHERE rule_id=?2", params![at, id])?;
+            let default_condition = utilization == DEFAULT_UTILIZATION
+                && memory == DEFAULT_MEMORY_MIB
+                && sustain == DEFAULT_SUSTAIN_SECONDS;
+            let (title, body) = if default_condition {
+                (
+                    "GPU available",
+                    format!("{server_name} · GPU {gpu_label} is available"),
+                )
+            } else {
+                (
+                    "Configured condition met",
+                    format!("{server_name} · GPU {gpu_label}: configured condition met"),
+                )
+            };
+            transaction.execute("INSERT INTO notification_outbox(id, rule_id, server_id, event_type, title, body, created_at) VALUES(?1, ?2, ?3, 'gpu_available', ?4, ?5, ?6)", params![Uuid::new_v4().to_string(), id, server_id, title, body, at])?;
+            transaction.execute("UPDATE watch_runtime_state SET condition_started_at=?1, last_observed_at=?2, last_triggered_at=?2, armed=0, updated_at=?2 WHERE rule_id=?3", params![started, at, id])?;
         } else {
-            transaction.execute("UPDATE watch_runtime_state SET condition_started_at=?1, updated_at=?1 WHERE rule_id=?2", params![started, id])?;
+            transaction.execute("UPDATE watch_runtime_state SET condition_started_at=?1, last_observed_at=?2, updated_at=?2 WHERE rule_id=?3", params![started, at, id])?;
         }
     }
     Ok(())
@@ -223,12 +318,12 @@ pub(super) fn reset_server(
     server_id: &str,
     at: &str,
 ) -> Result<(), AppError> {
-    transaction.execute("UPDATE watch_runtime_state SET condition_started_at=NULL, updated_at=?1 WHERE rule_id IN (SELECT id FROM watch_rules WHERE server_id=?2)", params![at, server_id])?;
+    transaction.execute("UPDATE watch_runtime_state SET condition_started_at=NULL, last_observed_at=NULL, updated_at=?1 WHERE rule_id IN (SELECT id FROM watch_rules WHERE server_id=?2)", params![at, server_id])?;
     Ok(())
 }
 
-fn reset(transaction: &Transaction<'_>, id: &str, at: &str) -> Result<(), AppError> {
-    transaction.execute("UPDATE watch_runtime_state SET condition_started_at=NULL, armed=1, updated_at=?1 WHERE rule_id=?2", params![at, id])?;
+fn break_condition(transaction: &Transaction<'_>, id: &str, at: &str) -> Result<(), AppError> {
+    transaction.execute("UPDATE watch_runtime_state SET condition_started_at=NULL, last_observed_at=NULL, updated_at=?1 WHERE rule_id=?2", params![at, id])?;
     Ok(())
 }
 
@@ -243,14 +338,10 @@ fn matching_gpu<'a>(
     }
 }
 
-fn elapsed(start: &str, end: &str) -> Result<i64, AppError> {
-    let start = DateTime::parse_from_rfc3339(start)
-        .map_err(|err| AppError::new("storage_app", "watch_timestamp_invalid", err.to_string()))?
-        .with_timezone(&Utc);
-    let end = DateTime::parse_from_rfc3339(end)
-        .map_err(|err| AppError::new("storage_app", "watch_timestamp_invalid", err.to_string()))?
-        .with_timezone(&Utc);
-    Ok((end - start).num_seconds())
+fn elapsed(start: &str, end: &str) -> Option<Duration> {
+    let start = DateTime::parse_from_rfc3339(start).ok()?;
+    let end = DateTime::parse_from_rfc3339(end).ok()?;
+    Some(end.signed_duration_since(start))
 }
 
 fn read_rule(row: &rusqlite::Row<'_>) -> rusqlite::Result<GpuAvailableWatchRule> {

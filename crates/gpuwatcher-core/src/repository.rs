@@ -5,6 +5,7 @@ use rusqlite::Connection;
 
 use crate::error::AppError;
 
+mod availability;
 mod health;
 mod history;
 mod mappers;

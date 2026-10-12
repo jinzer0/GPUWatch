@@ -190,7 +190,7 @@ export const helperContract = [
     dbMutation: 'watch-rules-write',
     pollingOverlapKey: 'server-id',
     helperEnvelope: 'request:{action:string,payload:object};response:{ok:true,data}|{ok:false,error:{layer,type,message}}',
-    fallbackBehavior: 'Serialize the watch rule write and reset runtime state when its configuration changes.',
+    fallbackBehavior: 'Serialize watch writes; break changed observation intervals without erasing notification cooldown or armed history.',
     notes: 'Creates or updates one GPU availability watch rule.'
   },
   {
@@ -216,6 +216,18 @@ export const helperContract = [
     helperEnvelope: 'request:{action:string,payload:object};response:{ok:true,data}|{ok:false,error:{layer,type,message}}',
     fallbackBehavior: 'Electron main consumes pending notification events exactly once; renderer bridge and IPC do not expose it.',
     notes: 'Consumes pending native notification events from the local outbox.'
+  },
+  {
+    frontendApi: null,
+    helperAction: 'reset_availability_observations',
+    visibility: 'main-only',
+    electronPreloadMethod: null,
+    timeoutClass: 'local-10s',
+    dbMutation: 'availability-reset',
+    pollingOverlapKey: 'electron-main-scheduler',
+    helperEnvelope: 'request:{action:string,payload:object};response:{ok:true,data}|{ok:false,error:{layer,type,message}}',
+    fallbackBehavior: 'Invalidate observation intervals only; preserve notification cooldown and armed history.',
+    notes: 'Main serializes startup and suspend/resume resets with collection; payload is exactly {serverId:string|null}.'
   },
   {
     frontendApi: null,

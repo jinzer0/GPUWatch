@@ -1,10 +1,34 @@
-# GPUWatcher v0.1 Demo Script
+# GPUWatcher 데모 순서
 
-1. Start the app with `npm run dev`, then run `npm run electron:dev` in a second terminal.
-2. Open Overview and click `Seed demo data`.
-3. Confirm the demo server shows GPU total, busy/free counts, average utilization, memory usage, max temperature, status, and last success time.
-4. Open Server Detail and confirm configured host, backend snapshot hostname, driver/CUDA, GPU cards, unknown metrics, and per-GPU process rows.
-5. Open Process Table and confirm process rows are sorted by GPU memory descending.
-6. Open Settings, add a real SSH server, and run Test Connection.
-7. Run Refresh and confirm the latest successful live snapshot appears in Overview, Server Detail, and Process Table.
-8. Temporarily break the SSH host or username and refresh again; confirm the latest success remains visible as stale while the latest error is shown.
+현재 서버 중심 UI의 시연 시나리오입니다. 실행·통과 기록이 아니며, 실제 SSH·OS 알림은 별도 승인 없이는 수행하지 않습니다. `GPUWATCHER_TEST_DATA_DIR`로 격리한 데모 데이터를 사용하고 운영 DB나 실제 서버 설정을 고의로 손상시키지 않습니다. 테스트 fixture는 테스트 자료로만 구분하며 실제 지표인 것처럼 보여주지 않습니다.
+
+## 준비
+
+- 터미널 두 개에서 `npm run dev`, `npm run electron:dev`로 개발 앱을 실행합니다. Electron 실행 터미널에 격리 데이터 경로를 설정합니다.
+- 실제 수집 시연은 승인된 Linux NVIDIA 서버와 프롬프트 없는 키 기반 SSH를 준비합니다. 원격에는 NVIDIA 드라이버/`nvidia-smi`, POSIX shell, `ps`만 필요하고 GPUWatcher·nvitop·Python·collector를 설치하지 않습니다.
+- GUI의 SSH agent·host key·passphrase·비대화형 `PATH`는 Terminal과 다를 수 있습니다. live 대상이 없으면 빈 상태와 로컬 관리 흐름만 시연하고 가짜 수집 성공이나 지표로 채우지 않습니다.
+
+## 화면·서버 관리
+
+1. 서버 사이드바와 빈 상태를 소개합니다. `+ → 직접 추가`에서 서버 정보를 입력해 저장하고 “Mac에 설정 저장”과 “SSH 연결 성공”이 별개임을 설명합니다.
+2. 해당 행 `… → 연결 테스트`의 관리 시트를 엽니다. 승인된 대상에서만 테스트를 실행해 실제 결과를 확인합니다. 행 메뉴는 선택된 서버가 아닌 그 행의 서버를 대상으로 편집·삭제·테스트·모니터링 시작/중지를 수행합니다.
+3. `+ → SSH config 가져오기`를 열어 후보 선택과 저장 흐름을 보여줍니다. 가져온 서버는 모니터링 off입니다. 격리 시나리오에서 부분 실패가 있으면 성공 항목을 유지하고 실패 항목만 재시도합니다. 결과가 없으면 부분 성공을 연출하지 않습니다.
+4. 편집 시트에서 미저장 입력을 두고 닫기를 시도해 폐기 확인을 보여줍니다. 삭제는 격리 데모 항목에만 확인 절차를 보여주며 원격 호스트는 바뀌지 않는다고 설명합니다.
+5. 승인된 서버에서 모니터링 시작/새로고침으로 최신 성공을 가져오고 서버 행을 선택합니다. GPU 핵심 지표, snapshot hostname, driver/CUDA, 현재 프로세스를 확인합니다. 여러 GPU 카드와 각 카드의 추가 지표를 따로 펼칩니다. History 탭이나 최근 24시간 기록 화면은 없습니다.
+6. `N/A`·`-`·누락 값은 unknown이지 0이 아님을 설명합니다. MIG/드라이버 차이, 선택적 `pmon`/`dmon` 저하, PID/권한/수집 시점에 따른 프로세스 한계가 있으며 nvitop과 정확히 같은 결과를 보장하지 않습니다. 격리된 실패 시나리오가 준비돼 있으면 이전 성공이 stale로 남고 최신 오류가 표시되는 것을 확인합니다.
+7. 사이드바 설정 아이콘과 앱 메뉴 설정(`Cmd+,`)으로 외형 전용 설정 창을 엽니다. 반복 호출해 창 하나만 유지되는지 확인하고 시스템/라이트/다크를 바꿉니다. 서버 관리는 관리 시트, 알림은 GPU 카드에서 다룹니다.
+
+## 가용 관측·선택적 알림 설명
+
+1. 기본 가용 표시는 알림 opt-in과 독립적입니다. 알려진 UTIL ≤5% **AND** VRAM ≤1024MiB가 성공 관측에서 연속 300초 유지돼야 합니다. 실제 성공 관측이 없으면 기다린 시간만으로 가용이라고 설명하지 않습니다.
+2. 실패·unknown·조건 이탈·GPU 사라짐·서버 설정 변경·모니터링 off·stale·앱 재시작·절전은 관측 구간을 무효화합니다. 관측 간 공백이 `2 × polling interval + 60초`를 넘으면 다시 관측하며, 오래된 성공값에 화면 타이머를 더하지 않습니다.
+3. GPU 카드의 알림 on/off와 저장 조건을 소개합니다. 기존 사용자 지정 임계값·지속시간·cooldown은 다시 켜도 보존되고 기본 카드 조건과 별개입니다. custom 조건 충족은 기본 GPU 가용을 보장하지 않습니다.
+4. 연속 유휴에는 한 번만 알리며, 사용 재개(저장 조건 이탈)가 관측된 뒤 지속 조건과 cooldown을 다시 만족해야 재알림합니다. 실효 cooldown은 최소 900초이며 작은 저장값을 덮어쓰지 않습니다. off/on·실패·unknown은 발송 이력이나 재준비를 임의 초기화하지 않습니다.
+5. 권한을 알 수 없으면 `unknown`(확인 불가)로 남습니다. 알림 저장 성공은 OS 권한 허용이나 배너 노출을 보장하지 않습니다. 실제 OS 알림 시연은 별도 승인된 격리 대상에서만 진행하고 macOS 설정·집중 모드에 따른 결과를 따로 기록합니다.
+
+## QA·패키지 증거 구분
+
+- Renderer 키보드 시연: Tab·Enter/Space, 메뉴 화살표·Home/End·Escape, 시트 포커스와 닫기 후 복귀를 확인합니다. 자동 renderer/CDP 이벤트는 물리 macOS 키보드·VoiceOver 통과 증거가 아닙니다.
+- 물리 `Cmd+,`·앱 메뉴·VoiceOver·sleep/wake·live SSH·OS 배너는 별도 승인 후 각각 확인합니다.
+- unsigned 패키지 시연은 실제 생성된 `.app` 경로와 ASAR 밖 helper를 확인합니다. 내부 테스트 DMG/ZIP을 포함해 서명·공증·업로드·자동 업데이트·프로덕션 배포 완료로 소개하지 않습니다.
+- 상세 실행 시나리오는 [스모크 체크리스트](../smoke-checklist.md)에 있으며, 수행하지 않은 항목은 미실행으로 기록합니다.

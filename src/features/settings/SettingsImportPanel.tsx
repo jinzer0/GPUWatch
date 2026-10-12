@@ -59,7 +59,8 @@ export const SettingsImportPanel = ({
   const selectedAliases = new Set(selectedImportHostAliases);
   const validCount = bulkImportCandidateMetadata.filter((item) => item.selectable).length;
   const selectedValidCount = bulkImportCandidateMetadata.filter((item) => item.selectable && selectedAliases.has(item.candidate.hostAlias)).length;
-  const canSaveSelection = selectedValidCount > 0 && !bulkImportSaveMutation.isPending;
+  const operationPending = bulkImportSaveMutation.isPending || sshConfigImportMutation.isPending;
+  const canSaveSelection = selectedValidCount > 0 && !operationPending;
 
   return (
     <section aria-labelledby="ssh-config-import-heading" className="settings-import-workspace surface p-4">
@@ -70,7 +71,7 @@ export const SettingsImportPanel = ({
             Preview OpenSSH host aliases, select valid hosts for disabled bulk creation, or use one candidate to copy it into the manual server form.
           </p>
         </div>
-        <Button disabled={sshConfigImportMutation.isPending} onClick={() => sshConfigImportMutation.mutate()} type="button" variant="secondary">
+        <Button disabled={operationPending} onClick={() => sshConfigImportMutation.mutate()} type="button" variant="secondary">
           Import from SSH config
         </Button>
       </div>
@@ -93,10 +94,10 @@ export const SettingsImportPanel = ({
               <div className="mt-1 text-sm font-semibold text-[color:var(--color-muted)]" id={bulkImportSelectionStatusId}>{selectedValidCount} of {validCount} valid hosts selected</div>
             </div>
             <div className="settings-import-actions flex flex-wrap gap-3">
-              <Button aria-describedby={validCount === 0 || bulkImportSaveMutation.isPending ? bulkImportSelectionStatusId : undefined} disabled={validCount === 0 || bulkImportSaveMutation.isPending} onClick={selectAllImportableCandidates} type="button" variant="secondary">
+              <Button aria-describedby={validCount === 0 || operationPending ? bulkImportSelectionStatusId : undefined} disabled={validCount === 0 || operationPending} onClick={selectAllImportableCandidates} type="button" variant="secondary">
                 Select all valid hosts
               </Button>
-              <Button aria-describedby={!canSaveSelection ? bulkImportSelectionStatusId : undefined} disabled={!canSaveSelection} onClick={() => void saveSelectedImportCandidates()} type="button" variant="primary">
+              <Button aria-describedby={!canSaveSelection ? bulkImportSelectionStatusId : undefined} disabled={!canSaveSelection} onClick={() => void saveSelectedImportCandidates().catch(() => undefined)} type="button" variant="primary">
                 Save selected hosts
               </Button>
             </div>
@@ -105,6 +106,7 @@ export const SettingsImportPanel = ({
           {bulkImportSaveMutation.isPending ? (
             <ResultFeedback label="Saving selected SSH config hosts" state="pending" />
           ) : null}
+          {bulkImportSaveMutation.error ? <ResultFeedback label="Bulk import" message={bulkImportSaveMutation.error.message} state="error" /> : null}
 
           {bulkImportSaveResult ? (
             <div className="settings-import-summary surface p-3 text-xs leading-5" role="status" aria-live="polite">
@@ -140,7 +142,7 @@ export const SettingsImportPanel = ({
           ) : null}
           {importResult.candidates.length === 0 ? <div className="settings-import-empty text-sm text-[color:var(--color-muted)]">No importable SSH host aliases found.</div> : null}
           {bulkImportCandidateMetadata.length > 0 ? (
-            <div className="settings-import-ledger surface overflow-x-auto">
+            <div aria-label="SSH config 후보 표" className="settings-import-ledger surface overflow-x-auto" role="region" tabIndex={0}>
               <table aria-label="SSH config import candidate ledger" className="settings-import-ledger-table w-full min-w-[58rem] border-collapse text-left text-sm">
                 <thead className="table-head">
                   <tr>
@@ -166,7 +168,7 @@ export const SettingsImportPanel = ({
                             aria-describedby={candidateDescriptionIds(metadata)}
                             aria-label={`Select ${candidate.hostAlias} for bulk import`}
                             checked={metadata.selectable && selectedAliases.has(candidate.hostAlias)}
-                            disabled={!metadata.selectable || bulkImportSaveMutation.isPending}
+                            disabled={!metadata.selectable || operationPending}
                             onChange={() => toggleImportCandidateSelection(candidate.hostAlias)}
                             type="checkbox"
                           />
@@ -189,7 +191,7 @@ export const SettingsImportPanel = ({
                           ) : null}
                         </td>
                         <td className="px-3 py-3">
-                          <Button aria-label={`Use ${candidate.hostAlias}`} onClick={() => importCandidate(candidate)} size="sm" type="button" variant="primary">
+                          <Button aria-label={`Use ${candidate.hostAlias}`} disabled={operationPending} onClick={() => importCandidate(candidate)} size="sm" type="button" variant="primary">
                             Use
                           </Button>
                         </td>

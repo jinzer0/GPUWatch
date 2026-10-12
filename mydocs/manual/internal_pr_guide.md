@@ -2,9 +2,13 @@
 
 ## 목적
 
-이 문서는 내부 task PR 본문 작성 규칙을 정의한다. 내부 task PR은 `local/task{번호}`에서 작업한 내용을 [`task-final-report`](../skills/task-final-report/SKILL.md)의 두 approval gate를 거쳐 `publish/task{번호}`와 `devel` 대상 Open PR로 게시한다.
+이 문서는 내부 task PR 본문 작성 규칙을 정의한다. 내부 task PR은 `local/task{번호}`에서 작업한 내용을 [`task-final-report`](../skills/task-final-report/SKILL.md)의 비차단 final report/evidence checkpoint와 하나의 exact publication Human gate를 거쳐 `publish/task{번호}`와 `devel` 대상 Open PR로 게시한다.
 
 브랜치 생성은 `task-start`, PR publication은 `task-final-report`, 문서 링크 기준은 [`pr_command_guide.md`](pr_command_guide.md)를 따른다. 일반 내부 task에서 직접 `git push` 또는 `gh pr create`를 실행하지 않는다.
+
+LOW/MEDIUM 보고/evidence 갱신과 로컬 PR 초안은 먼저 lean/local 경로로 수행한다. 계획서 commit이나 clean working tree를 요구하지 않고, 기존 BMAD 계획서를 로컬 참조할 수 있으며 중복 계획서/Stage 파일을 강제로 만들지 않는다. 아래 exact commit OID 링크와 publication shell 계약은 명시적으로 요청된 committed publication에만 적용한다. 로컬 보고 요청으로 commit/publication 권한을 추정하지 않고, 기존 미커밋/미추적 작업은 보존한다.
+
+위험 판단은 [`agent_code_hyperfall_rule_conflict.md`](agent_code_hyperfall_rule_conflict.md)를 따른다. Stage/계획서/최종 evidence는 별도 Human 대기 없이 사용하는 상태를 캡처하고 재검증하는 checkpoint다. lean/local 경로는 로컬 문서/evidence 상태를, committed publication은 exact commit/plan/blob/evidence 상태를 결박한다. 내부 `APPROVED_*` 변수는 검증한 context이며 publication 승인 응답을 대신하지 않는다. read-only 원격 preflight와 로컬 title/body 준비는 publication 승인 전에 허용하되, push/PR mutation은 exact publication tuple의 명시적 Human 승인 뒤에만 수행한다. commit에는 명시적 commit 권한이 필요하고 merge/issue close/release 권한은 publication 승인과 별개다. 도구 권한은 그대로 유지한다.
 
 ## 기본 원칙
 
@@ -14,7 +18,7 @@
 - PR title은 target issue REST 응답에서 검증한 live title로 만든 정확한 `Task #N: <live issue title>` 한 줄이다.
 - PR body에는 target issue를 닫는 독립 줄 `Closes #N`이 있어야 한다.
 - 상세 내용은 `변경 내역`의 Stage 링크와 작업 문서 링크로 참조한다.
-- approval tuple의 title/body hash와 publication 뒤 API 검증 결과는 PR body에 넣지 않는다. hash는 두 번째 approval tuple에만 남기고 closing linkage는 `task-final-report` 성공 출력으로만 남긴다.
+- approval tuple의 title/body hash와 publication 뒤 API 검증 결과는 PR body에 넣지 않는다. hash는 publication Human approval tuple에만 남기고 closing linkage는 `task-final-report` 성공 출력으로만 남긴다.
 - no-PR publication은 exact absence를 생성 직전 다시 확인하고 draft로 생성한다. POST가 반환한 exact number/node ID의 draft를 REST로 검증한 뒤에만 같은 PR을 ready로 전환하고 exact non-draft와 closing linkage를 검증한다.
 
 ## 섹션 구성
@@ -66,9 +70,9 @@
 
 `### 작업 문서` (`변경 내역`의 하위 섹션):
 
-- 수행 계획서, 구현 계획서, 최종 보고서를 적는다.
+- 실제 사용한 수행 계획서, 구현 계획서, 최종 보고서를 적는다. 로컬 초안에서는 기존 BMAD 계획서 등 해당 산출물을 참조하고, 없는 문서를 이 목록을 위해 생성하지 않는다.
 - 단계별 완료 보고서는 위 Stage timeline의 단계 보고서 링크에서 이미 노출되므로 중복 적지 않는다.
-- 작업 문서 링크는 approved final commit OID 기준 GitHub blob URL을 사용하고, raw URL 대신 `[파일명](URL)` 형식으로 표시한다.
+- committed publication의 작업 문서 링크는 checkpoint에서 캡처하고 재검증한 exact final commit OID 기준 GitHub blob URL을 사용하고, raw URL 대신 `[파일명](URL)` 형식으로 표시한다. 게시 시에는 같은 OID를 publication Human 승인 tuple에 결박한다. lean/local 보고와 초안에는 아직 없는 commit OID를 요구하거나 꾸며 넣지 않는다.
 
 `핵심 리뷰 포인트`:
 
