@@ -46,3 +46,5 @@ Skill 본문은 도구별 Skill 형식을 따른다. 산출물 문서를 만들 
 - 진실 원천: `mydocs/skills/{skill-name}/SKILL.md`
 - Codex 인식 경로: `.agents/skills/` (저장소 루트 심볼릭 링크 -> `mydocs/skills`)
 - Claude Code 인식 경로: `.claude/skills/` (저장소 루트 심볼릭 링크 -> `mydocs/skills`)
+
+BMAD의 `bmad*`·`bmod-*` 설치본과 루트 `skills-lock.json`을 함께 버전 관리한다. `_bmad/custom/*.user.toml`은 개인 설정으로 제외한다. Task #29의 공식 UX 기록은 `docs/ux/task_m001_29/`이며 동일한 로컬 `_bmad-output/initiative-ux-ui-refactor/` 사본은 중복 게시하지 않는다.
