@@ -51,8 +51,11 @@
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 14px;
-  padding: 0 0 20px;
-  border-bottom: 1px solid var(--color-line);
+  padding: 16px;
+  border: 1px solid var(--glass-rim);
+  border-radius: 14px;
+  background: linear-gradient(155deg, var(--glass-highlight), transparent 58%), var(--glass-panel-fill);
+  box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
 }
 .detail-health-strip > li {
   min-width: 0;
@@ -92,11 +95,9 @@
   min-width: 0;
   overflow: hidden;
   border-radius: 14px;
-  background: var(--color-surface);
-  box-shadow: 0 2px 6px #00000003;
-}
-.gpu-card-available {
-  border-color: color-mix(in srgb, var(--color-success) 45%, var(--color-line));
+  border: 1px solid var(--glass-rim);
+  background: linear-gradient(155deg, var(--glass-highlight), transparent 58%), var(--glass-panel-fill);
+  box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
 }
 .gpu-card-summary {
   display: grid;
@@ -106,6 +107,7 @@
   padding: 20px;
   cursor: pointer;
   list-style: none;
+  transition: background-color var(--glass-transition);
 }
 .gpu-card-summary::-webkit-details-marker {
   display: none;
@@ -123,7 +125,7 @@
   transform: rotate(135deg);
 }
 .gpu-card-summary:hover {
-  background: color-mix(in srgb, var(--color-surface-hover) 45%, transparent);
+  background-color: color-mix(in srgb, var(--color-surface-hover) 65%, transparent);
 }
 .gpu-card-summary:focus-visible, .gpu-extra-metrics > summary:focus-visible {
   outline: 2px solid var(--focus-ring-color);
@@ -203,32 +205,35 @@
   color: var(--color-muted);
   font-size: 9px;
 }
+.gpu-metric:not([data-tone="unknown"]) .gpu-metric-band {
+  color: var(--meter-fill);
+}
 .gpu-meter {
-  height: 6px;
-  gap: 2px;
-}
-.gpu-meter-segment {
-  min-width: 0;
-  height: 6px;
-  border-radius: 1px;
+  height: 8px;
   overflow: hidden;
-  background: var(--color-line);
+  border: 1px solid color-mix(in srgb, var(--color-line-strong) 84%, var(--color-text));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-text) 10%, var(--color-surface));
+  box-shadow: inset 0 1px 2px #0000001a, 0 1px 0 var(--glass-highlight);
 }
-.gpu-meter-segment-fill {
+.gpu-meter-fill {
+  display: block;
   height: 100%;
-  background: var(--meter-fill);
+  border-radius: inherit;
+  background: linear-gradient(to bottom, #ffffff38, transparent 45%), var(--meter-fill);
+  box-shadow: inset 0 1px 0 #ffffff66;
+  transition: width var(--glass-transition);
 }
 .gpu-meter[data-tone="unknown"] {
   border: 1px dashed var(--color-muted);
-  border-radius: 2px;
-}
-.gpu-meter[data-tone="unknown"] .gpu-meter-segment {
   background: transparent;
+  box-shadow: none;
 }
 .gpu-card-body {
   min-width: 0;
   padding: 20px;
-  border-top: 1px solid var(--color-line);
+  border-top: 1px solid var(--glass-rim);
+  background: var(--color-surface);
 }
 .gpu-card-body > p {
   line-height: 1.65;
@@ -313,7 +318,14 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .gpu-card-summary::before {
+  .gpu-card-summary, .gpu-card-summary::before, .gpu-meter-fill {
     transition: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .gpu-meter-fill {
+    background: var(--meter-fill);
+    box-shadow: none;
   }
 }

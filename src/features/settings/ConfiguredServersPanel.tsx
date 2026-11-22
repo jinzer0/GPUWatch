@@ -28,6 +28,7 @@ export const InlineActionsMenu = ({ label, trigger, children, onOpenChange, serv
 
   return <DropdownMenu
     alignment="end"
+    className="server-action-menu"
     isMenuOpen={open}
     menuWidth={208}
     onOpenChange={changeOpen}

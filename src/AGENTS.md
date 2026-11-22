@@ -12,7 +12,7 @@ React/TypeScript frontend renders backend DTOs from the Electron preload bridge 
 |---|---|---|
 | 창 역할·서버 탐색 | `App.tsx` | 메인은 서버 선택·GPU detail·서버 관리, 별도 설정 창은 외형 설정만 표시. 화면 종류별 탭 없음. |
 | 서버 sidebar | `components/Shell.tsx` | 실제 overview DTO의 서버 목록·상태와 선택/관리 진입. busy/free 개수를 가용 상태로 추정하지 않음. |
-| GPU 카드·미터 | `features/detail/DetailGpuCard.tsx`, `GpuMetricMeter.tsx` | GPU/추가 지표 독립 펼침, UTIL/VRAM/온도 분절형 미터. History UI·renderer 샘플 축적 없음. |
+| GPU 카드·미터 | `features/detail/DetailGpuCard.tsx`, `GpuMetricMeter.tsx` | GPU/추가 지표 독립 펼침, UTIL/VRAM/온도 연속형 미터. History UI·renderer 샘플 축적 없음. |
 | 세션 펼침 상태 | `lib/store.ts` | 서버+UUID 우선/index 대체 식별. 마지막 서버 ID만 저장하며 펼침은 세션에만 유지. |
 | Shared UI states | `components/ui.tsx` | Loading, error, empty, status badge. |
 | Electron API boundary | `lib/api.ts` | Calls action-specific `window.gpuwatcher` methods and defines browser fallback behavior. |

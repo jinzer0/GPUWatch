@@ -21,9 +21,18 @@
   --color-danger: #a92b37;
   --color-disabled: #57645d;
   --color-scrim: #192d2880;
-  --material-highlight: #ffffffb8;
   --shadow-chrome: 0 12px 26px #213b3021, 0 2px 5px #213b3014;
   --shadow-panel: 0 16px 56px #1a322b2b, 0 2px 6px #1a322b17;
+  --glass-canvas: var(--color-window);
+  --glass-wash: #d8e9dc;
+  --glass-chrome-fill: var(--color-sidebar);
+  --glass-panel-fill: var(--color-surface);
+  --glass-control-fill: var(--color-surface-raised);
+  --glass-selection-fill: var(--color-brand-soft);
+  --glass-rim: var(--color-line-strong);
+  --glass-highlight: #ffffffb8;
+  --glass-shadow: 0 2px 6px #213b301a;
+  --glass-filter: none;
 
   --radius-control: 8px;
   --radius-card: 13px;
@@ -43,6 +52,7 @@
   --shell-control-height: var(--density-control-height);
   --interaction-transition-duration: 140ms;
   --interaction-transition-timing: ease-out;
+  --glass-transition: var(--interaction-transition-duration) var(--interaction-transition-timing);
   --focus-ring-color: var(--color-brand);
   --focus-ring-shadow: 0 0 0 3px var(--color-brand-soft);
 }
@@ -67,9 +77,23 @@
   --color-danger: #ff9da5;
   --color-disabled: #a8b8ae;
   --color-scrim: #090f0caa;
-  --material-highlight: #ffffff1b;
   --shadow-chrome: 0 12px 28px #080e0b66, 0 2px 6px #080e0b33;
   --shadow-panel: 0 18px 60px #080e0b80, 0 2px 8px #080e0b40;
+  --glass-wash: #2c4138;
+  --glass-highlight: #ffffff25;
+  --glass-shadow: 0 2px 8px #080e0b54;
+}
+
+@media (prefers-reduced-transparency: no-preference) and (prefers-contrast: no-preference) {
+  :root {
+    --glass-canvas: radial-gradient(ellipse at 12% 0%, var(--glass-wash), transparent 66%) var(--color-window);
+    --glass-chrome-fill: color-mix(in srgb, var(--color-sidebar) 72%, transparent);
+    --glass-panel-fill: color-mix(in srgb, var(--color-surface-raised) 94%, transparent);
+    --glass-control-fill: color-mix(in srgb, var(--color-surface-raised) 90%, transparent);
+    --glass-selection-fill: color-mix(in srgb, var(--color-brand-soft) 92%, transparent);
+    --glass-rim: color-mix(in srgb, var(--color-line-strong) 40%, transparent);
+    --glass-filter: blur(12px) saturate(1.12);
+  }
 }
 
 /* Repeat public Astryx tokens on the provider so components and native dialog
