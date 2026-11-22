@@ -17,7 +17,7 @@ const assert = (value, message) => { if (!value) throw new Error(message); };
 const bridge = (cdp, method, payload = {}) => evaluate(cdp, `window.gpuwatcher[${JSON.stringify(method)}](${JSON.stringify(payload)}).then(r => { if (!r.ok) throw new Error(JSON.stringify(r.error)); return r.data; })`);
 
 async function clickSelector(cdp, selector) {
-  await evaluate(cdp, `(() => { const e = document.querySelector(${JSON.stringify(selector)}); if (!e || e.disabled) throw new Error('Missing enabled control: ' + ${JSON.stringify(selector)}); e.click(); })()`);
+  await evaluate(cdp, `(() => { const e = document.querySelector(${JSON.stringify(selector)}); if (!e || e.disabled || e.getAttribute('aria-disabled') === 'true') throw new Error('Missing enabled control: ' + ${JSON.stringify(selector)}); e.click(); })()`);
 }
 async function rowAction(cdp, id, action) {
   await clickSelector(cdp, `[data-server-menu-trigger="${id}"]`);
@@ -46,12 +46,13 @@ async function createGuard(dataDir, realHelper) {
   return { guardPath, guardLog };
 }
 
-async function checkAppearance(cdp, port, sockets) {
+async function checkAppearance(cdp, port, sockets, screenshots) {
   const opened = await evaluate(cdp, 'Promise.all([window.gpuwatcherUi.openSettings(), window.gpuwatcherUi.openSettings()])');
   assert(opened.every(response => response.ok), 'Appearance window failed to open');
   const settings = await connectCdp({ port, description: 'appearance window', pagePredicate: p => p.type === 'page' && String(p.url).includes('window=settings') });
   sockets.push(settings);
   await text(settings, '외형');
+  screenshots.push(await screenshot(settings, evidenceDir, 'liquid-glass-settings-light.png'));
   const pages = await (await fetch(`${cdpUrl(port)}/json/list`)).json();
   assert(pages.filter(p => p.type === 'page' && String(p.url).includes('window=settings')).length === 1, 'Settings window was not singleton');
   await clickSelector(settings, 'input[value="dark"]');
@@ -60,6 +61,7 @@ async function checkAppearance(cdp, port, sockets) {
     return states.every(response => response.ok && response.data.mode === 'dark' && response.data.resolved === 'dark') && await evaluate(cdp, 'document.documentElement.dataset.appearance === "dark"') && await evaluate(settings, 'document.documentElement.dataset.appearance === "dark"');
   });
   assert(!/Server registry|GPU 사용률/.test(await bodyText(settings)), 'Settings initialized monitoring UI');
+  screenshots.push(await screenshot(settings, evidenceDir, 'liquid-glass-settings-dark.png'));
   return 'One appearance window; dark mode synchronized in both renderer documents';
 }
 
@@ -67,6 +69,7 @@ export async function runDevFirstRunSmoke() {
   const processes = createProcessSet();
   const logs = { vite: [], electron: [] };
   const sockets = [];
+  const screenshots = [];
   let activeCdp;
   let tempDataDir;
   let tempHomeDir;
@@ -91,12 +94,17 @@ export async function runDevFirstRunSmoke() {
     };
     let { cdp, child } = await launch(cdpPort);
     await text(cdp, '등록된 서버가 없습니다');
+    const lightAppearance = await evaluate(cdp, 'window.gpuwatcherUi.setAppearance("light")');
+    assert(lightAppearance.ok, 'Could not establish light appearance for screenshot evidence');
+    await waitFor('light appearance baseline', () => evaluate(cdp, 'document.documentElement.dataset.appearance === "light"'));
+    screenshots.push(await screenshot(cdp, evidenceDir, 'liquid-glass-main-empty.png'));
     const bridgeInfo = await getBridgeInfo(cdp);
     const { electronMetaKeys } = assertBridgeGuardrails(bridgeInfo, 'Task29 dev');
     assert((await bridgeListServers(cdp)).length === 0, 'Isolation did not start empty');
     await clickText(cdp, '서버 추가 또는 가져오기');
     await clickText(cdp, '직접 추가');
     await text(cdp, '서버 추가');
+    screenshots.push(await screenshot(cdp, evidenceDir, 'liquid-glass-server-form.png'));
     await fillServer(cdp, 'Task29 Smoke Server');
     const saved = (await bridgeListServers(cdp))[0];
     assert(saved && !saved.enabled, 'UI add did not save disabled server');
@@ -149,6 +157,7 @@ export async function runDevFirstRunSmoke() {
     await clickSelector(cdp, '.gpu-card .gpu-extra-metrics > summary');
     await waitFor('nested GPU disclosure', () => evaluate(cdp, 'document.querySelector(".gpu-card > details").open && document.querySelector(".gpu-extra-metrics").open'));
     await text(cdp, 'PCIe');
+    screenshots.push(await screenshot(cdp, evidenceDir, 'liquid-glass-gpu-expanded-light.png'));
     const gpu = detail.gpus[0];
     await waitForEnabledClickableText(cdp, 'Notify when available');
     await clickText(cdp, 'Notify when available');
@@ -177,8 +186,8 @@ export async function runDevFirstRunSmoke() {
     const onRule = (await bridge(cdp, 'listWatchRules', { serverId: saved.id }))[0];
     for (const key of ['id', 'utilizationThresholdPercent', 'memoryThresholdMiB', 'sustainSeconds', 'cooldownSeconds']) assert(originalRule[key] === offRule[key] && originalRule[key] === onRule[key], `Custom watch lost ${key} on off/on`);
     assert(!offRule.enabled && onRule.enabled, 'Watch did not toggle');
-    const appearance = await checkAppearance(cdp, cdpPort + 2, sockets);
-    const screenshots = [await screenshot(cdp, evidenceDir, 'task-29-dev-gpu-watch.png')];
+    const appearance = await checkAppearance(cdp, cdpPort + 2, sockets, screenshots);
+    screenshots.push(await screenshot(cdp, evidenceDir, 'task-29-dev-gpu-watch.png'));
     await closeRun(cdp, child);
     ({ cdp, child } = await launch(cdpPort + 3));
     const persistedRule = (await bridge(cdp, 'listWatchRules', { serverId: saved.id }))[0];

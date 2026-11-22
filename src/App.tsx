@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Shell } from './components/Shell';
 import { ErrorState, LoadingState } from './components/ui';
 import { ServerDetailScreen } from './features/detail/ServerDetailScreen';
+import { useServerDetailController } from './features/detail/useServerDetailController';
 import { SettingsScreen } from './features/settings/SettingsScreen';
 import { AppearanceSettings } from './features/settings/AppearanceSettings';
 import { initializeApp, listOverview, queryKeys } from './lib/api';
@@ -25,6 +26,7 @@ const MainScreen = () => {
   const validSelectedServerId = overviewQuery.data
     ? overviewQuery.data.find((server) => server.id === selectedServerId)?.id ?? overviewQuery.data[0]?.id ?? null
     : null;
+  const detailController = useServerDetailController(validSelectedServerId);
 
   useEffect(() => {
     if (overviewQuery.isSuccess) {
@@ -34,12 +36,15 @@ const MainScreen = () => {
 
   const error = initializeQuery.error ?? overviewQuery.error;
   return (
-    <Shell overview={overview}>
+    <Shell overview={overview} selectedId={validSelectedServerId} refresh={{
+      pending: detailController.refreshMutation.isPending,
+      onClick: detailController.refreshSelectedServer
+    }}>
       {error ? <ErrorState message={error.message} /> : null}
       {initializeQuery.isPending || overviewQuery.isLoading ? (
         <LoadingState label="Loading servers..." />
       ) : error && !overviewQuery.data ? null : (
-        <ServerDetailScreen selectedServerId={validSelectedServerId} />
+        <ServerDetailScreen controller={detailController} selectedServerId={validSelectedServerId} />
       )}
       {managementOpen ? <SettingsScreen /> : null}
     </Shell>

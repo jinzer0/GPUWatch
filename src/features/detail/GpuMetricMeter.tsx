@@ -37,18 +37,9 @@ export const GpuMetricMeter = ({
         aria-hidden="true"
         className="gpu-meter"
         data-tone={tone}
-        style={{ display: 'grid', gridTemplateColumns: 'repeat(20, minmax(0, 1fr))', borderStyle: knownValue === null ? 'dashed' : undefined }}
+        style={{ borderStyle: knownValue === null ? 'dashed' : undefined }}
       >
-        {Array.from({ length: 20 }, (_, index) => (
-          <span className="gpu-meter-segment" data-tone={tone} key={index}>
-            {fill === null ? null : (
-              <span
-                className="gpu-meter-segment-fill"
-                style={{ display: 'block', width: `${Math.max(0, Math.min(5, fill - index * 5)) * 20}%` }}
-              />
-            )}
-          </span>
-        ))}
+        {fill === null ? null : <span className="gpu-meter-fill" style={{ width: `${fill}%` }} />}
       </div>
     </div>
   );

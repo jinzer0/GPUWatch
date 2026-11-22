@@ -213,7 +213,7 @@ describe('Settings management controller regressions', () => {
     // When: the form is submitted through the controlled validation path.
     fireEvent.click(screen.getByRole('button', { name: 'Save server' }));
 
-    // Then: field-owned errors wire deterministic IDs, aria-invalid, and described-by helper/error text.
+    // Then: each field exposes invalid state and owns its visible helper/error description.
     const nameInput = screen.getByLabelText('Name');
     const hostInput = screen.getByLabelText('Host');
     const portInput = screen.getByLabelText('SSH port');
@@ -221,17 +221,17 @@ describe('Settings management controller regressions', () => {
     const keyPathInput = screen.getByLabelText('SSH key path');
     const pollingInput = screen.getByLabelText('Polling interval seconds');
     expect(nameInput.getAttribute('aria-invalid')).toBe('true');
-    expect(nameInput.getAttribute('aria-describedby')).toBe('settings-name-helper settings-name-error');
+    expect(nameInput.getAttribute('aria-describedby')?.split(' ')).toContain('settings-name-helper');
     expect(hostInput.getAttribute('aria-invalid')).toBe('true');
     expect(portInput.getAttribute('aria-invalid')).toBe('true');
     expect(usernameInput.getAttribute('aria-invalid')).toBe('true');
     expect(keyPathInput.getAttribute('aria-invalid')).toBe('true');
     expect(pollingInput.getAttribute('aria-invalid')).toBe('true');
-    expect(screen.getByText('Server name is required.').getAttribute('id')).toBe('settings-name-error');
-    expect(screen.getByText('Host is required.').getAttribute('id')).toBe('settings-host-error');
+    expect(nameInput.getAttribute('aria-describedby')?.split(' ')).toContain(screen.getByText('Server name is required.').getAttribute('id'));
+    expect(hostInput.getAttribute('aria-describedby')?.split(' ')).toContain(screen.getByText('Host is required.').getAttribute('id'));
     expect(screen.getByText('SSH port must be between 1 and 65535.').getAttribute('id')).toBe('settings-port-error');
-    expect(screen.getByText('Username is required.').getAttribute('id')).toBe('settings-username-error');
-    expect(screen.getByText('SSH key path must be a filesystem path, not private key material.').getAttribute('id')).toBe('settings-sshKeyPath-error');
+    expect(usernameInput.getAttribute('aria-describedby')?.split(' ')).toContain(screen.getByText('Username is required.').getAttribute('id'));
+    expect(keyPathInput.getAttribute('aria-describedby')?.split(' ')).toContain(screen.getByText('SSH key path must be a filesystem path, not private key material.').getAttribute('id'));
     expect(screen.getByText('Polling interval must be between 1 and 86400.').getAttribute('id')).toBe('settings-pollingIntervalSeconds-error');
     expect(saveServerBridge).not.toHaveBeenCalled();
   });
@@ -536,9 +536,9 @@ describe('Settings management controller regressions', () => {
     const importDuplicate = screen.getByRole('checkbox', { name: 'Select gpu-prod-a-copy for bulk import' });
     expect(firstValid).toHaveProperty('checked', false);
     expect(secondValid).toHaveProperty('checked', false);
-    expect(missingUsername).toHaveProperty('disabled', true);
-    expect(savedDuplicate).toHaveProperty('disabled', true);
-    expect(importDuplicate).toHaveProperty('disabled', true);
+    expect(missingUsername.getAttribute('aria-disabled')).toBe('true');
+    expect(savedDuplicate.getAttribute('aria-disabled')).toBe('true');
+    expect(importDuplicate.getAttribute('aria-disabled')).toBe('true');
     expect(missingUsername.getAttribute('aria-describedby')).toBe(getSshImportCandidateDomId('missing-user', 'reason'));
     expect(document.getElementById(getSshImportCandidateDomId('missing-user', 'reason'))?.textContent).toBe('Missing username');
     expect(savedDuplicate.getAttribute('aria-describedby')).toBe(getSshImportCandidateDomId('saved-duplicate', 'reason'));
@@ -612,7 +612,7 @@ describe('Settings management controller regressions', () => {
     expect(screen.getByText('Saved 1, skipped 0, failed 1.')).toBeDefined();
     expect(screen.getByText(/gpu-prod-b: Permission denied for \[path redacted\] with token=\[redacted\]/)).toBeDefined();
     expect(screen.getByRole('checkbox', { name: 'Select gpu-prod-a for bulk import' })).toHaveProperty('checked', false);
-    expect(screen.getByRole('checkbox', { name: 'Select gpu-prod-a for bulk import' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('checkbox', { name: 'Select gpu-prod-a for bulk import' }).getAttribute('aria-disabled')).toBe('true');
     expect(screen.getByRole('checkbox', { name: 'Select gpu-prod-b for bulk import' })).toHaveProperty('checked', true);
     fireEvent.click(screen.getByRole('button', { name: 'Save selected hosts' }));
     await waitFor(() => expect(saveServerBridge).toHaveBeenCalledTimes(3));
@@ -697,7 +697,7 @@ describe('Settings management controller regressions', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Import from SSH config' }));
     await waitFor(() => expect(screen.queryByText('Bulk import summary')).toBeNull());
     expect(listSshConfigHostsBridge).toHaveBeenCalledTimes(2);
-    expect(screen.getByRole('checkbox', { name: 'Select gpu-prod-a for bulk import' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('checkbox', { name: 'Select gpu-prod-a for bulk import' }).getAttribute('aria-disabled')).toBe('true');
     expect(screen.getByRole('checkbox', { name: 'Select gpu-prod-b for bulk import' })).toHaveProperty('checked', false);
     expect(screen.getByRole('button', { name: 'Save selected hosts' })).toHaveProperty('disabled', true);
 

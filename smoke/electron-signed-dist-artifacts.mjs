@@ -192,7 +192,8 @@ export async function runSignedArtifactSmoke(options = {}, dependencies = {}) {
       if (mounted) await run('hdiutil', ['detach', mountpoint]);
       await fs.rm(mountOwner, { recursive: true, force: true });
     }
-    const runtime = await runtimeSmoke({ appPath: manifest.appPath, evidencePrefix: 'task-31-signed-dist', artifactMode: 'signed' });
+    const evidencePrefix = `gpuwatcher-v${manifest.version.replaceAll('.', '-')}-signed-dist`;
+    const runtime = await runtimeSmoke({ appPath: manifest.appPath, evidencePrefix, artifactMode: 'signed' });
     if (runtime?.ok !== true || runtime.artifactMode !== 'signed' || runtime.sourceUnchanged !== true || runtime.sourceSealSha256 !== manifest.appSealSha256) fail('Missing signature-preserving signed runtime receipt');
     const success = runtime.success;
     const proof = success?.signatureProof;
@@ -221,7 +222,7 @@ export async function runSignedArtifactSmoke(options = {}, dependencies = {}) {
     equal(JSON.stringify(finalSourceProof), JSON.stringify(sourceProof), 'Product source proof during verification');
     const finalApprovalProof = await verifySubmissionSnapshots(manifest, manifestPath, options, ctx);
     equal(JSON.stringify(finalApprovalProof), JSON.stringify(approvalProof), 'Original submission approval proof during verification');
-    return { manifestPath, appPath: manifest.appPath, state: 'verified', evidencePrefix: 'task-31-signed-dist', sourceProof, approvalProof, runtime };
+    return { manifestPath, appPath: manifest.appPath, state: 'verified', evidencePrefix, sourceProof, approvalProof, runtime };
   } finally { await preserveApp(); }
 }
 

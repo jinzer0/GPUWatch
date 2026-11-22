@@ -3,9 +3,10 @@ import { formatTime, formatUnknown } from '../../lib/format';
 import type { GpuCardDto, WatchRule } from '../../lib/types';
 import { DetailGpuCard } from './DetailGpuCard';
 import { getWatchTargetKey, useServerDetailController } from './useServerDetailController';
+import type { ServerDetailController } from './useServerDetailController';
 
 const ServerHealthItem = ({ label, value }: { readonly label: string; readonly value: React.ReactNode }) => (
-  <li className="surface min-w-0 p-4">
+  <li className="detail-health-item">
     <div className="metric-label">{label}</div>
     <div className="detail-health-value metric-value">{value}</div>
   </li>
@@ -21,10 +22,25 @@ const getErrorType = (error: Error | null) => {
   return null;
 };
 
-export const ServerDetailScreen = ({ selectedServerId }: { readonly selectedServerId: string | null }) => {
+const ConnectedServerDetailScreen = ({ selectedServerId }: { readonly selectedServerId: string | null }) => {
   const controller = useServerDetailController(selectedServerId);
+  return <ServerDetailContent controller={controller} selectedServerId={selectedServerId} />;
+};
+
+export const ServerDetailScreen = ({ selectedServerId, controller }: {
+  readonly selectedServerId: string | null;
+  readonly controller?: ServerDetailController;
+}) => controller
+  ? <ServerDetailContent controller={controller} selectedServerId={selectedServerId} toolbarOwned />
+  : <ConnectedServerDetailScreen selectedServerId={selectedServerId} />;
+
+const ServerDetailContent = ({ selectedServerId, controller, toolbarOwned = false }: {
+  readonly selectedServerId: string | null;
+  readonly controller: ServerDetailController;
+  readonly toolbarOwned?: boolean;
+}) => {
   const detail = controller.detail;
-  const refreshResult = controller.refreshMutation.data;
+  const refreshResult = controller.refreshResult;
 
   if (!selectedServerId) {
     return <EmptyState title="No server selected" body="Choose a server from the sidebar, or add a server using server management." />;
@@ -47,28 +63,31 @@ export const ServerDetailScreen = ({ selectedServerId }: { readonly selectedServ
   const watchError = controller.watchRulesQuery.error ?? controller.watchMutation.error;
 
   return (
-    <section className="detail-page space-y-6">
-      <header className="detail-header border-b border-[color:var(--color-line)] pb-5">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+    <section className="detail-page">
+      <header className="detail-header">
+        <div className="detail-server-identity">
           <div className="min-w-0">
-            <div className="eyebrow">Detail</div>
-            <div className="mt-2 flex items-center gap-3">
-              <h2 className="break-words text-2xl font-semibold tracking-[-0.03em]">{detail.server.name}</h2>
+            {toolbarOwned ? null : <div className="eyebrow">Detail</div>}
+            <div className="flex items-center gap-3">
+              {toolbarOwned ? null : <h2 className="break-words text-2xl font-semibold tracking-[-0.03em]">{detail.server.name}</h2>}
               <span className="detail-status-badge">
                 <StatusBadge status={detail.health.status} />
               </span>
+              <p className="detail-host">{detail.server.username}@{detail.server.host}:{detail.server.port}</p>
             </div>
-            <p className="mt-3 break-words text-sm text-[color:var(--color-muted)]">{detail.server.username}@{detail.server.host}:{detail.server.port}</p>
           </div>
-          <Button aria-label={`Refresh ${detail.server.name}`} className="detail-refresh-button" disabled={controller.refreshMutation.isPending} onClick={() => controller.refreshMutation.mutate(detail.server.id)} type="button" variant="primary">
+          {toolbarOwned ? null : <Button aria-label={`Refresh ${detail.server.name}`} className="detail-refresh-button" disabled={controller.refreshMutation.isPending} onClick={controller.refreshSelectedServer} type="button" variant="primary">
             <span className="detail-refresh-button-label">Refresh {detail.server.name}</span>
-          </Button>
+          </Button>}
         </div>
         {hasRefreshDiagnostic ? (
           <section aria-label="Refresh diagnostic" className="mt-4" role="region">
             <DiagnosticPanel errorType={refreshResult.errorType} message={refreshResult.message} title="Refresh diagnostic" />
           </section>
         ) : null}
+        {controller.refreshError ? <section aria-label="Refresh diagnostic" className="mt-4" role="alert">
+          <DiagnosticPanel errorType={getErrorType(controller.refreshError)} message={controller.refreshError.message} title="Refresh diagnostic" />
+        </section> : null}
       </header>
 
       {controller.detailQuery.error ? (

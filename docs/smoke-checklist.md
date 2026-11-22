@@ -76,6 +76,8 @@ node smoke/electron-unsigned-dist-artifacts.mjs
 
 unsigned 명령/탐색을 signed 결과로 대체하지 않습니다. unsigned 배포 회귀에서는 빌드 직전 `GPUWATCHER_ARTIFACT_STARTED_AT_MS`를 epoch milliseconds로 설정하고 같은 값을 artifact verifier에 전달해 이전 파일을 수용하지 않도록 합니다.
 
+이 체크아웃의 서명 도구는 [v0.3.0 배포 계획](../mydocs/plans/release_m001_v0.3.0.md)에 결박됩니다. v0.2.0의 산출물과 검증 근거는 해당 릴리즈의 원본 소스에서 확인합니다.
+
 1. 승인 계획과 깨끗한 source commit, Developer ID 인증서의 CN/Team, `xcrun notarytool`/`stapler`, Keychain profile 인증을 확인합니다. 검증한 `CSC_NAME`, `GPUWATCHER_SIGNING_TEAM_ID`, `APPLE_KEYCHAIN_PROFILE`을 설정하고 필요한 경우에만 `APPLE_KEYCHAIN`을 지정합니다. 인증 mixing·missing identity·unsigned/ad-hoc fallback은 허용하지 않습니다. 앱 entitlement는 JIT-only, helper는 empty이며 테스트를 위해 권한을 넓히지 않습니다.
 2. 아래 build는 서명만 된 새 후보를 생성합니다. 출력 manifest의 canonical 경로를 `SIGNED_MANIFEST`에 지정합니다. run은 `release/electron/signed/` 아래이며 signed 검증은 무인자 자동 탐색을 사용하지 않습니다. 승인 계획/source가 바뀌면 새 run이 필요합니다.
 
@@ -83,7 +85,7 @@ unsigned 명령/탐색을 signed 결과로 대체하지 않습니다. unsigned �
 npm run electron:pack:signed
 ```
 
-3. 앱 strict signature·Team·timestamp·hardened runtime·arm64·v0.2.0·실제 helper envelope를 확인하고 제출 ZIP tuple을 준비합니다.
+3. 앱 strict signature·Team·timestamp·hardened runtime·arm64·v0.3.0·실제 helper envelope를 확인하고 제출 ZIP tuple을 준비합니다.
 
 ```bash
 : "${SIGNED_MANIFEST:?해당 run의 canonical manifest 경로를 지정하세요}"

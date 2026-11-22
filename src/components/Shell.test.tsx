@@ -34,7 +34,7 @@ const renderShell = (overview: ServerOverviewDto[] | null = [server('one', 'disa
 const openRowMenu = async (id = 'two') => {
   const trigger = screen.getByRole('button', { name: `Server ${id} 서버 메뉴` });
   fireEvent.click(trigger);
-  await waitFor(() => expect((screen.getByRole('menuitem', { name: '서버 편집' }) as HTMLButtonElement).disabled).toBe(false));
+  await waitFor(() => expect(screen.getByRole('menuitem', { name: '서버 편집' }).getAttribute('aria-disabled') === 'true').toBe(false));
   return trigger;
 };
 
@@ -61,12 +61,12 @@ describe('server-centered Shell', () => {
     expect(listServers).not.toHaveBeenCalled();
   });
 
-  it.each([['직접 추가', 'add'], ['SSH config 가져오기', 'import']] as const)('opens %s from the + menu', (label, action) => {
+  it.each([['직접 추가', 'add'], ['SSH config 가져오기', 'import']] as const)('opens %s from the + menu', async (label, action) => {
     renderShell();
     const trigger = screen.getByRole('button', { name: '서버 추가 또는 가져오기' });
     expect(trigger.hasAttribute('data-server-add-trigger')).toBe(true);
-    fireEvent.click(trigger);
-    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: '직접 추가' }));
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: '직접 추가' })));
     fireEvent.click(screen.getByRole('menuitem', { name: label }));
     expect(useUiStore.getState()).toMatchObject({ managementOpen: true, managementAction: action, editingServerId: null });
     expect(screen.queryByRole('menu')).toBeNull();
@@ -85,9 +85,10 @@ describe('server-centered Shell', () => {
     expect(screen.getByRole('button', { name: 'Server one disabled' }).getAttribute('aria-current')).toBe('page');
   });
 
-  it('supports menu arrows, Home/End, Escape and outside dismissal with focus return', async () => {
+  it('supports menu arrows, Home/End, Escape and trigger dismissal with focus return', async () => {
     renderShell();
     const trigger = await openRowMenu();
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' });
     const menu = screen.getByRole('menu');
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: '서버 편집' })));
     fireEvent.keyDown(menu, { key: 'ArrowDown' });
@@ -103,9 +104,11 @@ describe('server-centered Shell', () => {
     fireEvent.keyDown(menu, { key: 'Escape' });
     expect(screen.queryByRole('menu')).toBeNull();
     expect(document.activeElement).toBe(trigger);
+    fireEvent.pointerDown(trigger);
     fireEvent.click(trigger);
-    fireEvent.pointerDown(screen.getByText('Existing GPU detail'));
-    expect(screen.queryByRole('menu')).toBeNull();
+    await waitFor(() => expect(screen.getByRole('menu').contains(document.activeElement)).toBe(true));
+    fireEvent.click(trigger);
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
     expect(document.activeElement).toBe(trigger);
   });
 
@@ -117,26 +120,26 @@ describe('server-centered Shell', () => {
     await openRowMenu('one');
     fireEvent.click(screen.getByRole('menuitem', { name: '모니터링 중지' }));
     expect(setServerEnabled).toHaveBeenCalledWith('one', false);
-    expect((screen.getByRole('menuitem', { name: '모니터링 중지' }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByRole('status').textContent).toContain('Server one: 모니터링 변경 중');
+    expect(screen.getByRole('menuitem', { name: '모니터링 중지' }).getAttribute('aria-disabled') === 'true').toBe(true);
+    expect(screen.getAllByRole('status').map((status) => status.textContent).join(' ')).toContain('Server one: 모니터링 변경 중');
     expect(useUiStore.getState().managementOpen).toBe(false);
     reject(new Error('Permission denied'));
     await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Server one: Permission denied'));
-    expect((screen.getByRole('menuitem', { name: '모니터링 중지' }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByRole('menuitem', { name: '모니터링 중지' }).getAttribute('aria-disabled') === 'true').toBe(false);
     fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
     expect(screen.getByRole('alert').textContent).toContain('Permission denied');
   });
 
-  it('uses the same keyboard and dismissal contract for the + menu', () => {
+  it('uses the same keyboard and dismissal contract for the + menu', async () => {
     renderShell();
     const trigger = screen.getByRole('button', { name: '서버 추가 또는 가져오기' });
     fireEvent.keyDown(trigger, { key: 'ArrowDown' });
     const menu = screen.getByRole('menu');
-    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: '직접 추가' }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: '직접 추가' })));
     fireEvent.keyDown(menu, { key: 'ArrowUp' });
     expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'SSH config 가져오기' }));
     fireEvent.keyDown(menu, { key: 'Home' });
-    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: '직접 추가' }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: '직접 추가' })));
     fireEvent.keyDown(menu, { key: 'End' });
     expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'SSH config 가져오기' }));
     fireEvent.keyDown(menu, { key: 'Escape' });
@@ -164,10 +167,10 @@ describe('server-centered Shell', () => {
     vi.mocked(listServers).mockImplementation(() => new Promise((done) => { resolve = done; }));
     renderShell();
     fireEvent.click(screen.getByRole('button', { name: 'Server two 서버 메뉴' }));
-    expect(screen.getByRole('status').textContent).toContain('Server two: 저장된 서버를 확인 중');
-    expect((screen.getByRole('menuitem', { name: '모니터링 변경' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getAllByRole('status').map((status) => status.textContent).join(' ')).toContain('Server two: 저장된 서버를 확인 중');
+    expect(screen.getByRole('menuitem', { name: '모니터링 변경' }).getAttribute('aria-disabled') === 'true').toBe(true);
     resolve([]);
-    await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Server two: 저장된 서버를 찾을 수 없습니다'));
+    await waitFor(() => expect(screen.getAllByRole('status').map((status) => status.textContent).join(' ')).toContain('Server two: 저장된 서버를 찾을 수 없습니다'));
     fireEvent.click(screen.getByRole('menuitem', { name: '서버 삭제' }));
     expect(useUiStore.getState().managementOpen).toBe(false);
     expect(setServerEnabled).not.toHaveBeenCalled();
@@ -180,7 +183,7 @@ describe('server-centered Shell', () => {
     view.unmount();
     renderShell([]);
     expect(screen.getByText('등록된 서버가 없습니다')).toBeDefined();
-    expect(screen.getByText('GPUWatcher', { selector: '.titlebar-page-title' })).toBeDefined();
+    expect(screen.getByText('GPUWatcher', { selector: '.app-name' })).toBeDefined();
     expect(screen.getByText('브라우저 · 읽기 전용')).toBeDefined();
   });
 
@@ -188,9 +191,9 @@ describe('server-centered Shell', () => {
     vi.mocked(listServers).mockRejectedValue(new Error('Registry unavailable'));
     renderShell();
     fireEvent.click(screen.getByRole('button', { name: 'Server two 서버 메뉴' }));
-    await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Server two: 서버 조회 실패 — Registry unavailable'));
-    expect((screen.getByRole('menuitem', { name: '서버 편집' }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole('menuitem', { name: '모니터링 변경' }) as HTMLButtonElement).disabled).toBe(true);
+    await waitFor(() => expect(screen.getAllByRole('status').map((status) => status.textContent).join(' ')).toContain('Server two: 서버 조회 실패 — Registry unavailable'));
+    expect(screen.getByRole('menuitem', { name: '서버 편집' }).getAttribute('aria-disabled') === 'true').toBe(true);
+    expect(screen.getByRole('menuitem', { name: '모니터링 변경' }).getAttribute('aria-disabled') === 'true').toBe(true);
     expect(setServerEnabled).not.toHaveBeenCalled();
   });
 

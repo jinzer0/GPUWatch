@@ -1,3 +1,4 @@
+import { CheckboxInput } from '@astryxdesign/core/CheckboxInput';
 import type { Ref } from 'react';
 
 import { Button, ResultFeedback } from '../../components/ui';
@@ -63,7 +64,7 @@ export const SettingsImportPanel = ({
   const canSaveSelection = selectedValidCount > 0 && !operationPending;
 
   return (
-    <section aria-labelledby="ssh-config-import-heading" className="settings-import-workspace surface p-4">
+    <section aria-labelledby="ssh-config-import-heading" className="settings-import-workspace">
       <div className="settings-import-header flex flex-wrap items-start justify-between gap-3">
         <div className="settings-import-copy">
           <h3 className="metric-label" id="ssh-config-import-heading" ref={headingRef} tabIndex={-1}>SSH config import</h3>
@@ -143,7 +144,7 @@ export const SettingsImportPanel = ({
           {importResult.candidates.length === 0 ? <div className="settings-import-empty text-sm text-[color:var(--color-muted)]">No importable SSH host aliases found.</div> : null}
           {bulkImportCandidateMetadata.length > 0 ? (
             <div aria-label="SSH config 후보 표" className="settings-import-ledger surface overflow-x-auto" role="region" tabIndex={0}>
-              <table aria-label="SSH config import candidate ledger" className="settings-import-ledger-table w-full min-w-[58rem] border-collapse text-left text-sm">
+              <table aria-label="SSH config import candidate ledger" className="settings-import-ledger-table w-full border-collapse text-left text-sm">
                 <thead className="table-head">
                   <tr>
                     <th className="px-3 py-3" scope="col">Select</th>
@@ -164,13 +165,14 @@ export const SettingsImportPanel = ({
                     return (
                       <tr className="settings-import-ledger-row border-t border-[color:var(--color-line)] align-top" key={candidate.hostAlias}>
                         <td className="px-3 py-3">
-                          <input
+                          <CheckboxInput
                             aria-describedby={candidateDescriptionIds(metadata)}
-                            aria-label={`Select ${candidate.hostAlias} for bulk import`}
-                            checked={metadata.selectable && selectedAliases.has(candidate.hostAlias)}
-                            disabled={!metadata.selectable || operationPending}
-                            onChange={() => toggleImportCandidateSelection(candidate.hostAlias)}
-                            type="checkbox"
+                            isDisabled={!metadata.selectable || operationPending}
+                            isLabelHidden
+                            label={`Select ${candidate.hostAlias} for bulk import`}
+                            onChange={() => { if (metadata.selectable && !operationPending) toggleImportCandidateSelection(candidate.hostAlias); }}
+                            size="sm"
+                            value={metadata.selectable && selectedAliases.has(candidate.hostAlias)}
                           />
                         </td>
                         <td className="px-3 py-3">

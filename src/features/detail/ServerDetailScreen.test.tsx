@@ -565,6 +565,29 @@ describe('ServerDetailScreen', () => {
     expect(queryClient.getQueryCache().findAll({ queryKey: ['gpu-history'] })).toHaveLength(0);
   });
 
+  it('keeps a late refresh result scoped to its request server and prevents duplicate refresh calls', async () => {
+    let resolveRefresh!: (result: Awaited<ReturnType<typeof refreshServer>>) => void;
+    apiMocks.refreshServer.mockReturnValue(new Promise((resolve) => { resolveRefresh = resolve; }));
+    vi.mocked(getServerDetail).mockImplementation(async (serverId: string) => ({
+      ...detailFixture,
+      server: { ...detailFixture.server, id: serverId, name: serverId }
+    }));
+    const { rerender, queryClient } = renderWithQueryClient(<ServerDetailScreen selectedServerId="server-a" />);
+    await screen.findByRole('heading', { name: 'server-a' });
+    const refreshButton = screen.getByRole('button', { name: 'Refresh server-a' });
+    fireEvent.click(refreshButton);
+    fireEvent.click(refreshButton);
+    await waitFor(() => expect(refreshServer).toHaveBeenCalledTimes(1));
+    rerender(<QueryClientProvider client={queryClient}><ServerDetailScreen selectedServerId="server-b" /></QueryClientProvider>);
+    await screen.findByRole('heading', { name: 'server-b' });
+    await act(async () => { resolveRefresh({ ok: false, status: 'error', errorType: 'ssh_failed', message: 'Only server A failed' }); });
+    expect(screen.queryByText('Only server A failed')).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Refresh diagnostic' })).toBeNull();
+    rerender(<QueryClientProvider client={queryClient}><ServerDetailScreen selectedServerId="server-a" /></QueryClientProvider>);
+    await screen.findByRole('heading', { name: 'server-a' });
+    expect(screen.getByRole('region', { name: 'Refresh diagnostic' }).textContent).toContain('Only server A failed');
+  });
+
   it('renders server health and refresh diagnostics guidance in bounded detail surfaces', async () => {
     apiMocks.refreshServer.mockResolvedValue({
       ok: false,
@@ -736,7 +759,7 @@ describe('ServerDetailScreen', () => {
     const button = await within(gpu).findByRole('button', { name: 'Notify when available' });
     fireEvent.click(button);
     await waitFor(() => expect(button.hasAttribute('disabled')).toBe(true));
-    expect(within(gpu).getByRole('status').textContent).toBe('GPU 0 알림 저장 중');
+    expect(within(gpu).getByRole('status', { name: 'GPU 0 알림 저장' }).textContent).toBe('GPU 0 알림 저장 중');
     expect(saveGpuAvailableWatch).toHaveBeenCalledWith({
       id: null, serverId: 'server-1', gpuUuid: null, gpuIndex: 0, enabled: true,
       utilizationThresholdPercent: null, memoryThresholdMiB: null, sustainSeconds: null, cooldownSeconds: null
@@ -774,7 +797,7 @@ describe('ServerDetailScreen', () => {
     await screen.findByRole('region', { name: 'Watch diagnostic' });
     await waitFor(() => expect(button.hasAttribute('disabled')).toBe(false));
     expect(gpu.getByText('알림 활성화')).toBeDefined();
-    expect(gpu.queryByRole('status')).toBeNull();
+    expect(gpu.queryByRole('status', { name: 'GPU 0 알림 저장' })).toBeNull();
     expect(gpu.queryByRole('button', { name: 'Notify when available' })).toBeNull();
   });
 
@@ -815,11 +838,11 @@ describe('ServerDetailScreen', () => {
     await act(async () => { resolvers.get(0)?.(watchRule()); });
     await waitFor(() => expect(firstButton.hasAttribute('disabled')).toBe(false));
     expect(secondButton.hasAttribute('disabled')).toBe(true);
-    expect(first.queryByRole('status')).toBeNull();
-    expect(second.getByRole('status').textContent).toBe('GPU 1 알림 저장 중');
+    expect(first.queryByRole('status', { name: 'GPU 0 알림 저장' })).toBeNull();
+    expect(second.getByRole('status', { name: 'GPU 1 알림 저장' }).textContent).toBe('GPU 1 알림 저장 중');
     await act(async () => { resolvers.get(1)?.(watchRule({ gpuIndex: 1, gpuUuid: 'GPU-populated' })); });
     await waitFor(() => expect(secondButton.hasAttribute('disabled')).toBe(false));
-    expect(second.queryByRole('status')).toBeNull();
+    expect(second.queryByRole('status', { name: 'GPU 1 알림 저장' })).toBeNull();
   });
 
   it('does not carry a pending GPU mutation to another server with the same GPU index', async () => {

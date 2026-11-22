@@ -1,3 +1,4 @@
+import { RadioList, RadioListItem } from '@astryxdesign/core/RadioList';
 import type { AppearanceMode } from '../../../electron/uiContract';
 import { setAppearance, useAppearanceStore } from '../../lib/appearance';
 
@@ -16,24 +17,22 @@ export const AppearanceSettings = () => {
   const disabled = !window.gpuwatcherUi || isSaving || isLoading;
 
   return (
-    <section className="settings-screen space-y-6" aria-labelledby="appearance-heading">
-      <h2 id="appearance-heading" className="text-2xl font-semibold">외형</h2>
+    <section className="settings-screen appearance-settings" aria-labelledby="appearance-heading">
+      <h2 id="appearance-heading" className="appearance-heading">외형</h2>
       {isLoading ? <p role="status">외형 설정을 불러오는 중…</p> : null}
-      <fieldset disabled={disabled} className="space-y-3">
+      <fieldset disabled={disabled} className="appearance-options">
         <legend className="sr-only">외형 선택</legend>
-        {modes.map(({ mode, label }) => (
-          <label key={mode} className="flex items-center gap-3">
-            <input
-              type="radio"
-              name="appearance"
-              value={mode}
-              checked={hasLoaded && appearance.mode === mode}
-              disabled={disabled}
-              onChange={() => { void setAppearance(mode).catch(() => {}); }}
-            />
-            {label}
-          </label>
-        ))}
+        <RadioList htmlName="appearance" isDisabled={disabled} isLabelHidden label="외형 모드"
+          onChange={(mode) => { if (!disabled) void setAppearance(mode as AppearanceMode).catch(() => {}); }}
+          size="sm" value={hasLoaded ? appearance.mode : ''} width="100%">
+          {modes.map(({ mode, label }) => <RadioListItem
+            className="appearance-option"
+            key={mode}
+            label={label}
+            startContent={<span aria-hidden="true" className={`appearance-preview appearance-preview-${mode}`}><span /><span /></span>}
+            value={mode}
+          />)}
+        </RadioList>
       </fieldset>
       {error ? <p role="alert">{error}</p> : null}
     </section>

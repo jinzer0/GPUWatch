@@ -43,3 +43,6 @@ __pycache__/
 
 # User files
 docs/memo/
+
+# Local UX working copies published in docs/ux/task_m001_29/
+/_bmad-output/initiative-ux-ui-refactor/

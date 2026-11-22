@@ -154,7 +154,7 @@ export const DetailGpuCard = ({
               {defaultCondition ? '사용 가능 시 알림' : '사용자 지정 조건 알림'}
             </Button>
           )}
-          {watchPending ? <span className="text-xs" role="status">GPU {gpu.index} 알림 저장 중</span> : null}
+          {watchPending ? <span aria-label={`GPU ${gpu.index} 알림 저장`} className="text-xs" role="status">GPU {gpu.index} 알림 저장 중</span> : null}
         </div>
         <div className="mb-4 text-xs text-[color:var(--color-muted)]">
           <p id={watchDescriptionId}>{watchTitle}</p>

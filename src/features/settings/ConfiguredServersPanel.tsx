@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useId, useRef, useState, type ReactNode } from 'react';
+import { DropdownMenu, DropdownMenuItem } from '@astryxdesign/core/DropdownMenu';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { listServers, queryKeys, setServerEnabled } from '../../lib/api';
@@ -15,10 +16,7 @@ export const InlineActionsMenu = ({ label, trigger, children, onOpenChange, serv
   addTrigger?: boolean;
 }) => {
   const [open, setOpen] = useState(false);
-  const root = useRef<HTMLDivElement>(null);
-  const invoker = useRef<HTMLButtonElement>(null);
-  const menu = useRef<HTMLDivElement>(null);
-  const [placement, setPlacement] = useState({ top: 44, left: 8 });
+  const invoker = useRef<HTMLButtonElement | null>(null);
   const changeOpen = (value: boolean) => {
     setOpen(value);
     onOpenChange?.(value);
@@ -28,71 +26,26 @@ export const InlineActionsMenu = ({ label, trigger, children, onOpenChange, serv
     invoker.current?.focus();
   };
 
-  useLayoutEffect(() => {
-    if (!open || !invoker.current || !menu.current) return;
-    const anchor = invoker.current.getBoundingClientRect();
-    const width = menu.current.offsetWidth;
-    const height = menu.current.offsetHeight;
-    const left = Math.max(8, Math.min(anchor.right - width, window.innerWidth - width - 8));
-    const preferredTop = anchor.bottom + height + 8 <= window.innerHeight ? anchor.bottom + 4 : anchor.top - height - 4;
-    const top = Math.max(48, Math.min(preferredTop, window.innerHeight - height - 8));
-    setPlacement((previous) => previous.top === top && previous.left === left ? previous : { top, left });
-  }, [open, children]);
-
-  useEffect(() => {
-    if (!open) return;
-    const firstItem = menu.current?.querySelector<HTMLButtonElement>('[role="menuitem"]:not(:disabled)');
-    (firstItem ?? menu.current)?.focus();
-    const dismiss = (event: PointerEvent) => {
-      if (!root.current?.contains(event.target as Node)) close();
-    };
-    document.addEventListener('pointerdown', dismiss);
-    window.addEventListener('resize', close);
-    return () => {
-      document.removeEventListener('pointerdown', dismiss);
-      window.removeEventListener('resize', close);
-    };
-  }, [open]);
-
-  useEffect(() => {
-    if (open && (document.activeElement === menu.current || document.activeElement === document.body)) {
-      (menu.current?.querySelector<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') ?? menu.current)?.focus();
-    }
-  });
-
-  return <div className="relative no-drag" ref={root}>
-    <button aria-label={label} aria-haspopup="menu" aria-expanded={open} ref={invoker} type="button"
-      data-server-menu-trigger={serverId} data-server-add-trigger={addTrigger ? '' : undefined}
-      className="no-drag rounded px-2 py-1 text-[color:var(--color-muted)]"
-      onClick={() => open ? close() : changeOpen(true)}
-      onKeyDown={(event) => {
-        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-          event.preventDefault();
-          changeOpen(true);
-        }
-      }}>{trigger}</button>
-    {open ? <div role="menu" aria-label={label} ref={menu} tabIndex={-1}
-      style={{ position: 'fixed', ...placement }}
-      className="absolute right-0 z-50 grid min-w-44 gap-1 rounded border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-2 shadow-lg"
-      onKeyDown={(event) => {
-        if (event.key === 'Escape' || event.key === 'Tab') {
-          if (event.key === 'Escape') event.preventDefault();
-          close();
-          return;
-        }
-        if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
-        event.preventDefault();
-        const items = Array.from(menu.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') ?? []);
-        if (items.length === 0) return;
-        const index = items.indexOf(document.activeElement as HTMLButtonElement);
-        const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1
-          : (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
-        items[next]?.focus();
-      }}>{children(close)}</div> : null}
-  </div>;
+  return <DropdownMenu
+    alignment="end"
+    className="server-action-menu"
+    isMenuOpen={open}
+    menuWidth={208}
+    onOpenChange={changeOpen}
+    renderTrigger={(props) => <button
+      {...props}
+      aria-label={label}
+      className="server-menu-trigger no-drag"
+      data-server-menu-trigger={serverId}
+      data-server-add-trigger={addTrigger ? '' : undefined}
+      ref={(element) => { props.ref(element); invoker.current = element; }}
+      type="button"
+    >{trigger}</button>}
+  >{children(close)}</DropdownMenu>;
 };
 
 export const ServerActionsMenu = ({ id, name }: { id: string; name: string }) => {
+  const diagnosticId = useId();
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const pendingRef = useRef(false);
@@ -125,20 +78,26 @@ export const ServerActionsMenu = ({ id, name }: { id: string; name: string }) =>
   return <div className="server-sidebar-actions">
     <InlineActionsMenu label={`${name} 서버 메뉴`} trigger="…" onOpenChange={setOpen} serverId={id}>
       {(close) => <>
-        {(['edit', 'delete', 'test'] as const).map((action, index) => <button
-          key={action} role="menuitem" type="button" disabled={unavailable}
-          className="rounded px-2 py-1 text-left disabled:opacity-50"
-          onClick={() => { close(); openServerManager(action, id); }}>
-          {['서버 편집', '서버 삭제', '연결 테스트'][index]}
-        </button>)}
-        <button role="menuitem" type="button" disabled={unavailable}
-          className="rounded px-2 py-1 text-left disabled:opacity-50"
-          onClick={() => void toggleMonitoring()}>
-          {savedServer ? savedServer.enabled ? '모니터링 중지' : '모니터링 시작' : '모니터링 변경'}
-        </button>
-        {diagnostic ? <p role="status" className="text-xs">{diagnostic}</p> : null}
+        {(['edit', 'delete', 'test'] as const).map((action, index) => <DropdownMenuItem
+          aria-label={['서버 편집', '서버 삭제', '연결 테스트'][index]}
+          key={action}
+          aria-describedby={diagnostic ? diagnosticId : undefined}
+          isDisabled={unavailable}
+          label={['서버 편집', '서버 삭제', '연결 테스트'][index]}
+          onClick={() => { if (!unavailable) { close(); openServerManager(action, id); } }}
+          variant={action === 'delete' ? 'destructive' : 'default'}
+        />)}
+        <DropdownMenuItem
+          aria-label={savedServer ? savedServer.enabled ? '모니터링 중지' : '모니터링 시작' : '모니터링 변경'}
+          aria-describedby={diagnostic ? diagnosticId : undefined}
+          hasCloseOnSelect={false}
+          isDisabled={unavailable}
+          label={savedServer ? savedServer.enabled ? '모니터링 중지' : '모니터링 시작' : '모니터링 변경'}
+          onClick={() => void toggleMonitoring()}
+        />
       </>}
     </InlineActionsMenu>
+    {diagnostic && open ? <p role="status" id={diagnosticId} className="server-menu-diagnostic">{diagnostic}</p> : null}
     {pending ? <p role="status" className="text-xs">{name}: 모니터링 변경 중</p> : null}
     {error ? <p role="alert" className="text-xs">{name}: {error}</p> : null}
   </div>;

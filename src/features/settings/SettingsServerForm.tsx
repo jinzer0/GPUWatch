@@ -1,3 +1,5 @@
+import { TextInput } from '@astryxdesign/core/TextInput';
+import { CheckboxInput } from '@astryxdesign/core/CheckboxInput';
 import { useEffect, useRef } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 
@@ -41,22 +43,39 @@ const SettingsTextField = ({ disabled, error, field, label, min, onChange, type 
 
   return (
     <div className="settings-field space-y-2 text-sm">
-      <label className="metric-label block" htmlFor={inputId}>{label}</label>
-      <input
-        aria-describedby={describedBy(helperId, errorId, hasError)}
+      {type === 'number' ? <>
+        <label className="metric-label block" htmlFor={inputId}>{label}</label>
+        <input
+          aria-describedby={describedBy(helperId, errorId, hasError)}
+          aria-invalid={hasError ? 'true' : undefined}
+          aria-required={required || undefined}
+          className="input"
+          disabled={disabled}
+          id={inputId}
+          min={min}
+          onChange={(event) => onChange(field, event.target.value)}
+          required={required}
+          type="number"
+          value={value}
+        />
+      </> : <TextInput
+        aria-label={label}
+        aria-describedby={helperId}
         aria-invalid={hasError ? 'true' : undefined}
-        aria-required={required || undefined}
-        className="input"
-        disabled={disabled}
+        containerClassName="settings-text-field"
+        controlClassName="settings-text-control"
         id={inputId}
-        min={min}
-        onChange={(event) => onChange(field, event.target.value)}
-        required={required}
-        type={type}
+        isDisabled={disabled}
+        isRequired={required}
+        label={label}
+        onChange={(next) => { if (!disabled) onChange(field, next); }}
+        size="md"
+        status={hasError ? { type: 'error', message: error } : undefined}
         value={value}
-      />
+        width="100%"
+      />}
       <p className="settings-field-helper text-xs leading-5 text-[color:var(--color-muted)]" id={helperId}>{fieldHelpers[field]}</p>
-      {hasError ? <p className="settings-field-error text-xs font-semibold leading-5 text-[color:var(--color-error)]" id={errorId}>{error}</p> : null}
+      {hasError && type === 'number' ? <p className="settings-field-error text-xs font-semibold leading-5 text-[color:var(--color-error)]" id={errorId}>{error}</p> : null}
     </div>
   );
 };
@@ -191,14 +210,13 @@ export const SettingsServerForm = ({
 
 	      <EditorFieldset disabled={isSavePending} title="Polling">
 	        <SettingsTextField disabled={isSavePending} error={fieldErrors.pollingIntervalSeconds} field="pollingIntervalSeconds" label="Polling interval seconds" min="1" onChange={updateField} type="number" value={form.pollingIntervalSeconds} />
-        <div className="settings-toggle-field flex items-end gap-3 text-sm text-[color:var(--color-muted)]">
-	          <input checked={form.enabled} disabled={isSavePending} id="settings-enabled" onChange={(event) => updateField('enabled', event.target.checked)} type="checkbox" />
-	          <div>
-	            <label className="metric-label block" htmlFor="settings-enabled">Enabled</label>
-	            <p className="mt-1 text-xs leading-5 text-[color:var(--color-muted)]" id={getSettingsFieldHelperId('enabled')}>Enabled servers are included in scheduled polling.</p>
-	          </div>
-	        </div>
-	      </EditorFieldset>
+        <div className="settings-toggle-field">
+          <CheckboxInput aria-describedby={getSettingsFieldHelperId('enabled')} id="settings-enabled"
+            isDisabled={isSavePending} label="Enabled" onChange={(checked) => { if (!isSavePending) updateField('enabled', checked); }}
+            size="sm" value={form.enabled} />
+          <p className="settings-field-helper" id={getSettingsFieldHelperId('enabled')}>Enabled servers are included in scheduled polling.</p>
+        </div>
+      </EditorFieldset>
 
       <section aria-labelledby="settings-remote-requirements-heading" className="settings-editor-section settings-remote-requirements text-sm leading-6 text-[color:var(--color-muted)]" role="region">
 	        <h3 className="metric-label" id="settings-remote-requirements-heading">Remote requirements</h3>

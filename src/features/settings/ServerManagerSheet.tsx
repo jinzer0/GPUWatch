@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { Dialog } from '@astryxdesign/core/Dialog';
 
-import { Button, DiagnosticPanel, ErrorState, LoadingState, ResultFeedback, RightDrawer } from '../../components/ui';
+import { Button, DiagnosticPanel, ErrorState, LoadingState, ResultFeedback } from '../../components/ui';
 import { formatUnknown } from '../../lib/format';
 import { useUiStore } from '../../lib/store';
 import type { ServerManagementAction } from '../../lib/store';
@@ -31,7 +31,7 @@ export const ServerManagerSheet = () => {
   const lastControlId = useRef<string | null>(null);
   const mutationLatch = useRef(false);
   const invokerRef = useRef(document.activeElement instanceof HTMLElement ? document.activeElement : null);
-  const modalRef = useRef<HTMLDivElement>(null);
+  const modalRef = useRef<HTMLDialogElement>(null);
 
   const requestClose = useCallback(() => {
     const state = current.current;
@@ -95,16 +95,22 @@ export const ServerManagerSheet = () => {
   const ready = !controller.serversQuery.isLoading && !controller.isTargetNotFound &&
     (!savedTargetRequired || controller.form.id !== null);
 
-  return createPortal(
-    <div className="server-manager-modal" ref={modalRef}>
-      <RightDrawer ariaLabel={titles[action]} onClose={requestClose} title={titles[action]}>
+  return (
+    <Dialog aria-label={titles[action]} aria-modal="true" className="server-manager-modal" isOpen
+      maxHeight="calc(100dvh - 40px)" onOpenChange={(open) => { if (!open) requestClose(); }}
+      padding={0} purpose="form" ref={modalRef} width={action === 'import' ? 800 : 580}>
+      <header className="server-manager-header">
+        <div><h2>{titles[action]}</h2><p>{action === 'import' ? '저장된 SSH 호스트를 확인하고 가져옵니다.' : '이 Mac에서 사용할 GPU 서버 연결을 설정합니다.'}</p></div>
+        <Button aria-label="Close drawer" data-autofocus onClick={requestClose} size="sm" variant="ghost">닫기</Button>
+      </header>
+      <div className="server-manager-content">
         {closeBlocked ? <p role="status">저장 또는 삭제 처리 중입니다. 결과를 확인한 뒤 닫아 주세요.</p> : null}
         {reviewDiscard ? (
           <section aria-labelledby="discard-changes-title" role="alertdialog">
             <h3 id="discard-changes-title">미저장 변경을 버릴까요?</h3>
             <p>저장하지 않은 입력과 가져오기 선택이 사라집니다.</p>
             <div className="server-manager-actions">
-              <button className="btn btn-secondary btn-sm" onClick={continueEditing} ref={continueRef} type="button">계속 편집</button>
+              <Button onClick={continueEditing} ref={continueRef} size="sm" type="button">계속 편집</Button>
               <Button onClick={closeServerManager} type="button" variant="danger">변경 버리기</Button>
             </div>
           </section>
@@ -122,10 +128,10 @@ export const ServerManagerSheet = () => {
                 <p>Delete {controller.deleteTarget?.name ?? controller.form.name}?</p>
                 <p>이 Mac의 서버 설정만 삭제하며 원격 호스트를 변경하지 않습니다.</p>
                 <div className="server-manager-actions">
-                  <button className="btn btn-secondary btn-sm" disabled={controller.isDeletePending} onClick={() => {
+                  <Button disabled={controller.isDeletePending} onClick={() => {
                     controller.cancelDelete();
                     closeServerManager();
-                  }} ref={deleteCancelRef} type="button">Cancel delete</button>
+                  }} data-autofocus ref={deleteCancelRef} size="sm" type="button">Cancel delete</Button>
                   <Button disabled={controller.isDeletePending || !controller.deleteTarget} onClick={confirmDelete} type="button" variant="danger">
                     Confirm delete {controller.deleteTarget?.name ?? controller.form.name}
                   </Button>
@@ -148,8 +154,7 @@ export const ServerManagerSheet = () => {
             ) : null}
           </>
         )}
-      </RightDrawer>
-    </div>,
-    document.body
+      </div>
+    </Dialog>
   );
 };

@@ -103,7 +103,9 @@ describe('Settings modal accessibility', () => {
     expectVisibleDescription(selectAll, '0 of 0 valid hosts selected');
     expectVisibleDescription(saveSelected, '0 of 0 valid hosts selected');
     const invalidCandidate = screen.getByRole('checkbox', { name: 'Select missing-user for bulk import' });
-    expect(invalidCandidate).toHaveProperty('disabled', true);
+    expect(invalidCandidate.getAttribute('aria-disabled')).toBe('true');
+    fireEvent.click(invalidCandidate);
+    expect(invalidCandidate).toHaveProperty('checked', false);
     expectVisibleDescription(invalidCandidate, 'Missing username');
     expect(screen.queryByLabelText('Name')).toBeNull();
   });
