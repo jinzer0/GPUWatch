@@ -5,12 +5,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 
-export const APPROVED_PLAN_OID = '4792cf42a8fac74540b3547349018e854b44f74e';
-export const APPROVED_PLAN_BLOB_OID = '6aaa38b6321e3e2aa7407f672a16917e9d1f6a24';
-export const REPOSITORY = Object.freeze({ host: 'github.com', repository: 'jinzer0/GPUWatch', repository_id: 1256824919, issue_number: 31 });
+export const APPROVED_RELEASE_VERSION = '0.3.0';
+export const APPROVED_PLAN_OID = '1de743a44543ef3df4689de19c27bc8da7818482';
+export const APPROVED_PLAN_BLOB_OID = '3179a33724af136cf64b15979d8997de797a350e';
+export const APPROVED_PLAN_PATH = 'mydocs/plans/release_m001_v0.3.0.md';
+export const REPOSITORY = Object.freeze({ host: 'github.com', repository: 'jinzer0/GPUWatch', repository_id: 1256824919 });
 export const ACTIONS = Object.freeze(['build', 'prepare-app', 'submit-app', 'package', 'prepare-dmg', 'submit-dmg']);
 const DEFAULT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const PLAN = 'mydocs/plans/task_m001_31_impl.md';
 const HASH = /^[a-f0-9]{64}$/;
 const REQUEST_ID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const digest = (value) => createHash('sha256').update(value).digest('hex');
@@ -115,16 +116,16 @@ async function sourceSnapshot(ctx) {
   if (indexEntries.some((entry) => !entry.startsWith('H '))) fail('Hidden or unresolved source index flags forbidden');
   const oid = (await command(ctx, 'git', ['rev-parse', '--verify', 'HEAD^{commit}'])).trim();
   if (!/^[a-f0-9]{40}$/.test(oid)) fail('Invalid source commit');
-  const plan = await safePath(ctx.root, path.join(ctx.root, PLAN));
+  const plan = await safePath(ctx.root, path.join(ctx.root, APPROVED_PLAN_PATH));
   const stat = await fs.lstat(plan);
   if ((stat.mode & 0o7777) !== 0o644) fail('Approved plan mode changed');
   const bytes = await fs.readFile(plan);
   const blob = createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
   if (blob !== APPROVED_PLAN_BLOB_OID) fail('Approved plan content changed');
-  const headTree = await command(ctx, 'git', ['ls-tree', '-z', 'HEAD', '--', `:(literal)${PLAN}`]);
-  if (headTree !== `100644 blob ${APPROVED_PLAN_BLOB_OID}\t${PLAN}\0`) fail('Approved plan HEAD mode/blob changed');
-  const metadata = await command(ctx, 'git', ['ls-files', '--stage', '-z', '--', `:(literal)${PLAN}`]);
-  if (metadata !== `100644 ${APPROVED_PLAN_BLOB_OID} 0\t${PLAN}\0`) fail('Approved plan index mode/blob changed');
+  const headTree = await command(ctx, 'git', ['ls-tree', '-z', 'HEAD', '--', `:(literal)${APPROVED_PLAN_PATH}`]);
+  if (headTree !== `100644 blob ${APPROVED_PLAN_BLOB_OID}\t${APPROVED_PLAN_PATH}\0`) fail('Approved plan HEAD mode/blob changed');
+  const metadata = await command(ctx, 'git', ['ls-files', '--stage', '-z', '--', `:(literal)${APPROVED_PLAN_PATH}`]);
+  if (metadata !== `100644 ${APPROVED_PLAN_BLOB_OID} 0\t${APPROVED_PLAN_PATH}\0`) fail('Approved plan index mode/blob changed');
   return { oid, physicalDocuments: await physicalSourceChanges(ctx), untracked: await untrackedSourceFiles(ctx) };
 }
 
@@ -310,7 +311,7 @@ export async function validateApp(appPath, manifest, dependencies = {}) {
   const info = path.join(appPath, 'Contents/Info.plist');
   await safePath(appPath, info);
   const version = (await command(ctx, '/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleShortVersionString', info])).trim();
-  if (version !== manifest.version || version !== '0.2.0') fail('App version mismatch');
+  if (version !== manifest.version || version !== APPROVED_RELEASE_VERSION) fail('App version mismatch');
   const executableName = (await command(ctx, '/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleExecutable', info])).trim();
   if (!executableName || path.basename(executableName) !== executableName) fail('Unsafe bundle executable name');
   const executable = path.join(appPath, 'Contents/MacOS', executableName);
@@ -356,7 +357,7 @@ export async function loadManifest(manifestPath, dependencies = {}) {
 
 async function validateManifestPaths(manifest, file, ctx) {
   const signedRoot = path.join(ctx.root, 'release/electron/signed');
-  if (manifest.schemaVersion !== 1 || manifest.approvedPlanOid !== APPROVED_PLAN_OID || manifest.version !== '0.2.0' || manifest.arch !== 'arm64' || manifest.runDirectory !== path.dirname(file) || path.dirname(manifest.runDirectory) !== signedRoot) fail('Invalid manifest provenance');
+  if (manifest.schemaVersion !== 1 || manifest.approvedPlanOid !== APPROVED_PLAN_OID || manifest.version !== APPROVED_RELEASE_VERSION || manifest.arch !== 'arm64' || manifest.runDirectory !== path.dirname(file) || path.dirname(manifest.runDirectory) !== signedRoot) fail('Invalid manifest provenance');
   for (const [key, value] of Object.entries(REPOSITORY)) if (manifest[key] !== value) fail('Manifest repository binding mismatch');
   await safePath(ctx.root, manifest.runDirectory, 'directory');
   if (await safePath(manifest.runDirectory, manifest.appPath, 'directory') !== manifest.appPath) fail('App path is not canonical');
@@ -587,7 +588,7 @@ export async function runAction(action, options = {}, dependencies = {}) {
     const commit = await sourceCommit(ctx);
     const certificateHash = await certificateIdentity(ctx, credentials);
     const metadata = JSON.parse(await fs.readFile(await safePath(ctx.root, path.join(ctx.root, 'package.json')), 'utf8'));
-    if (metadata.version !== '0.2.0') fail('Signed release requires version 0.2.0');
+    if (metadata.version !== APPROVED_RELEASE_VERSION) fail(`Signed release requires version ${APPROVED_RELEASE_VERSION}`);
     const signedRoot = path.join(ctx.root, 'release/electron/signed');
     // Validate every existing ancestor before creating output.
     for (const relative of ['release', 'release/electron', 'release/electron/signed']) {
@@ -600,7 +601,7 @@ export async function runAction(action, options = {}, dependencies = {}) {
     }
     const runDirectory = path.join(signedRoot, `${ctx.now().replace(/[:.]/g, '-')}-${randomUUID()}`);
     await fs.mkdir(runDirectory, { mode: 0o700 });
-    const manifest = { schemaVersion: 1, ...REPOSITORY, approvedPlanOid: APPROVED_PLAN_OID, sourceCommit: commit, version: '0.2.0', arch: 'arm64', ...credentials, runDirectory, appPath: null, appFiles: [], appSealSha256: null, artifacts: {}, notarization: {}, state: 'building', createdAt: ctx.now() };
+    const manifest = { schemaVersion: 1, ...REPOSITORY, approvedPlanOid: APPROVED_PLAN_OID, sourceCommit: commit, version: APPROVED_RELEASE_VERSION, arch: 'arm64', ...credentials, runDirectory, appPath: null, appFiles: [], appSealSha256: null, artifacts: {}, notarization: {}, state: 'building', createdAt: ctx.now() };
     const file = path.join(runDirectory, 'manifest.json');
     await saveManifest(file, manifest, ctx);
     try {
@@ -653,7 +654,7 @@ export async function runAction(action, options = {}, dependencies = {}) {
       await assertSeal(manifest);
       const dmg = await discover(output, '.dmg');
       await verifyDmg(dmg, manifest, ctx);
-      const zip = path.join(output, 'GPUWatcher-0.2.0-arm64.zip');
+      const zip = path.join(output, `GPUWatcher-${manifest.version}-${manifest.arch}.zip`);
       await command(ctx, '/usr/bin/ditto', ['-c', '-k', '--sequesterRsrc', '--keepParent', manifest.appPath, zip]);
       if ((await sealApp(manifest.appPath)).sha256 !== before.sha256) fail('Packaging changed source app');
       await verifyZip(zip, manifest, ctx);

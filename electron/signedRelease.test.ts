@@ -5,14 +5,13 @@ import { createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ACTIONS, APPROVED_PLAN_OID, APPROVED_PLAN_BLOB_OID, approvalInputs, executeCommand, loadManifest, parseCli, runAction, safePath, sealApp, sha256File, validateCredentials, verifyArtifactSource, verifyGatekeeper, verifySubmissionSnapshots } from './signedRelease.mjs';
+import { ACTIONS, APPROVED_PLAN_OID, APPROVED_PLAN_BLOB_OID, APPROVED_PLAN_PATH as PLAN, APPROVED_RELEASE_VERSION, approvalInputs, executeCommand, loadManifest, parseCli, runAction, safePath, sealApp, sha256File, validateCredentials, verifyArtifactSource, verifyGatekeeper, verifySubmissionSnapshots } from './signedRelease.mjs';
 
 const TEAM = 'ABCDEFGHIJ';
 const IDENTITY = `Developer ID Application: GPUWatcher (${TEAM})`;
 const PROFILE = 'gpuwatcher-notary';
 const SOURCE = 'a'.repeat(40);
 const ID = '12345678-1234-1234-1234-123456789abc';
-const PLAN = 'mydocs/plans/task_m001_31_impl.md';
 const PLAN_TEXT = await fs.readFile(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', PLAN), 'utf8');
 const ENV = { CSC_NAME: IDENTITY, GPUWATCHER_SIGNING_TEAM_ID: TEAM, APPLE_KEYCHAIN_PROFILE: PROFILE };
 const success = (stdout = '', stderr = '') => ({ code: 0, signal: null, timedOut: false, stdout, stderr });
@@ -36,7 +35,7 @@ beforeEach(async () => {
   root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'gpuwatcher-signed-test-')));
   await fs.mkdir(path.join(root, 'mydocs/plans'), { recursive: true });
   await fs.writeFile(path.join(root, PLAN), PLAN_TEXT, { mode: 0o644 });
-  await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({ version: '0.2.0' }));
+  await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({ version: APPROVED_RELEASE_VERSION }));
   await fs.writeFile(path.join(root, '.gitignore'), '', { mode: 0o644 });
   archives = new Map();
   commandOverride = undefined;
@@ -64,7 +63,7 @@ beforeEach(async () => {
         return success();
       }
       if (executable === 'security') return success(`  1) ${'D'.repeat(40)} "${IDENTITY}"\n     1 valid identities found`);
-      if (executable === '/usr/libexec/PlistBuddy') return success(args[1].includes('Executable') ? 'GPUWatcher' : '0.2.0');
+      if (executable === '/usr/libexec/PlistBuddy') return success(args[1].includes('Executable') ? 'GPUWatcher' : APPROVED_RELEASE_VERSION);
       if (executable === 'lipo') return success('arm64');
       if (executable === 'spctl') return success('', `${args.at(-1)}: accepted\nsource=Notarized Developer ID\n`);
       if (executable === 'codesign' && args.includes('--entitlements')) return success(`<plist><dict>${args.at(-1)?.endsWith('gpuwatcher-helper') ? '' : '<key>com.apple.security.cs.allow-jit</key><true/>'}</dict></plist>`);
@@ -163,10 +162,16 @@ describe('owned paths and signed build', () => {
     expect(result.manifest.state).toBe('signed');
     expect(result.manifest.sourceCommit).toBe(SOURCE);
     expect(result.manifest.approvedPlanOid).toBe(APPROVED_PLAN_OID);
+    expect(result.manifest.version).toBe(APPROVED_RELEASE_VERSION);
     expect(uploads()).toHaveLength(0);
     for (const [executable, , commandOptions] of deps.command.mock.calls) if (executable === 'git') expect(commandOptions.env.GIT_NO_REPLACE_OBJECTS).toBe('1');
     const second = await runAction('build', {}, deps);
     expect(second.manifest.runDirectory).not.toBe(result.manifest.runDirectory);
+  });
+  it('rejects the previous release version before invoking the builder', async () => {
+    await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({ version: '0.2.0' }));
+    await expect(runAction('build', {}, deps)).rejects.toThrow(`Signed release requires version ${APPROVED_RELEASE_VERSION}`);
+    expect(deps.build).not.toHaveBeenCalled();
   });
   it.each([0, 2])('rejects %s app candidates', async (count) => {
     buildHook = async (options) => {
@@ -285,7 +290,7 @@ describe('exact approval and immutable submission', () => {
   });
   it('freezes app ZIP and returns the complete approval tuple; repeated prepare never rebuilds it', async () => {
     const prepared = await preparedApp();
-    expect(prepared.approval).toMatchObject({ host: 'github.com', repository: 'jinzer0/GPUWatch', repository_id: 1256824919, issue_number: 31, approvedPlanOid: APPROVED_PLAN_OID, sourceCommit: SOURCE, action: 'submit-app-zip-and-staple-app', target: 'Apple notarization service', version: '0.2.0', arch: 'arm64', identity: IDENTITY, teamId: TEAM, keychainProfile: PROFILE, keychain: null });
+    expect(prepared.approval).toMatchObject({ host: 'github.com', repository: 'jinzer0/GPUWatch', repository_id: 1256824919, approvedPlanOid: APPROVED_PLAN_OID, sourceCommit: SOURCE, action: 'submit-app-zip-and-staple-app', target: 'Apple notarization service', version: APPROVED_RELEASE_VERSION, arch: 'arm64', identity: IDENTITY, teamId: TEAM, keychainProfile: PROFILE, keychain: null });
     expect(prepared.approval.manifestSha256).toBe(await sha256File(prepared.manifestPath));
     expect(prepared.approval.artifactSha256).toBe(await sha256File(prepared.approval.artifactPath));
     const again = await runAction('prepare-app', { manifest: prepared.manifestPath }, deps);
@@ -668,7 +673,7 @@ describe('repository release defaults', () => {
     const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
     const pkg = JSON.parse(await fs.readFile(path.join(repositoryRoot, 'package.json'), 'utf8'));
     const lock = JSON.parse(await fs.readFile(path.join(repositoryRoot, 'package-lock.json'), 'utf8'));
-    expect(pkg.version).toBe('0.2.0');
+    expect(pkg.version).toBe(APPROVED_RELEASE_VERSION);
     expect(lock.version).toBe(pkg.version);
     expect(lock.packages[''].version).toBe(pkg.version);
     expect(pkg.devDependencies['@electron/osx-sign']).toBe('1.3.3');
@@ -679,8 +684,8 @@ describe('repository release defaults', () => {
     for (const crate of ['gpuwatcher-core', 'gpuwatcher-helper']) {
       const toml = await fs.readFile(path.join(repositoryRoot, 'crates', crate, 'Cargo.toml'), 'utf8');
       const cargoLock = await fs.readFile(path.join(repositoryRoot, 'crates', crate, 'Cargo.lock'), 'utf8');
-      expect(toml).toMatch(/\[package\][\s\S]*?version = "0\.2\.0"/);
-      expect(cargoLock).toMatch(new RegExp(`name = "${crate}"\\nversion = "0\\.2\\.0"`));
+      expect(toml.split(/\n\[/, 2)[0]).toContain(`version = "${APPROVED_RELEASE_VERSION}"`);
+      expect(cargoLock).toContain(`name = "${crate}"\nversion = "${APPROVED_RELEASE_VERSION}"`);
     }
   });
 });

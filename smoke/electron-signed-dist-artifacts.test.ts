@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { APPROVED_PLAN_OID, REPOSITORY, executeCommand, sealApp, sha256File } from '../electron/signedRelease.mjs';
+import { APPROVED_PLAN_OID, APPROVED_PLAN_PATH, APPROVED_RELEASE_VERSION, REPOSITORY, executeCommand, sealApp, sha256File } from '../electron/signedRelease.mjs';
 import { parseCli, runSignedArtifactSmoke } from './electron-signed-dist-artifacts.mjs';
 import { discoverAppPath } from './shared/paths.mjs';
 
@@ -62,11 +62,11 @@ async function writeInput(name: string, bytes: string) {
 
 async function makeSource() {
   await writeInput('.gitignore', 'release/\n');
-  await writeInput('mydocs/plans/task_m001_31_impl.md', await fs.readFile(fileURLToPath(new URL('../mydocs/plans/task_m001_31_impl.md', import.meta.url)), 'utf8'));
-  await writeInput('package.json', '{"version":"0.2.0"}\n');
+  await writeInput(APPROVED_PLAN_PATH, await fs.readFile(fileURLToPath(new URL(`../${APPROVED_PLAN_PATH}`, import.meta.url)), 'utf8'));
+  await writeInput('package.json', JSON.stringify({ version: APPROVED_RELEASE_VERSION }) + '\n');
   await writeInput('src/main.tsx', 'export const value = 1;\n');
   git('init', '--quiet');
-  git('add', '--', '.gitignore', 'mydocs/plans/task_m001_31_impl.md', 'package.json', 'src/main.tsx');
+  git('add', '--', '.gitignore', APPROVED_PLAN_PATH, 'package.json', 'src/main.tsx');
   git('commit', '--quiet', '-m', 'fixture source');
   return git('rev-parse', 'HEAD');
 }
@@ -83,7 +83,7 @@ function runtimeReceipt(): any {
   const signature = () => ({ sourceSealSha256: manifest.appSealSha256, copySealSha256: manifest.appSealSha256, codesign: ok(), stapler: ok() });
   return {
     ok: true, artifactMode: 'signed', sourceUnchanged: true, sourceSealSha256: manifest.appSealSha256,
-    success: { artifactMode: 'signed', guardUsed: false, signatureProof: signature(), helperHealth: { ok: true, data: { helperVersion: '0.2.0' } }, servers: [{ enabled: false }], isolatedCopyRemoved: true },
+    success: { artifactMode: 'signed', guardUsed: false, signatureProof: signature(), helperHealth: { ok: true, data: { helperVersion: APPROVED_RELEASE_VERSION } }, servers: [{ enabled: false }], isolatedCopyRemoved: true },
     failure: { artifactMode: 'signed', faultClass: 'backend-error', signatureBefore: signature(), isolatedCopyRemoved: true, bridgeError: { ok: false, error: { layer: 'helper_contract', type: 'helper_spawn_failed' } }, errorBody: 'permission denied EACCES', navigableBody: 'GPUWatcher Save server' }
   };
 }
@@ -115,7 +115,7 @@ beforeEach(async () => {
   manifestPath = path.join(run, 'manifest.json');
   manifest = {
     ...REPOSITORY, schemaVersion: 1, approvedPlanOid: APPROVED_PLAN_OID, sourceCommit,
-    version: '0.2.0', arch: 'arm64', runDirectory: run, appPath, identity, teamId: team,
+    version: APPROVED_RELEASE_VERSION, arch: 'arm64', runDirectory: run, appPath, identity, teamId: team,
     keychainProfile: 'gpuwatcher-notary', keychain: '/mock/login.keychain-db', state: 'finalized',
     appFiles: seal.files, appSealSha256: seal.sha256, signedAppSealSha256: signedSeal.sha256, artifacts,
     appStaple: { beforeSha256: signedSeal.sha256, afterSha256: seal.sha256 },
@@ -145,7 +145,7 @@ beforeEach(async () => {
       const overridden = await override?.(exe, args);
       if (overridden !== undefined) return overridden;
       if (exe === 'git') return executeCommand(exe, args, options);
-      if (exe === '/usr/libexec/PlistBuddy') return ok(args[1].includes('Executable') ? 'GPUWatcher' : '0.2.0');
+      if (exe === '/usr/libexec/PlistBuddy') return ok(args[1].includes('Executable') ? 'GPUWatcher' : APPROVED_RELEASE_VERSION);
       if (exe === 'lipo') return ok('arm64');
       if (exe === 'codesign' && args.includes('--entitlements')) return ok(`<plist><dict>${args.at(-1)?.endsWith('gpuwatcher-helper') ? '' : '<key>com.apple.security.cs.allow-jit</key><true/>'}</dict></plist>`);
       if (exe === 'codesign' && args[0] === '-d') return ok('', `Authority=${identity}\nTeamIdentifier=${team}\nflags=0x10000(runtime)\n`);
@@ -347,7 +347,7 @@ describe('signed artifact smoke', () => {
     const before = await sealApp(manifest.appPath);
     const manifestBefore = await fs.readFile(manifestPath, 'utf8');
     await expect(verify()).resolves.toMatchObject({ state: 'verified', appPath: manifest.appPath });
-    expect(deps.runtimeSmoke).toHaveBeenCalledWith({ appPath: manifest.appPath, evidencePrefix: 'task-31-signed-dist', artifactMode: 'signed' });
+    expect(deps.runtimeSmoke).toHaveBeenCalledWith({ appPath: manifest.appPath, evidencePrefix: `gpuwatcher-v${APPROVED_RELEASE_VERSION.replaceAll('.', '-')}-signed-dist`, artifactMode: 'signed' });
     expect(await discoverAppPath(manifest.appPath)).toBe(manifest.appPath);
     expect(await sealApp(manifest.appPath)).toEqual(before);
     expect(await fs.readFile(manifestPath, 'utf8')).toBe(manifestBefore);
