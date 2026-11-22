@@ -10,6 +10,7 @@ export const getWatchTargetKey = (serverId: string, gpuUuid: string | null, gpuI
 export const useServerDetailController = (selectedServerId: string | null) => {
   const queryClient = useQueryClient();
   const pendingWatchTargetsRef = useRef(new Set<string>());
+  const refreshPendingRef = useRef(false);
   const [pendingWatchTargets, setPendingWatchTargets] = useState<readonly string[]>([]);
   const detailQuery = useQuery<ServerDetailDto | null>({
     queryKey: selectedServerId ? queryKeys.detail(selectedServerId) : ['server-detail', 'none'],
@@ -61,13 +62,27 @@ export const useServerDetailController = (selectedServerId: string | null) => {
         queryClient.invalidateQueries({ queryKey: queryKeys.detail(id) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.overview }),
         queryClient.invalidateQueries({ queryKey: queryKeys.processes })
-      ])
+      ]),
+    onSettled: () => { refreshPendingRef.current = false; }
   });
+
+  const refreshResult = refreshMutation.variables === selectedServerId ? refreshMutation.data : undefined;
+  const refreshError = refreshMutation.variables === selectedServerId ? refreshMutation.error : null;
+
+  const refreshSelectedServer = () => {
+    if (selectedServerId && !refreshPendingRef.current && !refreshMutation.isPending) {
+      refreshPendingRef.current = true;
+      refreshMutation.mutate(selectedServerId);
+    }
+  };
 
   return {
     detail,
     detailQuery,
     refreshMutation,
+    refreshResult,
+    refreshError,
+    refreshSelectedServer,
     pendingWatchTargets,
     saveWatch,
     watchMutation,
@@ -75,3 +90,5 @@ export const useServerDetailController = (selectedServerId: string | null) => {
     watchRulesQuery
   };
 };
+
+export type ServerDetailController = ReturnType<typeof useServerDetailController>;

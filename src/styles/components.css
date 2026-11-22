@@ -1,243 +1,94 @@
-@layer components {
-  .app-shell {
-    --component-control-height: var(--shell-control-height, var(--density-control-height));
-    --component-control-padding-block: 0.65rem;
-    --component-control-padding-inline: var(--density-space-4);
-    --component-input-padding-inline: var(--density-space-3);
-    --component-metric-value-gap: 0.35rem;
-    --component-metric-value-size: 1.8rem;
-  }
+.btn {
+  flex-shrink: 0;
+  font-size: 13px;
+}
 
-  .app-shell[data-density="compact"] {
-    --component-control-padding-block: var(--density-space-2);
-    --component-control-padding-inline: var(--density-space-3);
-    --component-input-padding-inline: var(--density-space-3);
-    --component-metric-value-gap: var(--density-space-1);
-    --component-metric-value-size: 1.45rem;
-  }
+.btn-sm {
+  font-size: 12px;
+}
 
-  .eyebrow {
-    color: var(--color-brand);
-    font-family: var(--font-display);
-    font-size: 0.78rem;
-    font-weight: 700;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-  }
+.btn-lg {
+  border-radius: 999px;
+}
 
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--density-space-2);
-    min-height: var(--component-control-height);
-    border: 1px solid transparent;
-    border-radius: var(--radius-control);
-    padding: var(--component-control-padding-block) var(--component-control-padding-inline);
-    font-weight: 800;
-    transition:
-      background-color var(--interaction-transition-duration) var(--interaction-transition-timing),
-      border-color var(--interaction-transition-duration) var(--interaction-transition-timing),
-      color var(--interaction-transition-duration) var(--interaction-transition-timing),
-      box-shadow var(--interaction-transition-duration) var(--interaction-transition-timing);
-  }
+:where(.field, .input) {
+  min-height: var(--density-control-height);
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  padding: 5px 10px;
+}
 
-  .btn-sm {
-    min-height: calc(var(--component-control-height) - var(--density-space-1));
-    padding: var(--density-space-1) var(--density-space-3);
-  }
+.input {
+  width: 100%;
+}
 
-  .btn-md {
-    min-height: var(--component-control-height);
-    padding: var(--component-control-padding-block) var(--component-control-padding-inline);
-  }
+:where(.field, .input)[aria-invalid="true"] {
+  border-color: var(--color-danger);
+}
 
-  .btn-primary {
-    border-color: var(--color-brand);
-    background: var(--color-brand);
-    color: var(--color-canvas-deep);
-    font-weight: 800;
-  }
+:where(.field, .input):disabled {
+  background: var(--color-surface-hover);
+  color: var(--color-disabled);
+}
 
-  .btn-secondary {
-    border-color: var(--color-line-strong);
-    background: color-mix(in srgb, var(--color-surface) 58%, transparent);
-    color: var(--color-ink);
-    font-weight: 700;
-  }
+.surface {
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+}
 
-  .btn-ghost {
-    border-color: transparent;
-    background: transparent;
-    color: var(--color-muted);
-    font-weight: 700;
-  }
+.surface-raised {
+  border-color: var(--color-line);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-panel);
+}
 
-  .btn-danger {
-    border-color: color-mix(in srgb, var(--color-danger) 72%, var(--color-line));
-    background: color-mix(in srgb, var(--color-danger) 14%, transparent);
-    color: var(--color-danger);
-    font-weight: 800;
-  }
+.surface-interactive:hover,
+.surface-interactive:focus-within {
+  border-color: var(--color-line-strong);
+  background: var(--color-surface-hover);
+}
 
-  .btn-primary:not(:disabled):not([aria-disabled="true"]):hover {
-    box-shadow: 0 0 0 3px var(--color-brand-soft);
-  }
+.surface-warning {
+  border-color: color-mix(in srgb, var(--color-warning) 46%, var(--color-line));
+  background: color-mix(in srgb, var(--color-warning) 9%, var(--color-surface));
+}
 
-  .btn-secondary:not(:disabled):not([aria-disabled="true"]):hover,
-  .btn-ghost:not(:disabled):not([aria-disabled="true"]):hover {
-    border-color: var(--color-line-strong);
-    background: var(--color-surface-hover);
-    color: var(--color-text);
-  }
+.surface-danger {
+  border-color: color-mix(in srgb, var(--color-danger) 46%, var(--color-line));
+  background: color-mix(in srgb, var(--color-danger) 8%, var(--color-surface));
+}
 
-  .btn-danger:not(:disabled):not([aria-disabled="true"]):hover {
-    background: color-mix(in srgb, var(--color-danger) 20%, transparent);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-danger) 14%, transparent);
-  }
+.metric-label,
+.eyebrow {
+  color: var(--color-muted);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
 
-  .field {
-    border: 1px solid var(--color-line);
-    border-radius: var(--radius-control);
-    background: rgba(8, 8, 7, 0.44);
-    color: var(--color-ink);
-    outline: none;
-  }
+.metric-value {
+  color: var(--color-text);
+  font-size: 1.35rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  line-height: 1.2;
+}
 
-  .field:focus-visible {
-    border-color: var(--color-brand);
-    box-shadow: var(--focus-ring-shadow);
-  }
+.empty-state {
+  padding: 40px 22px;
+  text-align: center;
+}
 
-  .input {
-    width: 100%;
-    min-height: var(--component-control-height);
-    border: 1px solid var(--color-line);
-    border-radius: var(--radius-control);
-    background: rgba(8, 8, 7, 0.44);
-    color: var(--color-ink);
-    outline: none;
-    padding: var(--component-control-padding-block) var(--component-input-padding-inline);
-  }
+.empty-state .section-title {
+  font-size: 18px;
+  font-weight: 650;
+}
 
-  .input:focus-visible {
-    border-color: var(--color-brand);
-    box-shadow: var(--focus-ring-shadow);
-  }
-
-  .surface {
-    border: 1px solid var(--color-line);
-    border-radius: var(--radius-card);
-    background: var(--color-surface);
-  }
-
-  .surface-raised {
-    border-color: var(--color-line-strong);
-    background: var(--color-surface-raised);
-    box-shadow: var(--shadow-panel);
-  }
-
-  .surface-interactive {
-    transition:
-      background-color var(--interaction-transition-duration) var(--interaction-transition-timing),
-      border-color var(--interaction-transition-duration) var(--interaction-transition-timing),
-      box-shadow var(--interaction-transition-duration) var(--interaction-transition-timing);
-  }
-
-  .surface-interactive:hover,
-  .surface-interactive:focus-within {
-    border-color: var(--color-line-strong);
-    background: var(--color-surface-hover);
-  }
-
-  .surface-warning {
-    border-color: color-mix(in srgb, var(--color-warning) 72%, var(--color-line));
-    background: color-mix(in srgb, var(--color-warning) 12%, var(--color-surface));
-  }
-
-  .surface-danger {
-    border-color: color-mix(in srgb, var(--color-danger) 72%, var(--color-line));
-    background: color-mix(in srgb, var(--color-danger) 12%, var(--color-surface));
-  }
-
-  .no-drag,
-  .app-shell :is(button, input, select, textarea, a, .sidebar-nav-item, .density-control, .density-control *) {
-    -webkit-app-region: no-drag;
-  }
-
-  .app-shell :is(button, input, select, textarea, a, [tabindex]):focus-visible,
-  .sidebar-nav-item:focus-visible,
-  .density-control-option:focus-visible {
-    outline: 2px solid var(--color-brand);
-    outline-offset: 2px;
-    box-shadow: var(--focus-ring-shadow);
-  }
-
-  .app-shell :is(button, input, select, textarea):disabled,
-  .app-shell [aria-disabled="true"] {
-    cursor: not-allowed;
-    opacity: 0.58;
-  }
-
-  .app-shell [aria-disabled="true"] {
-    pointer-events: none;
-  }
-
-  .sidebar-nav-item {
-    min-height: var(--component-control-height);
-    border-radius: 0;
-  }
-
-  .sidebar-nav-item:hover {
-    background: var(--color-surface-hover);
-  }
-
-  .sidebar-nav-item-active {
-    background: var(--color-brand-soft);
-  }
-
-  .density-control {
-    color: var(--color-text-secondary);
-  }
-
-  .density-control-options {
-    gap: var(--density-space-2);
-  }
-
-  .density-control-option {
-    min-height: var(--component-control-height);
-    border-radius: var(--radius-control);
-  }
-
-  .density-control-option:hover {
-    background: var(--color-surface-hover);
-  }
-
-  .metric-label {
-    color: var(--color-ink-soft);
-    font-size: 0.72rem;
-    font-weight: 800;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-  }
-
-  .metric-value {
-    margin-top: var(--component-metric-value-gap);
-    color: var(--color-ink);
-    font-family: var(--font-display);
-    font-size: var(--component-metric-value-size);
-    font-weight: 900;
-    letter-spacing: -0.05em;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .app-shell *,
-    .app-shell *::before,
-    .app-shell *::after {
-      scroll-behavior: auto !important;
-      transition-duration: 0.01ms !important;
-      animation-duration: 0.01ms !important;
-      animation-iteration-count: 1 !important;
-    }
-  }
+.empty-state p {
+  max-width: 380px;
+  margin: 8px auto 0;
+  color: var(--color-muted);
 }

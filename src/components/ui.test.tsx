@@ -80,6 +80,26 @@ describe('shared UI primitives', () => {
     expect(onClick).not.toHaveBeenCalled();
   });
 
+  it('blocks submission during a loading action and restores it when loading completes', () => {
+    const onSubmit = vi.fn((event: React.FormEvent<HTMLFormElement>) => event.preventDefault());
+    const form = (loading: boolean) => (
+      <form onSubmit={onSubmit}>
+        <Button loading={loading} type="submit">Save server</Button>
+      </form>
+    );
+    const { rerender } = render(form(true));
+    const button = screen.getByRole('button', { name: 'Save server' });
+
+    expect(button.getAttribute('aria-busy')).toBe('true');
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    rerender(form(false));
+    fireEvent.click(screen.getByRole('button', { name: 'Save server' }));
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
   it('extends Button className without dropping the base class', () => {
     render(<Button className="settings-action">Save server</Button>);
 

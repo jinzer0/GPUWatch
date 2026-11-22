@@ -29,11 +29,14 @@ export async function clickText(cdp, text) {
     cdp,
     `(() => {
       const needle = ${JSON.stringify(text)};
-      const element = Array.from(document.querySelectorAll('button, a')).find((candidate) =>
+      const element = Array.from(document.querySelectorAll('button, a, [role="menuitem"]')).find((candidate) =>
         (() => {
           const visibleName = candidate.textContent.trim();
           const accessibleName = candidate.getAttribute('aria-label') || visibleName;
-          return (accessibleName.includes(needle) || visibleName.includes(needle)) && (!('disabled' in candidate) || !candidate.disabled);
+          const hasName = accessibleName.includes(needle) || visibleName.includes(needle);
+          const disabled = ('disabled' in candidate && candidate.disabled) || candidate.getAttribute('aria-disabled') === 'true';
+          const visible = typeof candidate.checkVisibility !== 'function' || candidate.checkVisibility();
+          return hasName && !disabled && visible;
         })()
       );
       if (!element) throw new Error('No enabled clickable element with text: ' + needle);
@@ -49,11 +52,14 @@ export async function waitForEnabledClickableText(cdp, text, timeoutMs = 15000) 
       cdp,
       `(() => {
         const needle = ${JSON.stringify(text)};
-        const element = Array.from(document.querySelectorAll('button, a')).find((candidate) =>
+        const element = Array.from(document.querySelectorAll('button, a, [role="menuitem"]')).find((candidate) =>
           (() => {
             const visibleName = candidate.textContent.trim();
             const accessibleName = candidate.getAttribute('aria-label') || visibleName;
-            return (accessibleName.includes(needle) || visibleName.includes(needle)) && (!('disabled' in candidate) || !candidate.disabled);
+            const hasName = accessibleName.includes(needle) || visibleName.includes(needle);
+            const disabled = ('disabled' in candidate && candidate.disabled) || candidate.getAttribute('aria-disabled') === 'true';
+            const visible = typeof candidate.checkVisibility !== 'function' || candidate.checkVisibility();
+            return hasName && !disabled && visible;
           })()
         );
         return Boolean(element);

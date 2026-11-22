@@ -35,9 +35,9 @@ export const MetricCard = ({ label, value, tone }: { readonly label: string; rea
 );
 
 export const EmptyState = ({ title, body }: { readonly title: string; readonly body: string }) => (
-  <div className="surface flex min-h-48 flex-col items-center justify-center p-8 text-center">
+  <div className="empty-state">
     <div className="section-title">{title}</div>
-    <p className="mt-3 max-w-lg text-sm text-[color:var(--color-muted)]">{body}</p>
+    <p>{body}</p>
   </div>
 );
 

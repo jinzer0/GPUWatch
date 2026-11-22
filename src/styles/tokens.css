@@ -1,101 +1,132 @@
 :root {
-  color-scheme: dark;
-  --font-display: "Avenir Next Condensed", "Gill Sans", "Trebuchet MS", sans-serif;
+  color-scheme: light;
   --font-body: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  --font-display: var(--font-body);
 
-  --palette-carbon-950: #08090a;
-  --palette-carbon-900: #0d0f10;
-  --palette-lime-primary: #d7ff64;
-  --palette-cyan-info: #68d8ff;
-  --palette-status-success: #7ee787;
-  --palette-status-warning: #ffba5c;
-  --palette-status-danger: #ff6b6b;
-  --palette-status-disabled: #9ba3af;
+  --color-window: #f2f3ef;
+  --color-sidebar: #e9eeea;
+  --color-surface: #fbfcf9;
+  --color-surface-raised: #ffffff;
+  --color-surface-hover: #edf2ee;
+  --color-text: #202b27;
+  --color-muted: #52615b;
+  --color-quiet: #596761;
+  --color-line: #d3dcd5;
+  --color-line-strong: #6e8076;
+  --color-brand: #185f51;
+  --color-on-brand: #ffffff;
+  --color-brand-soft: #d7ebe2;
+  --status-success: #176446;
+  --status-warning: #805304;
+  --color-danger: #a92b37;
+  --color-disabled: #57645d;
+  --color-scrim: #192d2880;
+  --material-highlight: #ffffffb8;
+  --shadow-chrome: 0 12px 26px #213b3021, 0 2px 5px #213b3014;
+  --shadow-panel: 0 16px 56px #1a322b2b, 0 2px 6px #1a322b17;
 
-  --background-window: var(--palette-carbon-950);
-  --background-sidebar: var(--palette-carbon-900);
-  --background-surface: rgba(21, 23, 24, 0.86);
-  --background-surface-raised: rgba(35, 38, 39, 0.94);
-  --background-surface-hover: rgba(31, 34, 35, 0.92);
-
-  --text-primary: #f4f6f3;
-  --text-secondary: #b8beb6;
-  --text-tertiary: #7f887f;
-
-  --border-default: rgba(244, 246, 243, 0.12);
-  --border-strong: rgba(244, 246, 243, 0.22);
-
-  --brand-lime-primary: var(--palette-lime-primary);
-  --brand-lime-soft: rgba(215, 255, 100, 0.14);
-  --focus-ring-color: var(--brand-lime-primary);
-  --focus-ring-shadow: 0 0 0 3px var(--brand-lime-soft);
-
-  --info-cyan: var(--palette-cyan-info);
-  --info-cyan-soft: rgba(104, 216, 255, 0.13);
-  --chart-cyan: var(--info-cyan);
-  --chart-cyan-soft: var(--info-cyan-soft);
-
-  --status-success: var(--palette-status-success);
-  --status-warning: var(--palette-status-warning);
-  --status-danger: var(--palette-status-danger);
-  --status-disabled: var(--palette-status-disabled);
-
-  --radius-control-sm: 0.5rem;
-  --radius-card-sm: 0.75rem;
-  --radius-surface-lg: 1.4rem;
-  --radius-surface-xl: 2rem;
-
-  --density-space-1: 0.25rem;
-  --density-space-2: 0.5rem;
-  --density-space-3: 0.75rem;
-  --density-space-4: 1rem;
-  --density-space-5: 1.25rem;
-  --density-control-height: 2.25rem;
+  --radius-control: 8px;
+  --radius-card: 13px;
+  --radius-sm: var(--radius-control);
+  --radius-md: var(--radius-card);
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --density-space-1: 4px;
+  --density-space-2: 8px;
+  --density-space-3: 12px;
+  --density-space-4: 16px;
+  --density-space-5: 20px;
+  --density-control-height: 32px;
   --density-toolbar-gap: var(--density-space-2);
   --density-card-padding: var(--density-space-4);
   --density-section-gap: var(--density-space-5);
+  --shell-control-height: var(--density-control-height);
+  --interaction-transition-duration: 140ms;
+  --interaction-transition-timing: ease-out;
+  --focus-ring-color: var(--color-brand);
+  --focus-ring-shadow: 0 0 0 3px var(--color-brand-soft);
+}
 
-  --interaction-transition-duration: 160ms;
-  --interaction-transition-timing: ease;
+:root[data-appearance="dark"] {
+  color-scheme: dark;
+  --color-window: #1a201e;
+  --color-sidebar: #232b28;
+  --color-surface: #222926;
+  --color-surface-raised: #2b3531;
+  --color-surface-hover: #313e38;
+  --color-text: #eef4ef;
+  --color-muted: #b8c6bd;
+  --color-quiet: #a9b8af;
+  --color-line: #405047;
+  --color-line-strong: #82978b;
+  --color-brand: #91dfc6;
+  --color-on-brand: #102b23;
+  --color-brand-soft: #29483d;
+  --status-success: #8ad6a9;
+  --status-warning: #f0c27a;
+  --color-danger: #ff9da5;
+  --color-disabled: #a8b8ae;
+  --color-scrim: #090f0caa;
+  --material-highlight: #ffffff1b;
+  --shadow-chrome: 0 12px 28px #080e0b66, 0 2px 6px #080e0b33;
+  --shadow-panel: 0 18px 60px #080e0b80, 0 2px 8px #080e0b40;
+}
 
-  --color-window: var(--background-window);
-  --color-sidebar: var(--background-sidebar);
-  --color-surface: var(--background-surface);
-  --color-surface-hover: var(--background-surface-hover);
-  --color-surface-raised: var(--background-surface-raised);
-  --color-text: var(--text-primary);
-  --color-text-primary: var(--text-primary);
-  --color-text-secondary: var(--text-secondary);
-  --color-text-tertiary: var(--text-tertiary);
-  --color-line: var(--border-default);
-  --color-line-strong: var(--border-strong);
-  --color-brand: var(--brand-lime-primary);
-  --color-brand-soft: var(--brand-lime-soft);
-  --color-accent: var(--info-cyan);
-  --color-accent-soft: var(--info-cyan-soft);
-  --color-warning: var(--status-warning);
-  --color-danger: var(--status-danger);
+/* Repeat public Astryx tokens on the provider so components and native dialog
+   content use the same palette as the app root. */
+:root,
+[data-astryx-theme="neutral"] {
+  --font-family-body: var(--font-body);
+  --font-family-heading: var(--font-display);
+  --color-background-surface: var(--color-surface);
+  --color-background-body: var(--color-window);
+  --color-background-card: var(--color-surface);
+  --color-background-popover: var(--color-surface-raised);
+  --color-background-muted: var(--color-surface-hover);
+  --color-text-primary: var(--color-text);
+  --color-text-secondary: var(--color-muted);
+  --color-text-tertiary: var(--color-quiet);
+  --color-text-disabled: var(--color-disabled);
+  --color-text-accent: var(--color-brand);
+  --color-text-success: var(--color-success);
+  --color-text-warning: var(--color-warning);
+  --color-text-error: var(--color-danger);
+  --color-icon-primary: var(--color-text);
+  --color-icon-secondary: var(--color-muted);
+  --color-icon-accent: var(--color-brand);
+  --color-border: var(--color-line);
+  --color-border-emphasized: var(--color-line-strong);
+  --color-accent: var(--color-brand);
+  --color-accent-muted: var(--color-brand-soft);
+  --color-on-accent: var(--color-on-brand);
+  --color-overlay: var(--color-scrim);
   --color-success: var(--status-success);
+  --color-warning: var(--status-warning);
   --color-error: var(--color-danger);
+  --radius-inner: 6px;
+  --radius-element: var(--radius-control);
+  --radius-container: var(--radius-card);
+
+  --color-accent-soft: var(--color-brand-soft);
   --color-online: var(--color-success);
   --color-stale: var(--color-warning);
-  --color-disabled: var(--status-disabled);
   --color-ink: var(--color-text);
-  --color-ink-muted: var(--color-text-secondary);
-  --color-ink-soft: var(--color-text-tertiary);
-  --color-muted: var(--color-text-secondary);
+  --color-ink-muted: var(--color-muted);
+  --color-ink-soft: var(--color-quiet);
   --color-canvas: var(--color-sidebar);
   --color-canvas-deep: var(--color-window);
   --color-panel: var(--color-surface);
   --color-panel-strong: var(--color-surface-raised);
-  --color-border: var(--color-line);
-  --shadow-panel: 0 24px 80px rgba(0, 0, 0, 0.34);
-  --shadow-glow: 0 0 36px rgba(215, 255, 100, 0.18);
-  --radius-control: var(--radius-control-sm);
-  --radius-card: var(--radius-card-sm);
-  --radius-sm: var(--radius-control-sm);
-  --radius-md: var(--radius-card);
-  --radius-lg: var(--radius-surface-lg);
-  --radius-xl: var(--radius-surface-xl);
-  --shell-control-height: var(--density-control-height);
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --color-line: var(--color-line-strong);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --interaction-transition-duration: 0ms;
+  }
 }

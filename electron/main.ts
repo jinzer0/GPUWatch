@@ -13,6 +13,7 @@ import { registerUiIpc } from './uiIpc.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const isMac = process.platform === 'darwin';
+const windowBackground = { light: '#f2f3ef', dark: '#1a201e' };
 let mainWindow: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
 let settingsLoading: Promise<void> | null = null;
@@ -44,7 +45,7 @@ function createWindow(role: 'main' | 'settings'): BrowserWindow {
     minHeight: role === 'main' ? 708 : 280,
     title: role === 'main' ? 'GPUWatcher' : 'GPUWatcher 설정',
     show: false,
-    backgroundColor: appearance.getAppearance().resolved === 'dark' ? '#202124' : '#F5F5F7',
+    backgroundColor: windowBackground[appearance.getAppearance().resolved],
     ...(isMac ? { titleBarStyle: 'hiddenInset' as const } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload-runtime.cjs'),
@@ -139,7 +140,7 @@ app.whenReady().then(async () => {
   });
   appearance.subscribe((state) => {
     for (const window of [mainWindow, settingsWindow]) {
-      if (window && !window.isDestroyed()) window.setBackgroundColor(state.resolved === 'dark' ? '#202124' : '#F5F5F7');
+      if (window && !window.isDestroyed()) window.setBackgroundColor(windowBackground[state.resolved]);
     }
   });
   const settingsItem = {
