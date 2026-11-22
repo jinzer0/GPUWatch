@@ -1121,7 +1121,16 @@ def write_leaf(t: dict, tree: dict, root: Path | None) -> Path:
     path = folder / f"{leaf_stem(t, tree)}.md"
     if path.exists():
         raise TicketError(f"{path.name} exists already; change entry {t['id']}'s title")
-    after = [str(ref(b, t["epic"], tree)) for b in t["after"]]
+    after = []
+    for key in t["after"]:
+        reference = ref(key, t["epic"], tree)
+        if reference == key and "/" in key:
+            # Folder-qualified keys are internal. The resolver accepts sibling filenames and tracker IDs.
+            prerequisite = next(row for row in tree["tickets"] if row["key"] == key)
+            reference = quoted(
+                prerequisite["file"] if prerequisite["epic"] == t["epic"] else prerequisite["tracker_id"]
+            )
+        after.append(str(reference))
     epic_file = folder / f"{folder.name}.md"
     try:
         parent = Path(os.path.relpath(epic_file, root)).as_posix() if root else epic_file.as_posix()

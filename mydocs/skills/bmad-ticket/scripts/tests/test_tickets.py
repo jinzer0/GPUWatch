@@ -652,6 +652,33 @@ covers = ["R2", "R3"]
         self.assertTrue(rows[3]["drift"])
         self.assertTrue(rows[3]["hitl"])
 
+    def test_pull_preserves_a_sibling_filename_dependency_without_an_entry_id(self):
+        self.breakdown_epic(
+            '[[entry]]\nid = 1\ntype = "story"\ntitle = "Dependent"\nafter = ["story-base.md"]\n'
+        )
+        self.add("story-base.md", ticket("draft"))
+        self.assertEqual(self.next()["blocked"][0]["id"], 1)
+        pulled = run("pull", str(self.epic), "1")
+        self.assertEqual(pulled.returncode, 0, pulled.stderr)
+        after = self.next()["blocked"][0]
+        self.assertEqual(after["id"], 1)
+        self.assertEqual(after["after"], ["epic-cart/story-base.md"])
+        self.assertNotIn("drift", after)
+
+    def test_pull_preserves_a_cross_epic_tracker_dependency_without_an_entry_id(self):
+        pricing = self.pricing()
+        self.breakdown_epic(
+            '[[entry]]\nid = 1\ntype = "story"\ntitle = "Dependent"\nafter = ["47"]\n'
+        )
+        self.add("story-base.md", ticket("draft", tracker_id='"47"'), pricing)
+        self.assertEqual(self.next()["blocked"][0]["id"], 1)
+        pulled = run("pull", str(self.epic), "1")
+        self.assertEqual(pulled.returncode, 0, pulled.stderr)
+        after = self.next()["blocked"][0]
+        self.assertEqual(after["id"], 1)
+        self.assertEqual(after["after"], ["epic-pricing/story-base.md"])
+        self.assertNotIn("drift", after)
+
     def test_pull_writes_the_leaf_and_only_a_refine_entry_waits_for_refinement(self):
         self.breakdown_epic(
             self.BREAKDOWN.replace(
