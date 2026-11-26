@@ -23,6 +23,7 @@ import type { ElectronScheduler } from './scheduler.js';
 import { channelForPreloadMethod, helperIpcChannels, registerIpcHandlers, validateHelperPayload } from './ipc.js';
 import { createGpuwatcherBridge } from './preload.js';
 import { contextBridge, ipcMain } from 'electron';
+import type { UiWindow } from './uiIpc.js';
 
 const exposedGlobalsAtImport = vi.mocked(contextBridge.exposeInMainWorld).mock.calls.map(([name, value]) => [name, value] as const);
 
@@ -357,7 +358,13 @@ describe('Electron IPC bridge contract', () => {
     const runner = { run: vi.fn() } as unknown as HelperRunner;
     const scheduler = { start: vi.fn(), stop: vi.fn(), isRunning: true, run } as unknown as ElectronScheduler;
 
-    registerIpcHandlers(runner, scheduler);
+    const mainFrame = { url: 'file:///app/index.html' };
+    const sender = { mainFrame, isDestroyed: () => false };
+    const window = { isDestroyed: () => false, webContents: sender } as unknown as UiWindow;
+    const event = { sender, senderFrame: mainFrame };
+    registerIpcHandlers(runner, scheduler, {
+      getWindows: () => [window], isAllowedUrl: (url) => url === 'file:///app/index.html'
+    });
 
     const handleMock = vi.mocked(ipcMain.handle);
     const saveRegistration = handleMock.mock.calls.find(([channel]) => channel === channelForPreloadMethod('saveServer'));
@@ -365,12 +372,12 @@ describe('Electron IPC bridge contract', () => {
     const handler = saveRegistration?.[1] as (_event: unknown, payload: unknown) => Promise<unknown>;
     const input = { id: null, name: 'GPU', host: 'gpu.local', port: 22, username: 'alice', pollingIntervalSeconds: 30, enabled: true };
 
-    await expect(handler({}, { input })).resolves.toEqual({ ok: true, data: { id: 'server-1' } });
+    await expect(handler(event, { input })).resolves.toEqual({ ok: true, data: { id: 'server-1' } });
     expect(run).toHaveBeenCalledWith(runner, { action: 'save_server', payload: { input } });
 
     const refreshRegistration = handleMock.mock.calls.find(([channel]) => channel === channelForPreloadMethod('refreshServer'));
     const refreshHandler = refreshRegistration?.[1] as (_event: unknown, payload: unknown) => Promise<unknown>;
-    await expect(refreshHandler({}, { id: '' })).resolves.toEqual({
+    await expect(refreshHandler(event, { id: '' })).resolves.toEqual({
       ok: false,
       error: {
         layer: 'helper_contract',
@@ -379,5 +386,33 @@ describe('Electron IPC bridge contract', () => {
       }
     });
     expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects foreign windows, subframes, navigated pages and destroyed windows before helper execution', async () => {
+    const run = vi.fn();
+    const mainFrame = { url: 'file:///app/index.html' };
+    const sender = { mainFrame, isDestroyed: () => false };
+    let destroyed = false;
+    const window = { isDestroyed: () => destroyed, webContents: sender } as unknown as UiWindow;
+    registerIpcHandlers({ run } as unknown as HelperRunner, { run } as unknown as ElectronScheduler, {
+      getWindows: () => [window], isAllowedUrl: (url) => url === 'file:///app/index.html'
+    });
+    // Exercise every helper capability, including mutations, with otherwise valid payloads.
+    for (const [, handler] of vi.mocked(ipcMain.handle).mock.calls) {
+      for (const event of [
+        { sender: { ...sender }, senderFrame: mainFrame },
+        { sender, senderFrame: { ...mainFrame } },
+        { sender, senderFrame: null }
+      ]) {
+        await expect(handler(event as never, {})).resolves.toMatchObject({ ok: false, error: { type: 'ipc_forbidden' } });
+      }
+      mainFrame.url = 'https://untrusted.example/';
+      await expect(handler({ sender, senderFrame: mainFrame } as never, {})).resolves.toMatchObject({ ok: false, error: { type: 'ipc_forbidden' } });
+      mainFrame.url = 'file:///app/index.html';
+      destroyed = true;
+      await expect(handler({ sender, senderFrame: mainFrame } as never, {})).resolves.toMatchObject({ ok: false, error: { type: 'ipc_forbidden' } });
+      destroyed = false;
+    }
+    expect(run).not.toHaveBeenCalled();
   });
 });
