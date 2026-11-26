@@ -35,7 +35,7 @@
     "@vitejs/plugin-react": "^5.1.1",
     "autoprefixer": "^10.4.22",
     "electron": "^42.11.16",
-    "electron-builder": "^26.15.3",
+    "electron-builder": "^26.18.0",
     "jsdom": "^27.2.0",
     "postcss": "^8.5.25",
     "tailwindcss": "^3.4.18",
@@ -69,5 +69,8 @@
       "identity": null,
       "sign": null
     }
+  },
+  "overrides": {
+    "minimatch@>=7 <11": "^11.0.1"
   }
 }

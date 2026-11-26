@@ -112,7 +112,10 @@ async function openSettings(): Promise<void> {
 
 const scheduler = createScheduler();
 const helperRunner = createHelperRunner({ isPackaged: app.isPackaged, resourcesPath: process.resourcesPath });
-registerIpcScaffold(helperRunner, scheduler);
+registerIpcScaffold(helperRunner, scheduler, {
+  getWindows: () => [mainWindow, settingsWindow].filter((window): window is BrowserWindow => window !== null),
+  isAllowedUrl
+});
 let disposePowerMonitor: (() => void) | null = null;
 
 function reportLifecycleError(error: unknown): void {

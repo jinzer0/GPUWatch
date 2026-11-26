@@ -1,8 +1,9 @@
 import { ipcMain } from 'electron';
 
 import type { HelperAction, HelperRequestEnvelope, HelperResponseEnvelope } from './helperContract.js';
-import { createHelperRunner, type HelperRunner } from './helperRunner.js';
-import { createScheduler, type ElectronScheduler } from './scheduler.js';
+import type { HelperRunner } from './helperRunner.js';
+import type { ElectronScheduler } from './scheduler.js';
+import type { UiIpcOptions } from './uiIpc.js';
 export { IPC_CHANNEL_PREFIX, channelForPreloadMethod, helperIpcChannels } from './ipc/actionChannels.js';
 import { helperIpcChannels } from './ipc/actionChannels.js';
 export { validateHelperPayload } from './ipc/payloadValidation.js';
@@ -33,9 +34,31 @@ export async function invokeHelperAction(
   }
 }
 
-export function registerIpcHandlers(runner: HelperRunner = createHelperRunner(), scheduler: ElectronScheduler = createScheduler()): void {
+export function registerIpcHandlers(
+  runner: HelperRunner,
+  scheduler: ElectronScheduler,
+  authorization: Pick<UiIpcOptions, 'getWindows' | 'isAllowedUrl'>
+): void {
   for (const entry of helperIpcChannels) {
-    ipcMain.handle(entry.channel, async (_event, payload: unknown) => {
+    ipcMain.handle(entry.channel, async (event, payload: unknown) => {
+      const authorized = authorization.getWindows().some((window) =>
+        !window.isDestroyed()
+        && !window.webContents.isDestroyed()
+        && window.webContents === event.sender
+        && event.senderFrame != null
+        && event.senderFrame === window.webContents.mainFrame
+        && authorization.isAllowedUrl(event.senderFrame.url)
+      );
+      if (!authorized) {
+        return {
+          ok: false,
+          error: {
+            layer: 'helper_contract',
+            type: 'ipc_forbidden',
+            message: 'Helper requests require an allowed application main frame.'
+          }
+        };
+      }
       const validation = validateHelperPayload(entry.action, payload);
       if (!validation.ok) {
         return validation;

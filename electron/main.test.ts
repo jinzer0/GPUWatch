@@ -186,7 +186,9 @@ describe('main settings-window lifecycle', () => {
     const main = await boot();
     expect(mocks.app.setPath).not.toHaveBeenCalled();
     expect(mocks.mkdirSync).not.toHaveBeenCalled();
-    expect(mocks.registerIpcScaffold).toHaveBeenCalledWith(mocks.runner, mocks.scheduler);
+    expect(mocks.registerIpcScaffold).toHaveBeenCalledWith(mocks.runner, mocks.scheduler, {
+      getWindows: expect.any(Function), isAllowedUrl: expect.any(Function)
+    });
     expect(mocks.createAppearanceController).toHaveBeenCalledWith({
       nativeTheme: mocks.nativeTheme, filePath: '/isolated/user-data/appearance.json'
     });
