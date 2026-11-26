@@ -18,6 +18,8 @@ jobs:
       - name: Install Rust tooling
         run: rustup toolchain install stable --profile minimal --component clippy --component rustfmt
       - run: npm ci --ignore-scripts
+      - name: Build helper required by the scheduler integration test
+        run: cargo +stable build --locked --manifest-path crates/gpuwatcher-helper/Cargo.toml
       - run: npm test
       - run: npm run build && npm run electron:build
       - run: cargo +stable test --locked --manifest-path crates/gpuwatcher-core/Cargo.toml
